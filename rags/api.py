@@ -2,7 +2,6 @@
 import hmac
 import io
 import os
-import re
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
