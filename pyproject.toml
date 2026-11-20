@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.25,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rags-platform"
+version = "0.1.0"
+description = "Evidence-grounded, multi-strategy RAG API"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+    "httpx>=0.27,<1",
+    "pydantic>=2.8,<3",
+    "python-multipart>=0.0.12,<1",
+]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.19,<2"]
+pdf = ["pypdf>=5,<7"]
+vision = ["pillow>=11,<13"]
+dev = ["pytest>=8,<10", "ruff>=0.8,<1"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["rags"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
