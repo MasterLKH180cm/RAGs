@@ -16,7 +16,7 @@
 
 This code does NOT yet implement Microsoft GraphRAG community detection and summaries,
 RAPTOR learned recursive cluster summaries, HippoRAG, ColBERT, a cross-encoder
-reranker, truly multimodal visual embedding, agent autonomous web search, or
+reranker, native visual vector retrieval, agent autonomous web search, or
 the trained reflection-token mechanisms of Self-RAG. Those require independent
 implementations and measurable quality gains. The agent workflow repository is
 separate and calls RAGs over its authenticated API.
@@ -55,3 +55,12 @@ run a dual-index migration and switch traffic only after verification.
 - SQLite writes, delete and FTS updates occur in the same transaction.
 - Keep the demo private to a laptop; use a secret manager and monitoring in production.
 - Never log model credentials or full sensitive prompts in an external observability sink.
+
+## Optional vision ingestion
+
+POST /images validates an image with Pillow before sending it to a configured
+vision-capable model. The model returns a descriptive TEXT CAPTION, indexed as
+an ordinary document with source=image:<filename>. No raw image pixels are
+stored in the RAG database. This may omit or hallucinate visual details; do
+not use it as a medical diagnostic interpretation or as a substitute for
+independent image verification. Set the model to a vision-capable variant.

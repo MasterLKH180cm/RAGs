@@ -108,7 +108,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=415, detail="Unsupported file type")
         if not body.strip():
             raise HTTPException(status_code=422, detail="No extractable text")
-        return service.ingest(tenant, filename, body[:200_000], "upload:" + filename)
+        if len(body) > 200_000:
+            raise HTTPException(status_code=413, detail="Extracted text exceeds the document limit")
+        return service.ingest(tenant, filename, body, "upload:" + filename)
+
+    @app.post("/images", status_code=201)
+    async def ingest_image(
+        tenant: Annotated[str, Depends(auth)],
+        file: UploadFile = File(...),
+    ) -> dict:
+        """Vision-assisted image caption ingestion (caption index, not image vectors)."""
+        if config.model_provider == "extractive":
+            raise HTTPException(status_code=501, detail="Configure a vision-capable model")
+        raw = await file.read(2_000_001)
+        if not 0 < len(raw) <= 2_000_000:
+            raise HTTPException(status_code=413, detail="Image must be 1..2MB")
+        from rags.vision import describe_image, validate_image
+
+        try:
+            media_type = validate_image(raw)
+            description = describe_image(raw, media_type, config)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        filename = os.path.basename(file.filename or "image")
+        return service.ingest(
+            tenant, filename,
+            "# Image description (model-generated; verify against original)\n" + description,
+            "image:" + filename,
+            {"kind": "image", "media_type": media_type,
+             "caption_generated_by": config.model_provider},
+        )
 
     @app.get("/documents")
     def documents(tenant: Annotated[str, Depends(auth)]) -> list[dict]:

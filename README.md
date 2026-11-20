@@ -55,8 +55,17 @@ The response contains evidence chunk IDs, source, title, section and scores.
 | corrective | evidence-term overlap triggers expansion; NOT published CRAG |
 | adaptive | simple intent-based retrieval selection, NOT trained Adaptive-RAG |
 
-The API also handles text extraction from TXT, Markdown, JSON, CSV and PDF uploads.
-Image/audio understanding and true multimodal retrieval are NOT implemented.
+The API handles TXT, Markdown, JSON, CSV and PDF text extraction. Optional POST /images
+uses a real vision-capable OpenAI / Anthropic model to produce indexed image captions
+(JPEG/PNG/WebP); this is **not** direct image-vector search, OCR-quality assurance,
+or medical image diagnosis. Audio/video retrieval is not implemented.
+
+Repeatable offline retrieval benchmarks (labelled examples, Recall@K, MRR):
+
+    RAGS_ENV=test python -m rags.evaluate --dataset examples/eval_baseline.json --k 3
+
+This dataset is illustrative; replace it with domain-labelled, held-out questions.
+
 
 ## Choose real providers
 
@@ -76,7 +85,11 @@ a synonym for an OpenAI text-model API.
 
 ## Codex and Claude Code
 
-Both can use this RAG service through a standard MCP stdio server:
+Both can use this RAG service through a standard MCP stdio server.
+Copy the non-secret examples in docs/codex-mcp.toml and docs/claude-mcp.json
+into your local Codex config.toml or Claude .mcp.json respectively, ensuring the
+RAGS_URL and RAGS_API_KEY environment variables are available:
+
 
     pip install -e ".[mcp]"
     RAGS_URL=http://127.0.0.1:8000 \

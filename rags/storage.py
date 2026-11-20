@@ -85,6 +85,14 @@ class Store:
                 )
             return row is not None
 
+    def has_index(self, tenant: str, doc_id: str, embedding_model: str) -> bool:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM chunks WHERE tenant=? AND document_id=? "
+                "AND embedding_model=? LIMIT 1", (tenant, doc_id, embedding_model)
+            ).fetchone()
+            return row is not None
+
     def list_documents(self, tenant: str) -> list[dict]:
         with self.connect() as conn:
             rows = conn.execute(

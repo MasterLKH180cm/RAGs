@@ -1,0 +1,39 @@
+{
+  "documents": [
+    {
+      "id": "auth",
+      "title": "Authentication Policy",
+      "text": "# Login\nRefresh token rotation occurs after login. Session expiration is 30 minutes."
+    },
+    {
+      "id": "dicom",
+      "title": "DICOM Integration",
+      "text": "# DICOM\nC-STORE delivers medical images to the PACS archive. Orthanc stores study instances."
+    },
+    {
+      "id": "audit",
+      "title": "Audit Records",
+      "text": "# Audit\nPatient access records are preserved for 180 days for auditing and compliance."
+    }
+  ],
+  "cases": [
+    {
+      "question": "What happens to refresh tokens after login?",
+      "relevant_document_ids": [
+        "auth"
+      ]
+    },
+    {
+      "question": "What protocol delivers medical images to the archive?",
+      "relevant_document_ids": [
+        "dicom"
+      ]
+    },
+    {
+      "question": "How long are audit records preserved?",
+      "relevant_document_ids": [
+        "audit"
+      ]
+    }
+  ]
+}

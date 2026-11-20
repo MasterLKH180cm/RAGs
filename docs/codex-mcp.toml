@@ -1,0 +1,8 @@
+# Copy into your LOCAL ~/.codex/config.toml, or a trusted project's
+# .codex/config.toml. No credentials are stored in this file.
+# Export RAGS_URL and RAGS_API_KEY in your Codex host environment.
+[mcp_servers.rags]
+command = "python"
+args = ["-m", "rags.mcp_server"]
+env_vars = ["RAGS_URL", "RAGS_API_KEY"]
+startup_timeout_sec = 20

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "rags": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "-m",
+        "rags.mcp_server"
+      ],
+      "env": {
+        "RAGS_URL": "${RAGS_URL:-http://127.0.0.1:8000}",
+        "RAGS_API_KEY": "${RAGS_API_KEY}"
+      }
+    }
+  }
+}

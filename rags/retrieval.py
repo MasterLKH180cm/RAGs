@@ -91,7 +91,12 @@ class RAGService:
         doc_id = document_id or str(uuid.uuid4())
         checksum = hashlib.sha256(text.encode("utf-8")).hexdigest()
         existing = self.store.get_document(tenant, doc_id)
-        if existing and existing["checksum"] == checksum and existing["title"] == title:
+        if (
+            existing and existing["checksum"] == checksum
+            and existing["title"] == title and existing["source"] == source
+            and existing["metadata"] == (metadata or {})
+            and self.store.has_index(tenant, doc_id, self.provider.embedding_model)
+        ):
             return {"id": doc_id, "chunks": 0, "unchanged": True}
         chunks = split_text(text)
         indexed = []
