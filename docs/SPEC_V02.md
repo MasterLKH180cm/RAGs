@@ -1,6 +1,6 @@
 # RAGs v0.2 specification
 
-Status: implementation contract, approved by the user's instruction to specify, implement, and self-review.
+Status: implementation contract prepared and committed before feature code, following the requested specification, implementation, and self-review sequence.
 Baseline: v0.1 at 68d6d7a3bf59ed48475a11fbfe7f7645e6fcdb30.
 Companion: agentic-system/docs/SPEC_V02.md.
 
