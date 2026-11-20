@@ -37,7 +37,9 @@ The [README coverage table](../README.md#twenty-family-coverage) retains every o
 
 ### Ordinary suite and focused integration
 
-The complete ordinary RAG test suite finished with **140 passed, 3 skipped** after the request-body limits were added. The three skips are explicit opt-in actual-model checks; they were exercised separately. A subsequent focused evaluation regression prevents configured external engines from making network calls during the offline evaluator. Static checks use the repository's declared Ruff rule set.
+The complete local suite finished with **140 passed, 3 skipped** after request-body limits were added. The final offline-evaluation regression then passed its focused suite. GitHub Actions subsequently verified implementation commit `aff48b3a53029a2febea0366055845f14b69bbfa`: **141 passed, 3 skipped** in the ordinary job, and **39 passed** in the encoder job, including all three actual-model checks. The encoder job repeats adapter tests, so the two counts are not disjoint.
+
+Recorded [CI run 44798397794](https://github.com/MasterLKH180cm/RAGs/actions/runs/44798397794) completed successfully. It also passed Ruff, the real HTTP smoke, and the 36-question evaluation command; the complete report is available as the [synthetic-evaluation artifact](https://github.com/MasterLKH180cm/RAGs/actions/runs/44798397794/artifacts/14660520514). The offline evaluator explicitly refuses configured external engines and federation, so its offline promise does not depend on the operator's environment.
 
 The focused core/backend run also included actual ColBERT inference:
 
@@ -46,7 +48,7 @@ RAGS_TEST_COLBERT=1 RAGS_MODEL_CACHE=/tmp/rags-model-cache \
 python -m pytest tests/test_backends.py tests/test_native_integration.py tests/test_api.py -q
 ```
 
-Result: **47 passed**. Coverage includes typed filters, historical source isolation, real hierarchy lineage, two-hop graph evidence, reindex atomicity, bounded HTTP parsing, per-tenant federation/backend credentials, citation authorization, invalid Unicode credentials, and nonfinite-value rejection. This is a local result, not a claim that an unpublished GitHub Actions run has completed.
+Result: **47 passed**. Coverage includes typed filters, historical source isolation, real hierarchy lineage, two-hop graph evidence, reindex atomicity, bounded HTTP parsing, per-tenant federation/backend credentials, citation authorization, invalid Unicode credentials, and nonfinite-value rejection. This focused local result is separate from the recorded CI run above.
 
 The tokenizer/chunker development gate separately ran **63 focused tests**, actual tiktoken inference, and seeded multilingual small-budget cases. It caught and corrected a BPE overlap/progress edge before integration.
 
@@ -64,7 +66,7 @@ The semantic smoke completed with **1 passed**. CLIP checks also cover artifact/
 
 ### Real HTTP, independent worker, and MCP
 
-The companion [tests/e2e_v02.py](https://github.com/MasterLKH180cm/agentic-system/blob/master/tests/e2e_v02.py) acceptance flow passed with both the Agent SQLite store and PostgreSQL 16.2 store. RAG storage remained SQLite in both runs. The script starts actual TCP APIs, an independent worker process, and stdio MCP clients against disposable data.
+The companion [tests/e2e_v02.py](https://github.com/MasterLKH180cm/agentic-system/blob/a646845bdbff2fc269972959d30c3ddcdbe70222/tests/e2e_v02.py) acceptance flow passed with both the Agent SQLite store and PostgreSQL 16.2 store. RAG storage remained SQLite in both runs. The script starts actual TCP APIs, an independent worker process, and stdio MCP clients against disposable data.
 
 The RAG checks include authenticated ingestion, exact source-span citations, prompt-budget accounting, tenant isolation, guarded reindex, historical reads, typed aggregation, deletion of temporal history, and HTTP-backed MCP tool calls. The companion checks include workflow execution, idempotency, bounded agent loops, persisted checkpoints/memory, approval, artifacts, events, and signed webhook replay rejection. This records integration boundaries; the Agent's separate review owns its complete twelve-layer status.
 

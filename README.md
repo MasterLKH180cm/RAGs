@@ -336,7 +336,7 @@ The [36-question synthetic dataset](examples/eval_v02.json) covers retrieval, st
 | Source citation-record validity | `1.0` for measured available modes; this checks records/spans, not semantic support |
 | Extractive answer exact match | `0.0`; evidence excerpts do not match short reference answers verbatim |
 
-The ordinary suite completed locally with **126 passed, 3 skipped**; the three opt-in actual-model checks also passed separately. BGE smoke verifies actual 384-dimensional semantic chunking and dense retrieval. ColBERT smoke uses a 32 × 96 query matrix and checks a three-document retrieval fixture. Paired CLIP smoke checks simple image/text retrieval and image self-matching. These establish that checkpoints and adapters execute; they do not establish domain quality.
+The [recorded v0.2 CI run](https://github.com/MasterLKH180cm/RAGs/actions/runs/44798397794) passed both jobs: the ordinary suite finished with **141 passed, 3 skipped**, and the real-encoder job finished with **39 passed**, including all three opt-in model checks. The encoder job also repeats relevant adapter tests, so these counts must not be added as unique tests. BGE smoke verifies actual 384-dimensional semantic chunking and dense retrieval. ColBERT smoke uses a 32 × 96 query matrix and checks a three-document retrieval fixture. Paired CLIP smoke checks simple image/text retrieval and image self-matching. These establish that checkpoints and adapters execute; they do not establish domain quality.
 
 The companion real HTTP/worker/MCP acceptance flow also passed with both Agent SQLite and PostgreSQL 16.2 storage; RAG storage remained SQLite in both runs. Paid generation providers and named upstream research services have not been verified through live integration runs.
 
