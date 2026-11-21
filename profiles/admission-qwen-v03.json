@@ -1,0 +1,85 @@
+{
+  "schema_version": "evidence-admission-profile-v1",
+  "scorer": {
+    "model": "Qwen/Qwen3-1.7B",
+    "revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+    "artifacts": {
+      "config.json": "1ddb5b89ebc90dcb417a45c213d818577e65976454d29385c8f6140771d95197",
+      "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+      "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+      "model-00001-of-00002.safetensors": "169ad53ec313c3a34b06c0809216e4fc072cce444a5d4ff2b59690d064130ed5",
+      "model-00002-of-00002.safetensors": "912becff8d60672aa8628ef08c05898d9adf17c2ad4ae3caf99b065622fdeff9",
+      "model.safetensors.index.json": "0d660e94b165eb912669a5249dff44b83188c4777a07ddb9611fb78d91b0578d",
+      "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+      "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+    },
+    "runtime": {
+      "torch": "2.15.0+cpu",
+      "transformers": "4.57.6",
+      "tokenizers": "0.22.2",
+      "safetensors": "0.8.0",
+      "huggingface_hub": "0.36.2",
+      "python": "3.12",
+      "device": "cpu",
+      "dtype": "bfloat16",
+      "intraop_threads": 2,
+      "interop_threads": 2,
+      "attention_implementation": "eager"
+    },
+    "score_convention": "float32_next_token_logit_YES_minus_NO_from_bfloat16_forward",
+    "limits": {
+      "max_candidates": 20,
+      "max_question_chars": 2000,
+      "max_passage_chars": 200000,
+      "max_total_passage_chars": 200000,
+      "prompt_tokens": 1024,
+      "batch_size": 1,
+      "cpu_threads": 2,
+      "window": "right_source_prefix_complete_json_chat_v1"
+    },
+    "aggregation": "max_original_passage",
+    "prompt_sha256": "b31f4f1b508b56e7fcb293e449c7a01731e982b633c73127ea6e2764be5c14b3",
+    "label_ids": {
+      "YES": 14004,
+      "NO": 8996
+    },
+    "chat_template_sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+    "chat_settings": {
+      "enable_thinking": false,
+      "add_generation_prompt": true,
+      "json_ensure_ascii": false,
+      "json_separators": [
+        ",",
+        ":"
+      ]
+    }
+  },
+  "threshold": 10.75,
+  "languages": [
+    "en",
+    "zh"
+  ],
+  "calibration": {
+    "cases_digest": "7f655a11c85d4d87b5b295e24bef879848d298dddd34822dc296bfbeed13ee42",
+    "objective": "max_specificity_then_retention_then_smallest_threshold_v1",
+    "minimum_positive_retention": 0.95,
+    "measurements": {
+      "cases": 48,
+      "positive": 24,
+      "negative": 24,
+      "positive_retained": 23,
+      "negative_refused": 18,
+      "false_refusals": 1,
+      "positive_retention": 0.9583333333333334,
+      "refusal_recall": 0.75,
+      "refusal_precision": 0.9473684210526315,
+      "false_refusal_rate": 0.041666666666666664,
+      "abstentions": 19,
+      "abstention_rate": 0.3958333333333333,
+      "semantic_only_positive": 12,
+      "semantic_only_retained": 11
+    }
+  },
+  "profile_id": "0be2ce8f8c7eee905c58a231576e7f5ddc5c7e94b561cff603f3398dcd5ac8e4"
+}
