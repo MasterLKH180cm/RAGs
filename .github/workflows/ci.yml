@@ -2,11 +2,22 @@ name: RAGs CI
 
 on:
   push:
-    branches: ["master", "feat/**"]
+    branches: ["master"]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      full_admission_benchmark:
+        description: Run the full frozen admission benchmark with quality enforcement
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -14,6 +25,8 @@ jobs:
     timeout-minutes: 10
     env:
       RAGS_ENV: test
+      ORT_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -23,11 +36,35 @@ jobs:
       - name: Install
         run: python -m pip install -e ".[dev,pdf,mcp,vision]"
       - name: Static analysis
-        run: ruff check rags tests --select E4,E7,E9,F
+        run: |
+          ruff check rags tests scripts conftest.py --select E4,E7,E9,F
+          ruff check rags --select B,RUF021
       - name: Labelled retrieval evaluation
-        run: python -m rags.evaluate --dataset examples/eval_baseline.json --k 3
-      - name: Integration tests
-        run: pytest -q
+        run: python -m rags.evaluate --dataset examples/eval_v02.json --k 3 --generate > evaluation-v02.json
+      - name: Unit contracts with explicit inventory
+        run: >-
+          python -m pytest -q -m unit --require-no-skips
+          --test-inventory reports/testing/inventory-unit.json
+          --junitxml reports/testing/junit-unit.xml
+          --cov=rags --cov-branch --cov-config=pyproject.toml --cov-report=json:reports/testing/coverage-unit.json
+      - name: Integration contracts without optional external resources
+        run: >-
+          python -m pytest -q -m "integration and not external" --require-no-skips
+          --test-inventory reports/testing/inventory-integration.json
+          --junitxml reports/testing/junit-integration.xml
+          --cov=rags --cov-branch --cov-config=pyproject.toml --cov-append
+          --cov-report=json:reports/testing/coverage-core.json
+          --cov-report=xml:reports/testing/coverage-core.xml
+          --cov-report=html:reports/testing/coverage-html
+      - name: Enforce complete-package line and branch floors
+        run: python scripts/check_coverage.py
+      - name: Publish test inventory, JUnit and coverage evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rags-core-test-evidence
+          path: reports/testing/
+          if-no-files-found: error
       - name: Real HTTP smoke test
         shell: bash
         run: |
@@ -39,3 +76,243 @@ jobs:
             sleep 1
           done
           curl -fsS -H "Authorization: Bearer local-development-key" http://127.0.0.1:8000/health
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-evaluation
+          path: evaluation-v02.json
+
+  real-encoders:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RAGS_ENV: test
+      ORT_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      RAGS_TEST_COLBERT: "1"
+      RAGS_TEST_MULTIMODAL: "1"
+      RAGS_TEST_ENCODERS: "1"
+      RAGS_MODEL_CACHE: /tmp/rags-model-cache
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/rags-model-cache
+          key: rags-onnx-colbert-clip-v02-${{ runner.os }}
+      - run: python -m pip install -e ".[dev,encoders,vision]"
+      - name: Actual ColBERT and aligned CLIP inference
+        run: >-
+          python -m pytest -q tests/test_backends.py tests/test_multimodal.py tests/test_semantic_encoder.py
+          -m encoders --require-no-skips
+          --test-inventory reports/testing/inventory-encoders.json
+          --junitxml reports/testing/junit-encoders.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: actual-encoder-test-evidence
+          path: reports/testing/
+          if-no-files-found: error
+
+  research-upstreams:
+    name: Actual ${{ matrix.engine }} and HTTP lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [raptor, lightrag]
+    env:
+      RAGS_ENV: test
+      ORT_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      NUMBA_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      RAGS_MODEL_CACHE: /tmp/rags-research-models
+      RAGS_TEST_RESEARCH_UPSTREAMS: ${{ matrix.engine }}
+      RAGS_RESEARCH_REPORT_PATH: reports/ci-research-${{ matrix.engine }}.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/rags-research-models
+          key: rags-research-bge-v03-${{ runner.os }}
+      - name: Install isolated pinned CPU dependencies
+        run: bash scripts/install_research.sh "${{ matrix.engine }}" "$RUNNER_TEMP/research-venv"
+      - name: Execute actual upstream algorithm and trained BGE
+        run: >-
+          "$RUNNER_TEMP/research-venv/bin/python" -m pytest -q tests/test_research_upstreams.py
+          -m "research_${{ matrix.engine }}" --require-no-skips
+          --test-inventory "reports/testing/inventory-${{ matrix.engine }}.json"
+          --junitxml "reports/testing/junit-${{ matrix.engine }}.xml"
+      - name: Real sidecar and RAG HTTP lifecycle
+        run: >-
+          "$RUNNER_TEMP/research-venv/bin/python" scripts/e2e_research_v03.py
+          --engine "${{ matrix.engine }}" --model-cache "$RAGS_MODEL_CACHE"
+          --report "reports/ci-research-${{ matrix.engine }}-http.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: actual-${{ matrix.engine }}-evidence
+          path: |
+            reports/ci-research-${{ matrix.engine }}*.json
+            reports/testing/
+          if-no-files-found: error
+
+  admission-runtime:
+    name: Actual admission runtime and recorded quality evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      RAGS_ENV: test
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      ORT_DISABLE_TELEMETRY: "1"
+      RAGS_MODEL_CACHE: /tmp/rags-answerability-models
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/rags-answerability-models
+          key: qwen-1.7b-70d244cc-v03-${{ runner.os }}
+      - name: Install reproduced CPU answerability runtime
+        run: bash scripts/install-answerability.sh "$RUNNER_TEMP/admission-venv"
+      - name: Fetch and verify the pinned public checkpoint
+        run: |
+          "$RUNNER_TEMP/admission-venv/bin/python" - <<'PY'
+          import os
+          from rags.admission import load_profile
+          from rags.answerability import AnswerabilityScorer
+          scorer = AnswerabilityScorer(os.environ["RAGS_MODEL_CACHE"], allow_download=True)
+          scorer.verify(load_profile("profiles/admission-qwen-v03.json"))
+          print("Pinned artifacts, tokenizer, prompt and runtime match the frozen profile")
+          PY
+      - name: Run actual contract cases and audit recorded full quality evidence
+        run: >-
+          "$RUNNER_TEMP/admission-venv/bin/python" scripts/verify_admission_runtime.py
+          --cache-dir "$RAGS_MODEL_CACHE"
+          --report reports/ci-admission-runtime.json
+      - name: Distinguish actual runtime checks from recorded quality measurements
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          path = Path("reports/ci-admission-runtime.json")
+          if not path.exists():
+              raise SystemExit("No actual-runtime and recorded-evidence report was produced")
+          report = json.loads(path.read_text())
+          recorded = report["recorded_quality"]
+          correctness, quality = recorded["correctness"], recorded["quality"]
+          lines = ["## Actual pinned admission runtime", "",
+                   "Runtime contract status: **" + report["status"] + "**",
+                   "Calibration contract cases scored in this run: " + str(len(report["cases"])),
+                   "Frozen profile: " + report["profile_id"], "",
+                   "## Recorded full quality evidence", "",
+                   "Recorded report: " + recorded["report_path"],
+                   "Recorded report SHA-256: " + recorded["report_sha256"],
+                   "Recorded measurement time: " + recorded["measured_at"],
+                   f"Recorded correctness checks: {correctness['passed_count']}/{correctness['passed_count'] + correctness['failed_count']}",
+                   f"Recorded quality checks: {quality['passed_count']}/{quality['passed_count'] + quality['failed_count']}",
+                   "Recorded profile promotion status: **" + recorded["promotion_status"] + "**", "",
+                   "The full quality measurements are recorded evidence, not newly scored by this PR job.",
+                   "A scoring or retrieval change, or proposed promotion, requires a fresh complete enforced benchmark."]
+          for item in quality["gates"]:
+              if not item["passed"]:
+                  lines.append("- Recorded failed quality target: " + json.dumps(item, ensure_ascii=False))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
+              output.write("\n".join(lines) + "\n")
+          if not quality["passed"]:
+              print("::warning::Recorded frozen-profile quality targets failed; the profile remains unapproved and disabled by default.")
+          assert report["status"] == "passed" and len(report["cases"]) == 2
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: admission-runtime-and-recorded-quality
+          path: reports/ci-admission-runtime.json
+
+  full-admission-benchmark:
+    name: Manual full frozen admission benchmark with enforced quality
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_admission_benchmark }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      RAGS_ENV: test
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      ORT_DISABLE_TELEMETRY: "1"
+      RAGS_MODEL_CACHE: /tmp/rags-answerability-models
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/rags-answerability-models
+          key: qwen-1.7b-70d244cc-v03-${{ runner.os }}
+      - name: Install reproduced CPU answerability runtime
+        run: bash scripts/install-answerability.sh "$RUNNER_TEMP/admission-venv"
+      - name: Fetch and verify the pinned public checkpoint
+        run: |
+          "$RUNNER_TEMP/admission-venv/bin/python" - <<'PY'
+          import os
+          from rags.admission import load_profile
+          from rags.answerability import AnswerabilityScorer
+          scorer = AnswerabilityScorer(os.environ["RAGS_MODEL_CACHE"], allow_download=True)
+          scorer.verify(load_profile("profiles/admission-qwen-v03.json"))
+          print("Pinned artifacts, tokenizer, prompt and runtime match the frozen profile")
+          PY
+      - name: Run the complete frozen benchmark and enforce every quality target
+        run: >-
+          "$RUNNER_TEMP/admission-venv/bin/python" -m rags.verify_admission
+          --profile profiles/admission-qwen-v03.json
+          --holdout examples/admission_holdout_v03.json
+          --regression examples/eval_v02.json
+          --cache-dir "$RAGS_MODEL_CACHE"
+          --report reports/ci-full-admission-verification-qwen.json
+          --enforce-quality
+      - name: Report the fresh benchmark outcome including failed targets
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          path = Path("reports/ci-full-admission-verification-qwen.json")
+          if not path.exists():
+              raise SystemExit("No fresh full-benchmark report was produced")
+          report = json.loads(path.read_text())
+          lines = ["## Fresh full frozen admission benchmark", "",
+                   "Frozen profile: " + report["profile_id"],
+                   "Runtime correctness: " + str(report["correctness"]["passed"]),
+                   "Enforced quality gates: " + str(report["quality"]["passed"]),
+                   "Profile promotion status: **" + report["promotion_status"] + "**", "",
+                   "This manual run freshly scores the unchanged holdout and original regression files.",
+                   "Quality failures fail this job; the report is uploaded even when enforcement exits 2."]
+          for item in report["quality"]["gates"]:
+              if not item["passed"]:
+                  lines.append("- Failed quality target: " + json.dumps(item, ensure_ascii=False))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
+              output.write("\n".join(lines) + "\n")
+          if not report["quality"]["passed"]:
+              print("::warning::The fresh benchmark failed quality targets; profile promotion remains failed.")
+          assert report["enforce_quality"] is True
+          assert report["correctness"]["passed"] and report["quality"]["passed"]
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-frozen-admission-benchmark
+          path: reports/ci-full-admission-verification-qwen.json

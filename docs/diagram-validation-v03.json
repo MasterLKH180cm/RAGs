@@ -1,0 +1,31 @@
+{
+  "parser": "mermaid",
+  "parser_version": "11.12.1",
+  "dom_version": "26.1.0",
+  "scope": "actual syntax parse only; no rendered visual validation",
+  "passed": true,
+  "count": 3,
+  "diagrams": [
+    {
+      "file": "README.md",
+      "index": 1,
+      "source_sha256": "27b5c256f6b1036db5331f448a04141ac272a343f87a690dfec0bfa10359cf52",
+      "passed": true,
+      "type": "flowchart-v2"
+    },
+    {
+      "file": "README.md",
+      "index": 2,
+      "source_sha256": "c54e3ef5faf19384cdaeb3b49988a9be3b1d689775a16d972eebb971bf79f597",
+      "passed": true,
+      "type": "flowchart-v2"
+    },
+    {
+      "file": "README.md",
+      "index": 3,
+      "source_sha256": "55fcb9cf7043e5adb5c2b31651a4621f08e1df0d0216655aa85ce8f3ece1a181",
+      "passed": true,
+      "type": "flowchart-v2"
+    }
+  ]
+}

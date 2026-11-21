@@ -1,0 +1,830 @@
+{
+  "schema_version": "admission-cases-v1",
+  "split": "calibration",
+  "synthetic": true,
+  "description": "Frozen v0.3 evidence-admission calibration data. All facts are invented fixture facts. Independent of eval_v02.json. The answer is determined solely by the supplied passages.",
+  "schema_notes": {
+    "inference_fields": [
+      "question",
+      "passages[].text"
+    ],
+    "evaluation_only_fields": [
+      "id",
+      "topic",
+      "answerable",
+      "language",
+      "category",
+      "expected_answer",
+      "label_rationale"
+    ],
+    "answerable": "True only when the passages supply the requested fact for the correct entity and time; knowing that a field is absent is not an answer to its requested value.",
+    "semantic_only": "A deliberately paraphrased positive that must not require exact content-word overlap. Chinese examples test semantic phrasing; this label does not assert zero shared characters.",
+    "passages": "One or more original evidence texts. Passage IDs are identifiers, never model input or evidence of answerability.",
+    "calibration_objective": "Maximize negative rejection subject to positive retention >= 0.95, using only this split. Deterministic score/threshold ties must be frozen in the v0.3 specification before inference.",
+    "holdout_rule": "No holdout or eval_v02 labels may be used to choose thresholds, alter prompts, select a checkpoint, or revise these fixtures after model execution."
+  },
+  "counts": {
+    "cases": 48,
+    "positive": 24,
+    "negative": 24,
+    "by_language": {
+      "en": {
+        "positive": 12,
+        "negative": 12
+      },
+      "zh": {
+        "positive": 12,
+        "negative": 12
+      }
+    }
+  },
+  "topics": [
+    "apiary_operations",
+    "bookbinding_workshop",
+    "community_laundry",
+    "public_observatory",
+    "rowing_club",
+    "seed_exchange",
+    "共享木工間",
+    "植物染工作室",
+    "河岸鳥類調查",
+    "登山接駁車",
+    "陶藝燒窯",
+    "麵包烘焙課"
+  ],
+  "cases_digest": {
+    "algorithm": "sha256",
+    "canonicalization": "UTF-8 JSON of cases; ensure_ascii=False, sort_keys=True, separators=(comma,colon)",
+    "value": "7f655a11c85d4d87b5b295e24bef879848d298dddd34822dc296bfbeed13ee42"
+  },
+  "cases": [
+    {
+      "id": "cal-en-apiary-positive-literal",
+      "topic": "apiary_operations",
+      "question": "On which weekday is the apiary inspection?",
+      "passages": [
+        {
+          "id": "cal-en-apiary-positive-literal-p1",
+          "text": "The apiary inspection takes place every Wednesday. Visitors meet the beekeeper beside the east gate."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "expected_answer": "Wednesday.",
+      "label_rationale": "The weekday is stated directly."
+    },
+    {
+      "id": "cal-en-apiary-positive-semantic-only",
+      "topic": "apiary_operations",
+      "question": "How long should visitors keep clear after the stinging insects are relocated?",
+      "passages": [
+        {
+          "id": "cal-en-apiary-positive-semantic-only-p1",
+          "text": "Following a colony transfer, everyone must stay outside the enclosure for forty-eight hours."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "expected_answer": "Forty-eight hours.",
+      "label_rationale": "Colony transfer and exclusion describe relocation and keeping clear without repeating the question wording."
+    },
+    {
+      "id": "cal-en-apiary-negative-missing-field",
+      "topic": "apiary_operations",
+      "question": "What is the maximum weight allowed in each honey jar?",
+      "passages": [
+        {
+          "id": "cal-en-apiary-negative-missing-field-p1",
+          "text": "Honey jars are sealed with wax. Each jar label shows the harvest date and the hive number."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "Jar sealing and labels do not supply a maximum permitted weight."
+    },
+    {
+      "id": "cal-en-apiary-negative-wrong-entity",
+      "topic": "apiary_operations",
+      "question": "At what time does the Blue Meadow apiary open?",
+      "passages": [
+        {
+          "id": "cal-en-apiary-negative-wrong-entity-p1",
+          "text": "The Red Orchard apiary opens at 10:00 and closes at 16:00. These hours apply only to Red Orchard."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_entity",
+      "expected_answer": null,
+      "label_rationale": "The passage gives hours for a different named apiary."
+    },
+    {
+      "id": "cal-en-laundry-positive-literal",
+      "topic": "community_laundry",
+      "question": "How many tokens does the large washing machine require?",
+      "passages": [
+        {
+          "id": "cal-en-laundry-positive-literal-p1",
+          "text": "The large washing machine requires three tokens per cycle. The small machine requires two."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "expected_answer": "Three tokens.",
+      "label_rationale": "The requested machine and token count are explicit."
+    },
+    {
+      "id": "cal-en-laundry-positive-semantic-only",
+      "topic": "community_laundry",
+      "question": "Where can people reclaim garments they accidentally left behind?",
+      "passages": [
+        {
+          "id": "cal-en-laundry-positive-semantic-only-p1",
+          "text": "Uncollected clothing is placed in the lost-property cabinet beside reception."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "expected_answer": "In the lost-property cabinet beside reception.",
+      "label_rationale": "Uncollected clothing and lost property express the requested idea without the same content words."
+    },
+    {
+      "id": "cal-en-laundry-negative-missing-field",
+      "topic": "community_laundry",
+      "question": "What temperature does the delicate washing cycle use?",
+      "passages": [
+        {
+          "id": "cal-en-laundry-negative-missing-field-p1",
+          "text": "The delicate washing cycle lasts twenty-five minutes. Customers should place lace items in a mesh bag."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "Cycle duration and handling do not specify water temperature."
+    },
+    {
+      "id": "cal-en-laundry-negative-wrong-date",
+      "topic": "community_laundry",
+      "question": "What was the dryer price in March 2025?",
+      "passages": [
+        {
+          "id": "cal-en-laundry-negative-wrong-date-p1",
+          "text": "The dryer price is four tokens under the tariff effective from 1 January 2026. This leaflet describes only the 2026 tariff."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_date",
+      "expected_answer": null,
+      "label_rationale": "The stated tariff does not cover the requested historical date."
+    },
+    {
+      "id": "cal-en-observatory-positive-literal",
+      "topic": "public_observatory",
+      "question": "How many guests can join one observatory tour?",
+      "passages": [
+        {
+          "id": "cal-en-observatory-positive-literal-p1",
+          "text": "One observatory tour admits at most twelve guests. A guide accompanies each group through the dome."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "expected_answer": "Twelve guests.",
+      "label_rationale": "The group limit is directly provided."
+    },
+    {
+      "id": "cal-en-observatory-positive-semantic-only",
+      "topic": "public_observatory",
+      "question": "Are youngsters allowed to peer through the instrument without a grown-up?",
+      "passages": [
+        {
+          "id": "cal-en-observatory-positive-semantic-only-p1",
+          "text": "A guardian must accompany every child at the telescope."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "expected_answer": "No; a guardian must accompany each child.",
+      "label_rationale": "Youngsters, the instrument, and a grown-up correspond to child, telescope, and guardian."
+    },
+    {
+      "id": "cal-en-observatory-negative-missing-field",
+      "topic": "public_observatory",
+      "question": "What is the diameter of the observatory telescope mirror?",
+      "passages": [
+        {
+          "id": "cal-en-observatory-negative-missing-field-p1",
+          "text": "The observatory telescope was installed in 2019. Its mirror is cleaned during the annual maintenance closure."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "Installation and cleaning details do not provide the mirror diameter."
+    },
+    {
+      "id": "cal-en-observatory-negative-wrong-entity",
+      "topic": "public_observatory",
+      "question": "When does the Cedar Hill observatory close on Fridays?",
+      "passages": [
+        {
+          "id": "cal-en-observatory-negative-wrong-entity-p1",
+          "text": "The Pine Ridge observatory closes at 23:00 on Fridays. The schedule names Pine Ridge only."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_entity",
+      "expected_answer": null,
+      "label_rationale": "Opening hours for Pine Ridge do not establish Cedar Hill hours."
+    },
+    {
+      "id": "cal-en-rowing-positive-literal",
+      "topic": "rowing_club",
+      "question": "How far from shore is the rowing practice course?",
+      "passages": [
+        {
+          "id": "cal-en-rowing-positive-literal-p1",
+          "text": "The rowing practice course stays within two hundred metres of shore. Orange buoys mark its outer edge."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "expected_answer": "Within two hundred metres of shore.",
+      "label_rationale": "The requested distance is stated."
+    },
+    {
+      "id": "cal-en-rowing-positive-semantic-only",
+      "topic": "rowing_club",
+      "question": "What should novices put on before getting into a boat?",
+      "passages": [
+        {
+          "id": "cal-en-rowing-positive-semantic-only-p1",
+          "text": "Beginners must wear a buoyancy vest prior to boarding."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "expected_answer": "A buoyancy vest.",
+      "label_rationale": "Beginners, wear, and boarding paraphrase novices, putting on, and getting into a boat."
+    },
+    {
+      "id": "cal-en-rowing-negative-missing-field",
+      "topic": "rowing_club",
+      "question": "What wind speed causes rowing practice to be cancelled?",
+      "passages": [
+        {
+          "id": "cal-en-rowing-negative-missing-field-p1",
+          "text": "Rowing practice is cancelled when the coach considers the wind unsafe. The notice tells members to check the club board for cancellations."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "A qualitative safety rule does not provide a numeric wind-speed threshold."
+    },
+    {
+      "id": "cal-en-rowing-negative-wrong-date",
+      "topic": "rowing_club",
+      "question": "What time did Saturday rowing practice start in the 2023 season?",
+      "passages": [
+        {
+          "id": "cal-en-rowing-negative-wrong-date-p1",
+          "text": "For the 2026 season, Saturday rowing practice starts at 07:30. This timetable is valid from April through September 2026."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_date",
+      "expected_answer": null,
+      "label_rationale": "The available timetable covers a different season."
+    },
+    {
+      "id": "cal-en-binding-positive-literal",
+      "topic": "bookbinding_workshop",
+      "question": "How many sheets fit in the beginner bookbinding kit?",
+      "passages": [
+        {
+          "id": "cal-en-binding-positive-literal-p1",
+          "text": "The beginner bookbinding kit contains materials for a notebook of forty sheets. A bone folder and linen thread are included."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "expected_answer": "Forty sheets.",
+      "label_rationale": "The kit capacity is explicit."
+    },
+    {
+      "id": "cal-en-binding-positive-semantic-only",
+      "topic": "bookbinding_workshop",
+      "question": "Which implement smooths the creases in folded paper?",
+      "passages": [
+        {
+          "id": "cal-en-binding-positive-semantic-only-p1",
+          "text": "Use a bone folder to flatten each bend after the pages have been doubled over."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "expected_answer": "A bone folder.",
+      "label_rationale": "Flattening a bend in doubled-over pages paraphrases smoothing a paper crease."
+    },
+    {
+      "id": "cal-en-binding-negative-missing-field",
+      "topic": "bookbinding_workshop",
+      "question": "At what temperature should the bookbinding adhesive be stored?",
+      "passages": [
+        {
+          "id": "cal-en-binding-negative-missing-field-p1",
+          "text": "Bookbinding adhesive is supplied in a sealed bottle. Close the lid immediately after applying the adhesive."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "Container and handling instructions do not specify storage temperature."
+    },
+    {
+      "id": "cal-en-binding-negative-wrong-entity",
+      "topic": "bookbinding_workshop",
+      "question": "How long is the Amber Stitch bookbinding class?",
+      "passages": [
+        {
+          "id": "cal-en-binding-negative-wrong-entity-p1",
+          "text": "The Indigo Fold bookbinding class lasts ninety minutes. Participants in Indigo Fold make one stitched notebook."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_entity",
+      "expected_answer": null,
+      "label_rationale": "A duration for Indigo Fold does not answer the question about Amber Stitch."
+    },
+    {
+      "id": "cal-en-seed-positive-literal",
+      "topic": "seed_exchange",
+      "question": "How many seed packets may one household take at the exchange?",
+      "passages": [
+        {
+          "id": "cal-en-seed-positive-literal-p1",
+          "text": "At the seed exchange, each household may take up to five packets. Unused packets should be returned before leaving."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "expected_answer": "Up to five packets.",
+      "label_rationale": "The household allowance is stated."
+    },
+    {
+      "id": "cal-en-seed-positive-semantic-only",
+      "topic": "seed_exchange",
+      "question": "What should gardeners do with leftover planting material?",
+      "passages": [
+        {
+          "id": "cal-en-seed-positive-semantic-only-p1",
+          "text": "Surplus seeds can be donated to the community collection desk."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "expected_answer": "Donate surplus seeds at the community collection desk.",
+      "label_rationale": "Surplus seeds paraphrases leftover planting material."
+    },
+    {
+      "id": "cal-en-seed-negative-missing-field",
+      "topic": "seed_exchange",
+      "question": "What is the germination percentage of the yellow bean seeds?",
+      "passages": [
+        {
+          "id": "cal-en-seed-negative-missing-field-p1",
+          "text": "The yellow bean seeds were collected from the demonstration garden. Each envelope records the harvest month and variety name."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "Origin and envelope details do not provide a germination percentage."
+    },
+    {
+      "id": "cal-en-seed-negative-wrong-date",
+      "topic": "seed_exchange",
+      "question": "On which date was the autumn seed exchange held in 2022?",
+      "passages": [
+        {
+          "id": "cal-en-seed-negative-wrong-date-p1",
+          "text": "The autumn seed exchange for 2027 is scheduled for 18 October. The announcement lists the 2027 event only."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_date",
+      "expected_answer": null,
+      "label_rationale": "The announced event is in a different year from the requested event."
+    },
+    {
+      "id": "cal-zh-baking-positive-literal",
+      "topic": "麵包烘焙課",
+      "question": "基礎麵包課每組最多可以有幾位學員？",
+      "passages": [
+        {
+          "id": "cal-zh-baking-positive-literal-p1",
+          "text": "基礎麵包課每組最多四位學員，共用一張操作桌。每位學員都能帶走自己製作的麵包。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "expected_answer": "每組最多四位學員。",
+      "label_rationale": "人數上限直接載明。"
+    },
+    {
+      "id": "cal-zh-baking-positive-semantic-only",
+      "topic": "麵包烘焙課",
+      "question": "和好之後還要擱多久才會膨起來？",
+      "passages": [
+        {
+          "id": "cal-zh-baking-positive-semantic-only-p1",
+          "text": "揉製完成的麵糰須靜置發酵六十分鐘，之後才能整形。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "expected_answer": "靜置發酵六十分鐘。",
+      "label_rationale": "問題以口語描述揉麵後的發酵等待，未使用來源中的主要術語。"
+    },
+    {
+      "id": "cal-zh-baking-negative-missing-field",
+      "topic": "麵包烘焙課",
+      "question": "這份餐包配方需要多少公克的鹽？",
+      "passages": [
+        {
+          "id": "cal-zh-baking-negative-missing-field-p1",
+          "text": "這份餐包配方使用高筋麵粉、酵母、鹽和清水。材料混合後要揉成光滑麵糰。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "材料名稱存在，但沒有鹽的重量。"
+    },
+    {
+      "id": "cal-zh-baking-negative-wrong-entity",
+      "topic": "麵包烘焙課",
+      "question": "南街教室的麵包課幾點開始？",
+      "passages": [
+        {
+          "id": "cal-zh-baking-negative-wrong-entity-p1",
+          "text": "北巷教室的麵包課於上午九點開始，學員可提前十分鐘進場。這張課表僅適用北巷教室。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_entity",
+      "expected_answer": null,
+      "label_rationale": "來源只描述另一間教室。"
+    },
+    {
+      "id": "cal-zh-pottery-positive-literal",
+      "topic": "陶藝燒窯",
+      "question": "陶藝作品送入窯爐前必須乾燥幾天？",
+      "passages": [
+        {
+          "id": "cal-zh-pottery-positive-literal-p1",
+          "text": "陶藝作品送入窯爐前必須乾燥七天。管理員會確認底部沒有潮濕痕跡。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "expected_answer": "七天。",
+      "label_rationale": "乾燥天數直接載明。"
+    },
+    {
+      "id": "cal-zh-pottery-positive-semantic-only",
+      "topic": "陶藝燒窯",
+      "question": "做好的杯盤要等到什麼時候才能拿回家？",
+      "passages": [
+        {
+          "id": "cal-zh-pottery-positive-semantic-only-p1",
+          "text": "器皿完成燒製並充分冷卻後，工作室才會通知領取。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "expected_answer": "完成燒製並充分冷卻，收到工作室領取通知後。",
+      "label_rationale": "杯盤與拿回家分別對應器皿與領取，條件可由來源回答。"
+    },
+    {
+      "id": "cal-zh-pottery-negative-missing-field",
+      "topic": "陶藝燒窯",
+      "question": "青瓷釉的燒製最高溫度是多少？",
+      "passages": [
+        {
+          "id": "cal-zh-pottery-negative-missing-field-p1",
+          "text": "青瓷釉適用於工作室的素坯杯。上釉前須擦淨杯底，避免作品黏在窯板上。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "來源有上釉操作說明，沒有最高燒製溫度。"
+    },
+    {
+      "id": "cal-zh-pottery-negative-wrong-date",
+      "topic": "陶藝燒窯",
+      "question": "工作室在二〇二四年八月哪一天開窯？",
+      "passages": [
+        {
+          "id": "cal-zh-pottery-negative-wrong-date-p1",
+          "text": "工作室二〇二七年八月的開窯日是十五日。本月公告僅列出二〇二七年的安排。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_date",
+      "expected_answer": null,
+      "label_rationale": "公告年份與問題不符，不能外推歷史日期。"
+    },
+    {
+      "id": "cal-zh-wood-positive-literal",
+      "topic": "共享木工間",
+      "question": "共享木工間的砂紙放在哪一個抽屜？",
+      "passages": [
+        {
+          "id": "cal-zh-wood-positive-literal-p1",
+          "text": "共享木工間的砂紙放在工作臺左側第二個抽屜。不同粗細以隔板分開。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "expected_answer": "工作臺左側第二個抽屜。",
+      "label_rationale": "存放位置直接載明。"
+    },
+    {
+      "id": "cal-zh-wood-positive-semantic-only",
+      "topic": "共享木工間",
+      "question": "切割時怎樣避免碎屑飛進眼睛？",
+      "passages": [
+        {
+          "id": "cal-zh-wood-positive-semantic-only-p1",
+          "text": "操作鋸臺前，必須配戴護目鏡；一般近視鏡片不能代替防護裝備。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "expected_answer": "操作鋸臺前配戴護目鏡。",
+      "label_rationale": "問題描述防止碎屑傷眼的目的，來源提供所需裝備。"
+    },
+    {
+      "id": "cal-zh-wood-negative-missing-field",
+      "topic": "共享木工間",
+      "question": "共享木工間的集塵機功率是多少瓦？",
+      "passages": [
+        {
+          "id": "cal-zh-wood-negative-missing-field-p1",
+          "text": "共享木工間的集塵機與鋸臺連動。使用完畢後，值班人員會清空集塵袋。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "運作及清理資訊不包含額定功率。"
+    },
+    {
+      "id": "cal-zh-wood-negative-wrong-entity",
+      "topic": "共享木工間",
+      "question": "石橋木工間星期日開放到幾點？",
+      "passages": [
+        {
+          "id": "cal-zh-wood-negative-wrong-entity-p1",
+          "text": "竹林木工間星期日開放至下午五點。此開放時間僅適用竹林場地。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_entity",
+      "expected_answer": null,
+      "label_rationale": "竹林場地的時間不等於石橋場地。"
+    },
+    {
+      "id": "cal-zh-shuttle-positive-literal",
+      "topic": "登山接駁車",
+      "question": "登山接駁車每班可以載幾位乘客？",
+      "passages": [
+        {
+          "id": "cal-zh-shuttle-positive-literal-p1",
+          "text": "登山接駁車每班限載八位乘客，行李放在車尾置物區。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "expected_answer": "八位乘客。",
+      "label_rationale": "載客上限直接載明。"
+    },
+    {
+      "id": "cal-zh-shuttle-positive-semantic-only",
+      "topic": "登山接駁車",
+      "question": "下山後要在哪裡搭回程？",
+      "passages": [
+        {
+          "id": "cal-zh-shuttle-positive-semantic-only-p1",
+          "text": "返程上車處設於步道出口旁的藍色候車亭。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "expected_answer": "步道出口旁的藍色候車亭。",
+      "label_rationale": "回程搭車地點可由返程上車處直接推知。"
+    },
+    {
+      "id": "cal-zh-shuttle-negative-missing-field",
+      "topic": "登山接駁車",
+      "question": "登山接駁車的兒童票價是多少？",
+      "passages": [
+        {
+          "id": "cal-zh-shuttle-negative-missing-field-p1",
+          "text": "登山接駁車設有成人票與兒童票。乘客上車前須向服務亭購票，車內不收現金。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "票種與購票方式存在，但沒有兒童票金額。"
+    },
+    {
+      "id": "cal-zh-shuttle-negative-wrong-date",
+      "topic": "登山接駁車",
+      "question": "二〇二三年冬季的末班登山接駁車是幾點？",
+      "passages": [
+        {
+          "id": "cal-zh-shuttle-negative-wrong-date-p1",
+          "text": "二〇二六年冬季接駁表規定末班車為下午四點。這份表自二〇二六年十二月一日起適用。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_date",
+      "expected_answer": null,
+      "label_rationale": "新年度時刻表無法回答舊年度班次。"
+    },
+    {
+      "id": "cal-zh-birds-positive-literal",
+      "topic": "河岸鳥類調查",
+      "question": "河岸鳥類調查每個觀察點停留多久？",
+      "passages": [
+        {
+          "id": "cal-zh-birds-positive-literal-p1",
+          "text": "河岸鳥類調查在每個觀察點停留十五分鐘，期間記錄看見及聽見的種類。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "expected_answer": "十五分鐘。",
+      "label_rationale": "定點停留時間直接載明。"
+    },
+    {
+      "id": "cal-zh-birds-positive-semantic-only",
+      "topic": "河岸鳥類調查",
+      "question": "看不清是哪一種飛禽時應該怎麼填表？",
+      "passages": [
+        {
+          "id": "cal-zh-birds-positive-semantic-only-p1",
+          "text": "無法辨識物種的紀錄請註記為「未定」，不可憑猜測指定名稱。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "expected_answer": "註記為「未定」，不要猜測物種名稱。",
+      "label_rationale": "描述辨識不確定時的紀錄方式，沒有依賴原問題措辭。"
+    },
+    {
+      "id": "cal-zh-birds-negative-missing-field",
+      "topic": "河岸鳥類調查",
+      "question": "今年河岸調查總共看到多少隻白鷺？",
+      "passages": [
+        {
+          "id": "cal-zh-birds-negative-missing-field-p1",
+          "text": "今年河岸調查記錄到白鷺與翠鳥。志工先將紙本觀察單交給資料整理員。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "出現的種類不能提供白鷺總隻數。"
+    },
+    {
+      "id": "cal-zh-birds-negative-wrong-entity",
+      "topic": "河岸鳥類調查",
+      "question": "東灣河段的鳥類調查集合點在哪裡？",
+      "passages": [
+        {
+          "id": "cal-zh-birds-negative-wrong-entity-p1",
+          "text": "西浦河段的鳥類調查在堤防入口集合。通知上的集合點僅適用西浦小隊。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_entity",
+      "expected_answer": null,
+      "label_rationale": "來源屬於另一河段與小隊。"
+    },
+    {
+      "id": "cal-zh-dye-positive-literal",
+      "topic": "植物染工作室",
+      "question": "植物染課程每位學員可以帶幾條棉巾？",
+      "passages": [
+        {
+          "id": "cal-zh-dye-positive-literal-p1",
+          "text": "植物染課程每位學員可以帶兩條未漂白棉巾。工作室提供染液及晾曬工具。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "expected_answer": "兩條未漂白棉巾。",
+      "label_rationale": "攜帶數量直接載明。"
+    },
+    {
+      "id": "cal-zh-dye-positive-semantic-only",
+      "topic": "植物染工作室",
+      "question": "上色完成的布料可以立刻放進洗衣機嗎？",
+      "passages": [
+        {
+          "id": "cal-zh-dye-positive-semantic-only-p1",
+          "text": "染好的織品須先陰乾一整天，再以手洗方式進行首次清潔。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "expected_answer": "不可以；先陰乾一整天，首次清潔採手洗。",
+      "label_rationale": "立即機洗與先陰乾再手洗有明確衝突，來源足以否定。"
+    },
+    {
+      "id": "cal-zh-dye-negative-missing-field",
+      "topic": "植物染工作室",
+      "question": "洋蔥皮染液與清水的調配比例是多少？",
+      "passages": [
+        {
+          "id": "cal-zh-dye-negative-missing-field-p1",
+          "text": "洋蔥皮染液放在有蓋的不鏽鋼桶中。調配時使用專用量杯，完成後清洗器具。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "器材與流程沒有提供任何調配比例。"
+    },
+    {
+      "id": "cal-zh-dye-negative-wrong-date",
+      "topic": "植物染工作室",
+      "question": "二〇二五年春季植物染課程在哪一天開課？",
+      "passages": [
+        {
+          "id": "cal-zh-dye-negative-wrong-date-p1",
+          "text": "二〇二八年春季植物染課程將於三月九日開課。這份招生單只列二〇二八年春季班。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_date",
+      "expected_answer": null,
+      "label_rationale": "未提供問題所指定年度的開課日期。"
+    }
+  ]
+}

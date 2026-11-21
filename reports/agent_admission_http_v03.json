@@ -1,0 +1,53 @@
+{
+  "schema_version": "agent-admission-http-verification-v1",
+  "status": "passed",
+  "measured_at": "2026-11-21T03:40:52.706221+00:00",
+  "profile_id": "0be2ce8f8c7eee905c58a231576e7f5ddc5c7e94b561cff603f3398dcd5ac8e4",
+  "profile_file_sha256": "b8ed84a9d97f23ab9e49a0b40e8fbbec6b91224e642ef97efb763f71605abf32",
+  "basis": "calibrated_answerability",
+  "frozen_threshold": 10.75,
+  "calibration_cases_digest": "7f655a11c85d4d87b5b295e24bef879848d298dddd34822dc296bfbeed13ee42",
+  "cases": [
+    {
+      "case_id": "cal-en-apiary-positive-literal",
+      "outcome": "success",
+      "profile_id": "0be2ce8f8c7eee905c58a231576e7f5ddc5c7e94b561cff603f3398dcd5ac8e4",
+      "basis": "calibrated_answerability",
+      "score": 22.875,
+      "threshold": 10.75,
+      "candidate_source_ids": [
+        "f266132bc51b2643cfd668607ad77680"
+      ],
+      "usable_source_ids": [
+        "f266132bc51b2643cfd668607ad77680"
+      ],
+      "agent_status": "completed",
+      "synthesis_http_calls": 1,
+      "model_usage_records": 1,
+      "safe_events": true,
+      "terminal_rest_sse_and_both_mcp": true
+    },
+    {
+      "case_id": "cal-en-apiary-negative-missing-field",
+      "outcome": "insufficient_evidence",
+      "profile_id": "0be2ce8f8c7eee905c58a231576e7f5ddc5c7e94b561cff603f3398dcd5ac8e4",
+      "basis": "calibrated_answerability",
+      "score": -9.75,
+      "threshold": 10.75,
+      "candidate_source_ids": [
+        "f7867eec171b874d6a84f3e373c51c82"
+      ],
+      "usable_source_ids": [],
+      "agent_status": "failed",
+      "synthesis_http_calls": 0,
+      "model_usage_records": 0,
+      "safe_events": true,
+      "terminal_rest_sse_and_both_mcp": true
+    }
+  ],
+  "scope": "Two frozen calibration cases exercise the integration contract; no quality, calibration, or model-selection claim",
+  "admission": "actual pinned local Qwen inference with verified profile/runtime/artifact identity",
+  "synthesis": "explicit deterministic local HTTP fixture, not a live generation model",
+  "live_paid_provider": false,
+  "elapsed_seconds": 18.606
+}

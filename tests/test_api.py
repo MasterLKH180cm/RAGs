@@ -24,7 +24,7 @@ def add(client, **kw):
     return client.post("/documents", headers=A, json=kw)
 
 
-def test_ingest_all_strategies_and_evidence(client):
+def test_offline_paths_and_explicit_advanced_requirements(client):
     response = add(client, title="Authentication design", document_id="auth-v1",
                    source="spec://auth", text=(
                        "# Authentication\n"
@@ -41,10 +41,7 @@ def test_ingest_all_strategies_and_evidence(client):
                    "Refresh tokens rotate after login. JWT expiration is 30 minutes.\n"
                    "# Session Management\nUser session expires after 30 minutes of inactivity."
                )).json()["unchanged"]
-    for mode in (
-        "sparse", "dense", "hybrid", "fusion", "hyde",
-        "contextual", "hierarchical", "graph", "corrective", "adaptive"
-    ):
+    for mode in ("naive", "sparse", "dense", "hybrid", "structured", "temporal"):
         r = client.post("/query", headers=A, json={
             "question": "When does session expire?", "mode": mode
         })
@@ -53,6 +50,15 @@ def test_ingest_all_strategies_and_evidence(client):
         assert data["answer"]
         assert data["citations"]
         assert all(c["source"] == "spec://auth" for c in data["citations"])
+        assert data["mode_used"] == mode
+    for mode in ("fusion", "hyde", "corrective", "adaptive", "agentic", "self_reflective"):
+        r = client.post("/query", headers=A, json={"question": "When does session expire?", "mode": mode})
+        assert r.status_code == 503, (mode, r.text)
+        assert r.json()["detail"]["code"] == "requires_provider"
+    for mode in ("contextual", "hierarchical", "parent_child"):
+        r = client.post("/query", headers=A, json={"question": "When does session expire?", "mode": mode})
+        assert r.status_code == 409
+        assert r.json()["detail"]["code"] == "requires_index"
     assert client.post("/query", headers=A, json={
         "question": "session expires", "generate": False
     }).json()["answer"] is None

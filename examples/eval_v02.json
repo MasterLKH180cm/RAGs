@@ -1,0 +1,756 @@
+{
+  "description": "36 labelled synthetic regression cases. No production-quality or semantic-entailment claim. Repeated document IDs are chronological revisions.",
+  "documents": [
+    {
+      "id": "sessions",
+      "title": "Session controls",
+      "text": "An inactive login session expires after 30 minutes. Refresh tokens rotate after every successful login.",
+      "source": "synthetic-v02",
+      "valid_from": "2024-01-01T00:00:00Z",
+      "chunking": {
+        "strategy": "parent_child",
+        "max_tokens": 75,
+        "overlap_tokens": 8,
+        "parent_max_tokens": 300
+      },
+      "index_features": [
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "backups",
+      "title": "Backup operations",
+      "text": "Database backups run every night at 02:00 UTC. Encrypted backup copies are retained for 35 days. Restoration drills run monthly.",
+      "source": "synthetic-v02",
+      "valid_from": "2024-01-01T00:00:00Z",
+      "chunking": {
+        "strategy": "parent_child",
+        "max_tokens": 75,
+        "overlap_tokens": 8,
+        "parent_max_tokens": 300
+      },
+      "index_features": [
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "audit",
+      "title": "Audit policy",
+      "text": "Administrative access audit records are preserved for 180 days. Each audit record includes the actor, resource, action and timestamp.",
+      "source": "synthetic-v02",
+      "valid_from": "2024-01-01T00:00:00Z",
+      "chunking": {
+        "strategy": "parent_child",
+        "max_tokens": 75,
+        "overlap_tokens": 8,
+        "parent_max_tokens": 300
+      },
+      "index_features": [
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "keys",
+      "title": "Encryption keys",
+      "text": "Stored customer files use AES-256 encryption. Encryption keys rotate every 90 days. The security team owns the rotation procedure.",
+      "source": "synthetic-v02",
+      "valid_from": "2024-01-01T00:00:00Z",
+      "chunking": {
+        "strategy": "parent_child",
+        "max_tokens": 75,
+        "overlap_tokens": 8,
+        "parent_max_tokens": 300
+      },
+      "index_features": [
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "billing",
+      "title": "Billing support",
+      "text": "Invoices are issued on the first day of each month. Billing disputes must be reported within 14 days. Refund requests go to the billing team.",
+      "source": "synthetic-v02",
+      "valid_from": "2024-01-01T00:00:00Z",
+      "chunking": {
+        "strategy": "parent_child",
+        "max_tokens": 75,
+        "overlap_tokens": 8,
+        "parent_max_tokens": 300
+      },
+      "index_features": [
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "support",
+      "title": "Support hours",
+      "text": "Technical support operates Monday through Friday from 09:00 to 18:00 Taipei time. Critical incidents use the emergency on-call channel.",
+      "source": "synthetic-v02",
+      "valid_from": "2024-01-01T00:00:00Z",
+      "chunking": {
+        "strategy": "parent_child",
+        "max_tokens": 75,
+        "overlap_tokens": 8,
+        "parent_max_tokens": 300
+      },
+      "index_features": [
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "cache",
+      "title": "Cache policy",
+      "text": "The product catalog cache expires after 300 seconds. Updating a product explicitly invalidates its cached catalog entry.",
+      "source": "synthetic-v02",
+      "valid_from": "2024-01-01T00:00:00Z",
+      "chunking": {
+        "strategy": "parent_child",
+        "max_tokens": 75,
+        "overlap_tokens": 8,
+        "parent_max_tokens": 300
+      },
+      "index_features": [
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "upload",
+      "title": "Upload limits",
+      "text": "A single uploaded document must not exceed 20 megabytes. Accepted formats are PDF, Markdown and plain text. Images use a separate upload endpoint.",
+      "source": "synthetic-v02",
+      "valid_from": "2024-01-01T00:00:00Z",
+      "chunking": {
+        "strategy": "parent_child",
+        "max_tokens": 75,
+        "overlap_tokens": 8,
+        "parent_max_tokens": 300
+      },
+      "index_features": [
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "recovery",
+      "title": "Recovery objectives",
+      "text": "The service recovery time objective is four hours. The recovery point objective is one hour. Database replicas run in a second region.",
+      "source": "synthetic-v02",
+      "valid_from": "2024-01-01T00:00:00Z",
+      "chunking": {
+        "strategy": "parent_child",
+        "max_tokens": 75,
+        "overlap_tokens": 8,
+        "parent_max_tokens": 300
+      },
+      "index_features": [
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "zh_policy",
+      "title": "台灣帳號規則",
+      "text": "使用者連續登入失敗五次後，帳號會鎖定十五分鐘。重設密碼連結有效期限為三十分鐘。管理員必須開啟雙因素驗證。",
+      "source": "synthetic-v02",
+      "valid_from": "2024-01-01T00:00:00Z",
+      "chunking": {
+        "strategy": "parent_child",
+        "max_tokens": 75,
+        "overlap_tokens": 8,
+        "parent_max_tokens": 300
+      },
+      "index_features": [
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "gateway",
+      "title": "Gateway dependencies",
+      "text": "Gateway -> Accounts\nThe Gateway forwards account requests to Accounts. The Gateway is owned by the platform team.",
+      "source": "synthetic-v02",
+      "valid_from": "2024-01-01T00:00:00Z",
+      "chunking": {
+        "strategy": "parent_child",
+        "max_tokens": 75,
+        "overlap_tokens": 8,
+        "parent_max_tokens": 300
+      },
+      "index_features": [
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "accounts",
+      "title": "Account dependencies",
+      "text": "Accounts -> Ledger\nAccounts stores financial events in Ledger. The Accounts service is owned by the identity team.",
+      "source": "synthetic-v02",
+      "valid_from": "2024-01-01T00:00:00Z",
+      "chunking": {
+        "strategy": "parent_child",
+        "max_tokens": 75,
+        "overlap_tokens": 8,
+        "parent_max_tokens": 300
+      },
+      "index_features": [
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "ledger",
+      "title": "Ledger dependencies",
+      "text": "Ledger -> Archive\nThe Ledger sends immutable snapshots to Archive. Archive retains snapshots for seven years.",
+      "source": "synthetic-v02",
+      "valid_from": "2024-01-01T00:00:00Z",
+      "chunking": {
+        "strategy": "parent_child",
+        "max_tokens": 75,
+        "overlap_tokens": 8,
+        "parent_max_tokens": 300
+      },
+      "index_features": [
+        "hierarchy"
+      ]
+    },
+    {
+      "id": "sales",
+      "title": "Synthetic regional sales",
+      "text": "",
+      "rows": [
+        {
+          "region": "north",
+          "amount": 10,
+          "active": true
+        },
+        {
+          "region": "north",
+          "amount": 15,
+          "active": false
+        },
+        {
+          "region": "south",
+          "amount": 99,
+          "active": true
+        },
+        {
+          "region": "east",
+          "amount": 26,
+          "active": true
+        }
+      ],
+      "metadata": {
+        "kind": "sales"
+      },
+      "valid_from": "2024-01-01T00:00:00Z"
+    },
+    {
+      "id": "plan",
+      "title": "Plan price revision one",
+      "text": "The standard plan costs 10 credits per month.",
+      "metadata": {
+        "kind": "plan"
+      },
+      "valid_from": "2024-01-01T00:00:00Z"
+    },
+    {
+      "id": "plan",
+      "title": "Plan price revision two",
+      "text": "The standard plan costs 20 credits per month.",
+      "metadata": {
+        "kind": "plan"
+      },
+      "valid_from": "2024-06-01T00:00:00Z"
+    }
+  ],
+  "cases": [
+    {
+      "id": "lexical-01",
+      "category": "lexical",
+      "question": "What is the inactive login session expiration?",
+      "relevant_document_ids": [
+        "sessions"
+      ],
+      "reference_answer": "30 minutes"
+    },
+    {
+      "id": "lexical-02",
+      "category": "lexical",
+      "question": "When do database backups run?",
+      "relevant_document_ids": [
+        "backups"
+      ],
+      "reference_answer": "02:00 UTC every night"
+    },
+    {
+      "id": "lexical-03",
+      "category": "lexical",
+      "question": "How long are administrative audit records preserved?",
+      "relevant_document_ids": [
+        "audit"
+      ],
+      "reference_answer": "180 days"
+    },
+    {
+      "id": "lexical-04",
+      "category": "lexical",
+      "question": "How often do encryption keys rotate?",
+      "relevant_document_ids": [
+        "keys"
+      ],
+      "reference_answer": "90 days"
+    },
+    {
+      "id": "lexical-05",
+      "category": "lexical",
+      "question": "When are invoices issued?",
+      "relevant_document_ids": [
+        "billing"
+      ],
+      "reference_answer": "The first day of each month"
+    },
+    {
+      "id": "lexical-06",
+      "category": "lexical",
+      "question": "What are technical support hours?",
+      "relevant_document_ids": [
+        "support"
+      ],
+      "reference_answer": "09:00 to 18:00 Taipei time, Monday through Friday"
+    },
+    {
+      "id": "lexical-07",
+      "category": "lexical",
+      "question": "How long is the product catalog cache valid?",
+      "relevant_document_ids": [
+        "cache"
+      ],
+      "reference_answer": "300 seconds"
+    },
+    {
+      "id": "lexical-08",
+      "category": "lexical",
+      "question": "Which document upload formats are accepted?",
+      "relevant_document_ids": [
+        "upload"
+      ],
+      "reference_answer": "PDF, Markdown and plain text"
+    },
+    {
+      "id": "lexical-09",
+      "category": "lexical",
+      "question": "What is the recovery time objective?",
+      "relevant_document_ids": [
+        "recovery"
+      ],
+      "reference_answer": "four hours"
+    },
+    {
+      "id": "lexical-10",
+      "category": "lexical",
+      "question": "連續登入失敗幾次會鎖定帳號？",
+      "relevant_document_ids": [
+        "zh_policy"
+      ],
+      "reference_answer": "五次"
+    },
+    {
+      "id": "semantic-01",
+      "category": "semantic",
+      "question": "How long can someone leave their sign-in idle before it is closed?",
+      "relevant_document_ids": [
+        "sessions"
+      ],
+      "reference_answer": "30 minutes"
+    },
+    {
+      "id": "semantic-02",
+      "category": "semantic",
+      "question": "What happens to old cached catalog data after a product changes?",
+      "relevant_document_ids": [
+        "cache"
+      ],
+      "reference_answer": "The entry is invalidated"
+    },
+    {
+      "id": "semantic-03",
+      "category": "semantic",
+      "question": "Where should a customer ask to get a payment returned?",
+      "relevant_document_ids": [
+        "billing"
+      ],
+      "reference_answer": "The billing team"
+    },
+    {
+      "id": "semantic-04",
+      "category": "semantic",
+      "question": "What protection is used for customer files at rest?",
+      "relevant_document_ids": [
+        "keys"
+      ],
+      "reference_answer": "AES-256 encryption"
+    },
+    {
+      "id": "semantic-05",
+      "category": "semantic",
+      "question": "How much recent information could be lost during a service disaster?",
+      "relevant_document_ids": [
+        "recovery"
+      ],
+      "reference_answer": "one hour"
+    },
+    {
+      "id": "semantic-06",
+      "category": "semantic",
+      "question": "忘記密碼後收到的網址可以用多久？",
+      "relevant_document_ids": [
+        "zh_policy"
+      ],
+      "reference_answer": "三十分鐘"
+    },
+    {
+      "id": "multi_hop-01",
+      "category": "multi_hop",
+      "question": "How do session expiration and cache expiration differ?",
+      "relevant_document_ids": [
+        "sessions",
+        "cache"
+      ],
+      "reference_answer": "30 minutes versus 300 seconds"
+    },
+    {
+      "id": "multi_hop-02",
+      "category": "multi_hop",
+      "question": "Compare backup retention with audit retention.",
+      "relevant_document_ids": [
+        "backups",
+        "audit"
+      ],
+      "reference_answer": "35 days versus 180 days"
+    },
+    {
+      "id": "multi_hop-03",
+      "category": "multi_hop",
+      "question": "What are recovery time and backup restoration drill intervals?",
+      "relevant_document_ids": [
+        "recovery",
+        "backups"
+      ],
+      "reference_answer": "four hours and monthly"
+    },
+    {
+      "id": "multi_hop-04",
+      "category": "multi_hop",
+      "question": "Which teams own Gateway and Accounts?",
+      "relevant_document_ids": [
+        "gateway",
+        "accounts"
+      ],
+      "reference_answer": "platform and identity"
+    },
+    {
+      "id": "multi_hop-05",
+      "category": "multi_hop",
+      "question": "What dependencies are within two hops of Gateway?",
+      "relevant_document_ids": [
+        "gateway",
+        "accounts"
+      ],
+      "modes": [
+        "graph"
+      ]
+    },
+    {
+      "id": "multi_hop-06",
+      "category": "multi_hop",
+      "question": "What depends on Ledger and where does Ledger send snapshots?",
+      "relevant_document_ids": [
+        "accounts",
+        "ledger"
+      ],
+      "modes": [
+        "graph"
+      ]
+    },
+    {
+      "id": "structured-01",
+      "category": "structured",
+      "question": "Total north sales",
+      "relevant_document_ids": [
+        "sales"
+      ],
+      "modes": [
+        "structured"
+      ],
+      "expected_aggregate": 25,
+      "options": {
+        "row_filters": [
+          {
+            "field": "region",
+            "op": "eq",
+            "value": "north"
+          }
+        ],
+        "aggregate": {
+          "operation": "sum",
+          "field": "amount"
+        },
+        "filters": {
+          "metadata": {
+            "kind": "sales"
+          }
+        }
+      }
+    },
+    {
+      "id": "structured-02",
+      "category": "structured",
+      "question": "Count active sales rows",
+      "relevant_document_ids": [
+        "sales"
+      ],
+      "modes": [
+        "structured"
+      ],
+      "expected_aggregate": 3,
+      "options": {
+        "row_filters": [
+          {
+            "field": "active",
+            "op": "eq",
+            "value": true
+          }
+        ],
+        "aggregate": {
+          "operation": "count"
+        },
+        "filters": {
+          "metadata": {
+            "kind": "sales"
+          }
+        }
+      }
+    },
+    {
+      "id": "structured-03",
+      "category": "structured",
+      "question": "Mean north sales",
+      "relevant_document_ids": [
+        "sales"
+      ],
+      "modes": [
+        "structured"
+      ],
+      "expected_aggregate": 12.5,
+      "options": {
+        "row_filters": [
+          {
+            "field": "region",
+            "op": "eq",
+            "value": "north"
+          }
+        ],
+        "aggregate": {
+          "operation": "mean",
+          "field": "amount"
+        },
+        "filters": {
+          "metadata": {
+            "kind": "sales"
+          }
+        }
+      }
+    },
+    {
+      "id": "structured-04",
+      "category": "structured",
+      "question": "Largest sales amount",
+      "relevant_document_ids": [
+        "sales"
+      ],
+      "modes": [
+        "structured"
+      ],
+      "expected_aggregate": 99,
+      "options": {
+        "row_filters": [],
+        "aggregate": {
+          "operation": "max",
+          "field": "amount"
+        },
+        "filters": {
+          "metadata": {
+            "kind": "sales"
+          }
+        }
+      }
+    },
+    {
+      "id": "structured-05",
+      "category": "structured",
+      "question": "Smallest active amount",
+      "relevant_document_ids": [
+        "sales"
+      ],
+      "modes": [
+        "structured"
+      ],
+      "expected_aggregate": 10,
+      "options": {
+        "row_filters": [
+          {
+            "field": "active",
+            "op": "eq",
+            "value": true
+          }
+        ],
+        "aggregate": {
+          "operation": "min",
+          "field": "amount"
+        },
+        "filters": {
+          "metadata": {
+            "kind": "sales"
+          }
+        }
+      }
+    },
+    {
+      "id": "structured-06",
+      "category": "structured",
+      "question": "Count large sales",
+      "relevant_document_ids": [
+        "sales"
+      ],
+      "modes": [
+        "structured"
+      ],
+      "expected_aggregate": 2,
+      "options": {
+        "row_filters": [
+          {
+            "field": "amount",
+            "op": "gt",
+            "value": 20
+          }
+        ],
+        "aggregate": {
+          "operation": "count"
+        },
+        "filters": {
+          "metadata": {
+            "kind": "sales"
+          }
+        }
+      }
+    },
+    {
+      "id": "temporal-01",
+      "category": "temporal",
+      "question": "What is the standard plan price at this date?",
+      "relevant_document_ids": [
+        "plan"
+      ],
+      "modes": [
+        "temporal"
+      ],
+      "expected_text": "10 credits",
+      "options": {
+        "as_of": "2024-02-01T00:00:00Z",
+        "filters": {
+          "metadata": {
+            "kind": "plan"
+          }
+        }
+      },
+      "reference_answer": "10 credits"
+    },
+    {
+      "id": "temporal-02",
+      "category": "temporal",
+      "question": "What is the standard plan price at this date?",
+      "relevant_document_ids": [
+        "plan"
+      ],
+      "modes": [
+        "temporal"
+      ],
+      "expected_text": "10 credits",
+      "options": {
+        "as_of": "2024-05-31T00:00:00Z",
+        "filters": {
+          "metadata": {
+            "kind": "plan"
+          }
+        }
+      },
+      "reference_answer": "10 credits"
+    },
+    {
+      "id": "temporal-03",
+      "category": "temporal",
+      "question": "What is the standard plan price at this date?",
+      "relevant_document_ids": [
+        "plan"
+      ],
+      "modes": [
+        "temporal"
+      ],
+      "expected_text": "20 credits",
+      "options": {
+        "as_of": "2024-06-01T00:00:00Z",
+        "filters": {
+          "metadata": {
+            "kind": "plan"
+          }
+        }
+      },
+      "reference_answer": "20 credits"
+    },
+    {
+      "id": "temporal-04",
+      "category": "temporal",
+      "question": "What is the standard plan price at this date?",
+      "relevant_document_ids": [
+        "plan"
+      ],
+      "modes": [
+        "temporal"
+      ],
+      "expected_text": "20 credits",
+      "options": {
+        "as_of": "2024-12-01T00:00:00Z",
+        "filters": {
+          "metadata": {
+            "kind": "plan"
+          }
+        }
+      },
+      "reference_answer": "20 credits"
+    },
+    {
+      "id": "no_answer-01",
+      "category": "no_answer",
+      "question": "Which zeppelin won the interplanetary race?",
+      "relevant_document_ids": [],
+      "unanswerable": true
+    },
+    {
+      "id": "no_answer-02",
+      "category": "no_answer",
+      "question": "How many purple dragons live on Neptune?",
+      "relevant_document_ids": [],
+      "unanswerable": true
+    },
+    {
+      "id": "no_answer-03",
+      "category": "no_answer",
+      "question": "What is the private password of the unseen administrator?",
+      "relevant_document_ids": [],
+      "unanswerable": true
+    },
+    {
+      "id": "no_answer-04",
+      "category": "no_answer",
+      "question": "Who composed the Martian violin concerto?",
+      "relevant_document_ids": [],
+      "unanswerable": true
+    }
+  ]
+}

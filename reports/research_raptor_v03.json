@@ -1,0 +1,118 @@
+{
+  "schema": "actual-upstream-verification-v1",
+  "engine": "raptor",
+  "verified_at": "2026-11-21T03:16:27.344263+00:00",
+  "python": "3.12.14",
+  "verification": "actual_upstream_algorithm_real_bge_embeddings_deterministic_generation_fixture",
+  "not_verified": [
+    "trained_generation_quality",
+    "paper_benchmark_reproduction",
+    "paid_provider_quality"
+  ],
+  "runtime_versions": {
+    "fastembed": "0.9.1",
+    "onnxruntime": "1.32.0",
+    "tokenizers": "0.15.2",
+    "numpy": "1.26.4",
+    "tiktoken": "0.14.0",
+    "umap-learn": "0.5.5",
+    "scikit-learn": "1.4.2",
+    "torch": "2.5.1+cpu"
+  },
+  "embedding_artifacts_sha256": {
+    "model_optimized.onnx": "51f1bd0addd6e859e42c2c8021a5e5461385bb676a649f4b269aa445449f2431",
+    "tokenizer.json": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66",
+    "tokenizer_config.json": "0b29c7bfc889e53b36d9dd3e686dd4300f6525110eaa98c76a5dafceb2029f53"
+  },
+  "result": {
+    "hits": [
+      {
+        "chunk_id": "water-1",
+        "score": 1.0
+      },
+      {
+        "chunk_id": "water-2",
+        "score": 1.0
+      },
+      {
+        "chunk_id": "space-1",
+        "score": 0.25
+      },
+      {
+        "chunk_id": "space-2",
+        "score": 0.25
+      },
+      {
+        "chunk_id": "space-3",
+        "score": 0.25
+      },
+      {
+        "chunk_id": "space-4",
+        "score": 0.25
+      },
+      {
+        "chunk_id": "water-3",
+        "score": 0.25
+      },
+      {
+        "chunk_id": "water-4",
+        "score": 0.25
+      },
+      {
+        "chunk_id": "health-1",
+        "score": 0.14285714285714285
+      },
+      {
+        "chunk_id": "health-2",
+        "score": 0.125
+      },
+      {
+        "chunk_id": "health-3",
+        "score": 0.1111111111111111
+      },
+      {
+        "chunk_id": "health-4",
+        "score": 0.1111111111111111
+      },
+      {
+        "chunk_id": "library-1",
+        "score": 0.05263157894736842
+      },
+      {
+        "chunk_id": "library-2",
+        "score": 0.05263157894736842
+      },
+      {
+        "chunk_id": "library-3",
+        "score": 0.05263157894736842
+      },
+      {
+        "chunk_id": "library-4",
+        "score": 0.05263157894736842
+      }
+    ],
+    "implementation": {
+      "library": "raptor",
+      "version": "git-7da1d48",
+      "source_commit": "7da1d48a7e1d7dec61a63c9d9aae84e2dfaa5767",
+      "adapter_version": "v03"
+    },
+    "diagnostics": {
+      "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+      "generation_provider": "fixture:deterministic-generation-v1",
+      "embedding_dimensions": 384,
+      "embedding_calls": 27,
+      "embedding_token_limit": 512,
+      "embedding_window_policy": "provider_exact_counter_reject_oversize",
+      "query_embedding_calls": 1,
+      "generation_calls": 10,
+      "score_kind": "reciprocal_selected_node_rank",
+      "source_count": 16,
+      "tree_nodes": 26,
+      "summary_layers": 2,
+      "summary_nodes": 10,
+      "selected_nodes": 20,
+      "selected_summary_nodes": 9
+    }
+  }
+}

@@ -1,0 +1,259 @@
+{
+  "schema": "research-http-e2e-v03",
+  "verified_at": "2026-11-21T03:27:47.363582+00:00",
+  "engine": "raptor",
+  "implementation": {
+    "library": "raptor",
+    "version": "git-7da1d48",
+    "source_commit": "7da1d48a7e1d7dec61a63c9d9aae84e2dfaa5767",
+    "adapter_version": "v03"
+  },
+  "embedding_library": "fastembed:0.9.1",
+  "generation": "explicit_local_openai_protocol_deterministic_fixture",
+  "trained_generation_quality_verified": false,
+  "fixture_http_calls": 60,
+  "checks": {
+    "authentication": {
+      "invalid_token": 401,
+      "tenant_mismatch": 403,
+      "no_model_calls": true
+    },
+    "actual_upstream_http": {
+      "implementation": {
+        "library": "raptor",
+        "version": "git-7da1d48",
+        "source_commit": "7da1d48a7e1d7dec61a63c9d9aae84e2dfaa5767",
+        "adapter_version": "v03"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 22,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 9,
+        "score_kind": "reciprocal_selected_node_rank",
+        "source_count": 16,
+        "tree_nodes": 25,
+        "summary_layers": 2,
+        "summary_nodes": 9,
+        "selected_nodes": 20,
+        "selected_summary_nodes": 7,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "0265df19d88518d6866973116fbbb427",
+        "0376db1b05138c278f18c273230c8abc",
+        "0dca268bec1e84c2b32cd3a929e4ab07",
+        "2cd010bbfa20704451dcd3942f48c93b",
+        "4743bb8c970089c42d3b4ccf525f0ac5",
+        "555d7867dc3854b32ea93acda4998013",
+        "589c6c754bbe5b1ba90d5796fb7a5fa1",
+        "69c8d3e9763bae6c3f6402d512bff82b",
+        "71fc0b8f79ec9eb3610c1ae31c094148",
+        "9bc5507c5cccd9554d0bb57787eebb58",
+        "ae08d5f31fa292ec4000cdc75d918407",
+        "d69fd9a5805df9dd9a0f8580c41aee72",
+        "d90cb86088004f2d31c6c19d541469e6",
+        "f22001bc782c8f41473ed4a24541e4c5",
+        "f4bb615785415bafae4e7440a635edd5"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "companion_agent_chain": {
+      "completed": true,
+      "mode": "raptor",
+      "checks": [
+        "Actual upstream raptor identity and authorized source lineage survive independent Agent worker",
+        "Actual positive answer -> terminal REST/SSE/both MCP; source IDs and safe events"
+      ]
+    },
+    "updated_snapshot": {
+      "implementation": {
+        "library": "raptor",
+        "version": "git-7da1d48",
+        "source_commit": "7da1d48a7e1d7dec61a63c9d9aae84e2dfaa5767",
+        "adapter_version": "v03"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 5,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 0,
+        "score_kind": "reciprocal_selected_node_rank",
+        "source_count": 4,
+        "tree_nodes": 4,
+        "summary_layers": 0,
+        "summary_nodes": 0,
+        "selected_nodes": 4,
+        "selected_summary_nodes": 0,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "0265df19d88518d6866973116fbbb427",
+        "388c77d4bed7942c469710804dd9341a",
+        "d90cb86088004f2d31c6c19d541469e6",
+        "f22001bc782c8f41473ed4a24541e4c5"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "historical_snapshot": {
+      "implementation": {
+        "library": "raptor",
+        "version": "git-7da1d48",
+        "source_commit": "7da1d48a7e1d7dec61a63c9d9aae84e2dfaa5767",
+        "adapter_version": "v03"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 5,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 0,
+        "score_kind": "reciprocal_selected_node_rank",
+        "source_count": 4,
+        "tree_nodes": 4,
+        "summary_layers": 0,
+        "summary_nodes": 0,
+        "selected_nodes": 4,
+        "selected_summary_nodes": 0,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "0265df19d88518d6866973116fbbb427",
+        "555d7867dc3854b32ea93acda4998013",
+        "d90cb86088004f2d31c6c19d541469e6",
+        "f22001bc782c8f41473ed4a24541e4c5"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "tenant_source_isolation": {
+      "implementation": {
+        "library": "raptor",
+        "version": "git-7da1d48",
+        "source_commit": "7da1d48a7e1d7dec61a63c9d9aae84e2dfaa5767",
+        "adapter_version": "v03"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 2,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 0,
+        "score_kind": "reciprocal_selected_node_rank",
+        "source_count": 1,
+        "tree_nodes": 1,
+        "summary_layers": 0,
+        "summary_nodes": 0,
+        "selected_nodes": 1,
+        "selected_summary_nodes": 0,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "dbc1db6697de4922c3d788da715c766e"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "deleted_current_snapshot": {
+      "implementation": {
+        "library": "raptor",
+        "version": "git-7da1d48",
+        "source_commit": "7da1d48a7e1d7dec61a63c9d9aae84e2dfaa5767",
+        "adapter_version": "v03"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 3,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 0,
+        "score_kind": "reciprocal_selected_node_rank",
+        "source_count": 2,
+        "tree_nodes": 2,
+        "summary_layers": 0,
+        "summary_nodes": 0,
+        "selected_nodes": 2,
+        "selected_summary_nodes": 0,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "d90cb86088004f2d31c6c19d541469e6",
+        "f22001bc782c8f41473ed4a24541e4c5"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "deleted_historical_snapshot": {
+      "implementation": {
+        "library": "raptor",
+        "version": "git-7da1d48",
+        "source_commit": "7da1d48a7e1d7dec61a63c9d9aae84e2dfaa5767",
+        "adapter_version": "v03"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 3,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 0,
+        "score_kind": "reciprocal_selected_node_rank",
+        "source_count": 2,
+        "tree_nodes": 2,
+        "summary_layers": 0,
+        "summary_nodes": 0,
+        "selected_nodes": 2,
+        "selected_summary_nodes": 0,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "d90cb86088004f2d31c6c19d541469e6",
+        "f22001bc782c8f41473ed4a24541e4c5"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "empty_scope": {
+      "implementation": {
+        "library": "raptor",
+        "version": "git-7da1d48",
+        "source_commit": "7da1d48a7e1d7dec61a63c9d9aae84e2dfaa5767",
+        "adapter_version": "v03"
+      },
+      "diagnostics": {
+        "source_count": 0,
+        "engine_executed": false
+      },
+      "cited_chunk_ids": [],
+      "outcome": "insufficient_evidence",
+      "request_index_removed": true
+    },
+    "deadline_cleanup": {
+      "http_status": 504,
+      "code": "upstream_timeout",
+      "request_index_removed": true
+    }
+  },
+  "passed": true
+}

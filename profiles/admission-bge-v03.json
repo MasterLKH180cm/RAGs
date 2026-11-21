@@ -1,0 +1,59 @@
+{
+  "schema_version": "evidence-admission-profile-v1",
+  "scorer": {
+    "model": "BAAI/bge-reranker-v2-m3-int8",
+    "artifacts": {
+      "onnx/model_int8.onnx": "912fc1215c2dbff6499700534bd8d31253af01573861abbfc43afd1fab6cce5d",
+      "tokenizer.json": "8bf8afbfd11306bd872018c53bfdf2e160a56f8edbcf49933324404791c148d3",
+      "tokenizer_config.json": "b87c8703482b0300d3da30e201519aa641f6a450f5eb5bf1e624afbf70c74d80",
+      "special_tokens_map.json": "8c785abebea9ae3257b61681b4e6fd8365ceafde980c21970d001e834cf10835",
+      "config.json": "122e922dcfed6503c8721e6fe1daf090340c3d95ca7f3aa3a72730b321a51cfd"
+    },
+    "runtime": {
+      "fastembed": "0.9.1",
+      "onnxruntime": "1.32.0",
+      "tokenizers": "0.23.3",
+      "python": "3.12",
+      "execution_provider": "CPUExecutionProvider"
+    },
+    "score_convention": "onnx_output_0_first_column_logit_no_activation",
+    "limits": {
+      "max_candidates": 20,
+      "max_question_chars": 2000,
+      "max_passage_chars": 200000,
+      "max_total_passage_chars": 200000,
+      "pair_tokens": 512,
+      "batch_size": 4,
+      "cpu_threads": 2,
+      "window": "right_source_prefix_only_second_v1"
+    },
+    "aggregation": "max_original_passage"
+  },
+  "threshold": -5.907637596130371,
+  "languages": [
+    "en",
+    "zh"
+  ],
+  "calibration": {
+    "cases_digest": "7f655a11c85d4d87b5b295e24bef879848d298dddd34822dc296bfbeed13ee42",
+    "objective": "max_specificity_then_retention_then_smallest_threshold_v1",
+    "minimum_positive_retention": 0.95,
+    "measurements": {
+      "cases": 48,
+      "positive": 24,
+      "negative": 24,
+      "positive_retained": 23,
+      "negative_refused": 1,
+      "false_refusals": 1,
+      "positive_retention": 0.9583333333333334,
+      "refusal_recall": 0.041666666666666664,
+      "refusal_precision": 0.5,
+      "false_refusal_rate": 0.041666666666666664,
+      "abstentions": 2,
+      "abstention_rate": 0.041666666666666664,
+      "semantic_only_positive": 12,
+      "semantic_only_retained": 11
+    }
+  },
+  "profile_id": "f1f6f30f3f3003d888dcfa1607bc2bc875cdf7fb13d2a7b36479e4c0fa94cd7e"
+}
