@@ -387,6 +387,8 @@ Text uploads are capped at 2,000,000 bytes; extracted document text at 200,000 c
 
 The v0.3 local suite passed **280 tests with 5 opt-in environment/model checks skipped**. The separate actual upstream and pretrained-admission runs are recorded below; these counts overlap and must not be summed as unique tests.
 
+Ordinary CI runs actual Qwen acceptance/refusal on two preselected calibration cases and audits the immutable complete quality report. It checks all file/dataset/profile identities and recomputes the recorded gates, while clearly labelling those metrics as historical. The full 472-forward benchmark is a separate manual workflow option, `full_admission_benchmark`, using the unchanged `--enforce-quality` command and a bounded CPU budget. Any scoring/retrieval change or proposed profile promotion requires a new complete benchmark; a successful contract smoke or recorded-report audit cannot substitute for it. See [the CI resource specification](docs/SPEC_V03.md#9-ci-resource-and-evidence-amendment).
+
 ```bash
 RAGS_ENV=test pytest -q
 ruff check rags tests --select E4,E7,E9,F

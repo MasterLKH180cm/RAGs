@@ -115,10 +115,44 @@ The report destination must be new; the verifier refuses to overwrite evidence.
 Default enforcement exits0 only when correctness and quality both pass,1 for an
 execution/contract failure, and2 for a quality failure. The optional
 `--no-enforce-quality` mode checks runtime correctness while retaining every
-failed quality target and `promotion_status:failed`. CI explicitly names that
-runtime/measurement mode and publishes failures in its summary/artifact. A green
-runtime job does not approve a failed profile for deployment. No scoring profile
-is enabled by default.
+failed quality target and `promotion_status:failed`. Ordinary CI instead runs
+the small actual-model contract and recorded-evidence audit described below.
+Its green runtime job does not approve a failed profile for deployment. No
+scoring profile is enabled by default.
+
+### CI resource boundary and recorded evidence
+
+The complete local benchmark performed 472 forward passes: 32 held-out passages
+and 440 candidate scores across regression modes. The actual Agent CI contract
+took 140.627 seconds for six scorer calls, versus 18.606 seconds locally. Its
+logits were 22.625 and -9.5, compared with local 22.875 and -9.75. The frozen
+threshold 10.75 produced the same two decisions. Runtime and artifact identity
+does not promise bitwise numerical equality or identical speed across CPUs.
+
+The [first PR full replay](https://github.com/MasterLKH180cm/RAGs/actions/runs/44862953958)
+was superseded before completing its model evaluation. It supplies no new full
+quality measurement. A committed [specification amendment](SPEC_V03.md#9-ci-resource-and-evidence-amendment)
+then separated ordinary CI from the expensive full benchmark without changing
+the model, threshold, fixtures or quality targets.
+
+Ordinary CI executes the same two preselected calibration contract cases with
+the actual pinned scorer. The [runtime/evidence helper](../scripts/verify_admission_runtime.py)
+also verifies SHA-256 values for the frozen full report, profile, calibration,
+holdout and original regression files; checks row coverage and dataset/profile
+identity; and recomputes every recorded correctness and quality gate. Its
+`recorded_quality` object is explicitly historical. Audit success is not a
+new quality result and cannot promote the failed profile. The pure evidence
+audit can be reproduced without model inference:
+
+```bash
+python scripts/verify_admission_runtime.py --audit-only
+```
+
+The manual `full_admission_benchmark` workflow option retains the complete
+`--enforce-quality` command and all original gates, allows up to 360 CPU minutes,
+and uploads the result even when quality enforcement fails. A scoring/retrieval
+change or a promotion proposal requires a fresh complete benchmark. No automatic
+retries, profile selection or threshold changes are introduced.
 
 ## Review findings and corrections
 
