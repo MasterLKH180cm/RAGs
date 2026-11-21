@@ -28,6 +28,8 @@ class Settings:
     federated_sources: dict = field(default_factory=dict)
     fastembed_model: str = "BAAI/bge-small-en-v1.5"
     generation_tokenizer_config: dict = field(default_factory=lambda: {"backend": "unicode"})
+    admission_policy: str = "compatibility"
+    admission_profile: str | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -98,6 +100,9 @@ class Settings:
         iterations = int(os.getenv("RAGS_MAX_ITERATIONS", "3"))
         if not 1 <= iterations <= 3:
             raise ValueError("RAGS_MAX_ITERATIONS must be 1..3")
+        admission_policy = os.getenv("RAGS_ADMISSION_POLICY", "compatibility")
+        if admission_policy not in {"compatibility", "calibrated_required"}:
+            raise ValueError("RAGS_ADMISSION_POLICY must be compatibility or calibrated_required")
         return cls(
             db_path=db_path,
             keys=keys,
@@ -118,4 +123,6 @@ class Settings:
             federated_sources=sources,
             fastembed_model=os.getenv("RAGS_FASTEMBED_MODEL", "BAAI/bge-small-en-v1.5"),
             generation_tokenizer_config=generation_tokenizer,
+            admission_policy=admission_policy,
+            admission_profile=os.getenv("RAGS_ADMISSION_PROFILE") or None,
         )

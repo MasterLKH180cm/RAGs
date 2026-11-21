@@ -162,7 +162,7 @@ class QueryIn(BaseModel):
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings or Settings.from_env()
-    app = FastAPI(title="RAGs", version="0.2.0")
+    app = FastAPI(title="RAGs", version="0.3.0")
     app.add_middleware(BodyLimitMiddleware, max_body_bytes=2_100_000)
     store = Store(config.db_path)
     service = RAGService(store, Providers(config))

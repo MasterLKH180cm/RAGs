@@ -1,5 +1,9 @@
 # RAGs v0.2 implementation review
 
+Historical v0.2 record. Current implementation and research-engine status are in
+the [v0.3 review](IMPLEMENTATION_REVIEW_V03.md); the later evidence supersedes
+this document's then-unverified RAPTOR/LightRAG integration status.
+
 ## Scope and evidence rules
 
 The [v0.2 specification](SPEC_V02.md) was committed before feature implementation, following the requested specification → implementation → self-review sequence. This review records implemented behavior and measured checks against that contract. It does not declare all twenty original research families reproduced.

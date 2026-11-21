@@ -18,6 +18,8 @@ jobs:
     timeout-minutes: 10
     env:
       RAGS_ENV: test
+      ORT_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,7 +29,7 @@ jobs:
       - name: Install
         run: python -m pip install -e ".[dev,pdf,mcp,vision]"
       - name: Static analysis
-        run: ruff check rags tests --select E4,E7,E9,F
+        run: ruff check rags tests scripts --select E4,E7,E9,F
       - name: Labelled retrieval evaluation
         run: python -m rags.evaluate --dataset examples/eval_v02.json --k 3 --generate > evaluation-v02.json
       - name: Integration tests
@@ -53,6 +55,8 @@ jobs:
     timeout-minutes: 20
     env:
       RAGS_ENV: test
+      ORT_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
       RAGS_TEST_COLBERT: "1"
       RAGS_TEST_MULTIMODAL: "1"
       RAGS_TEST_ENCODERS: "1"
@@ -70,3 +74,117 @@ jobs:
       - run: python -m pip install -e ".[dev,encoders,vision]"
       - name: Actual ColBERT and aligned CLIP inference
         run: pytest -q tests/test_backends.py tests/test_multimodal.py tests/test_semantic_encoder.py
+
+  research-upstreams:
+    name: Actual ${{ matrix.engine }} and HTTP lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [raptor, lightrag]
+    env:
+      RAGS_ENV: test
+      ORT_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      NUMBA_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      RAGS_MODEL_CACHE: /tmp/rags-research-models
+      RAGS_TEST_RESEARCH_UPSTREAMS: ${{ matrix.engine }}
+      RAGS_RESEARCH_REPORT_PATH: reports/ci-research-${{ matrix.engine }}.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/rags-research-models
+          key: rags-research-bge-v03-${{ runner.os }}
+      - name: Install isolated pinned CPU dependencies
+        run: bash scripts/install_research.sh "${{ matrix.engine }}" "$RUNNER_TEMP/research-venv"
+      - name: Execute actual upstream algorithm and trained BGE
+        run: >-
+          "$RUNNER_TEMP/research-venv/bin/python" -m pytest -q tests/test_research_upstreams.py
+      - name: Real sidecar and RAG HTTP lifecycle
+        run: >-
+          "$RUNNER_TEMP/research-venv/bin/python" scripts/e2e_research_v03.py
+          --engine "${{ matrix.engine }}" --model-cache "$RAGS_MODEL_CACHE"
+          --report "reports/ci-research-${{ matrix.engine }}-http.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: actual-${{ matrix.engine }}-evidence
+          path: reports/ci-research-${{ matrix.engine }}*.json
+
+  admission-runtime:
+    name: Actual admission runtime and measured quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      RAGS_ENV: test
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      ORT_DISABLE_TELEMETRY: "1"
+      RAGS_MODEL_CACHE: /tmp/rags-answerability-models
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/rags-answerability-models
+          key: qwen-1.7b-70d244cc-v03-${{ runner.os }}
+      - name: Install reproduced CPU answerability runtime
+        run: bash scripts/install-answerability.sh "$RUNNER_TEMP/admission-venv"
+      - name: Fetch and verify the pinned public checkpoint
+        run: |
+          "$RUNNER_TEMP/admission-venv/bin/python" - <<'PY'
+          import os
+          from rags.admission import load_profile
+          from rags.answerability import AnswerabilityScorer
+          scorer = AnswerabilityScorer(os.environ["RAGS_MODEL_CACHE"], allow_download=True)
+          scorer.verify(load_profile("profiles/admission-qwen-v03.json"))
+          print("Pinned artifacts, tokenizer, prompt and runtime match the frozen profile")
+          PY
+      - name: Verify runtime correctness and report unchanged quality gates
+        run: >-
+          "$RUNNER_TEMP/admission-venv/bin/python" -m rags.verify_admission
+          --profile profiles/admission-qwen-v03.json
+          --holdout examples/admission_holdout_v03.json
+          --regression examples/eval_v02.json
+          --cache-dir "$RAGS_MODEL_CACHE"
+          --report reports/ci-admission-verification-qwen.json
+          --no-enforce-quality
+      - name: Expose profile promotion status separately from runtime correctness
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          path = Path("reports/ci-admission-verification-qwen.json")
+          if not path.exists():
+              raise SystemExit("No evaluation report was produced")
+          report = json.loads(path.read_text())
+          lines = ["## Frozen answerability profile", "",
+                   "Runtime correctness: " + str(report["correctness"]["passed"]),
+                   "Quality gates: " + str(report["quality"]["passed"]),
+                   "Profile promotion status: **" + report["promotion_status"] + "**", "",
+                   "This CI job checks execution and contracts. It does not waive the specification's quality targets."]
+          for item in report["quality"]["gates"]:
+              if not item["passed"]:
+                  lines.append("- Failed quality target: " + json.dumps(item, ensure_ascii=False))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
+              output.write("\n".join(lines) + "\n")
+          if not report["quality"]["passed"]:
+              print("::warning::Frozen answerability profile failed quality targets; it is not approved for promotion or enabled by default.")
+          assert report["correctness"]["passed"]
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frozen-admission-measurements
+          path: reports/ci-admission-verification-qwen.json

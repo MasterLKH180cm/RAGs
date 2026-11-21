@@ -1,6 +1,6 @@
-# RAGs v0.2 architecture
+# RAGs v0.3 architecture
 
-This document describes the implemented service. The [specification](SPEC_V02.md) records the original requirements; the [implementation review](IMPLEMENTATION_REVIEW.md) separates exercised mechanisms from unverified external integrations. The [README](../README.md#architecture-and-flows) contains the service, ingestion, and retrieval flowcharts.
+This document describes the implemented service. The [v0.3 specification](SPEC_V03.md) extends the [v0.2 requirements](SPEC_V02.md); the [v0.3 review](IMPLEMENTATION_REVIEW_V03.md) and historical [v0.2 review](IMPLEMENTATION_REVIEW.md) distinguish actual execution, measured quality and remaining integrations. The [README](../README.md#architecture-and-flows) contains the service, ingestion and retrieval flowcharts.
 
 ## Service boundaries
 
@@ -59,21 +59,80 @@ Before generation, the service packs the rendered instructions, question, citati
 | Image assets | Paired CLIP text/image vectors, cosine ranking, and original-image citations through `/assets/*` |
 | Federated | Operator-defined source IDs and per-tenant credentials, bounded parallel reads, source-qualified IDs, and RRF |
 
-The native hierarchy is not full RAPTOR; the native graph is not Microsoft GraphRAG, LightRAG, or HippoRAG; the reflection loop is not trained reflection-token Self-RAG. Separate identifiers reserve those named methods for configured external engines. Their adapter validates protocol and evidence boundaries, but does not install or establish the correctness of the upstream research implementation.
+The native hierarchy, native graph and reflection loop keep their own names. Separate `raptor` and `lightrag` identifiers execute pinned upstream implementations through the request-local service below. `full_graphrag`, `hipporag`, `self_rag` and `crag` still expose only the generic external contract. They do not become implemented papers because a native path has a similar purpose. See the [remaining upstream ledger](RESEARCH_ENGINES.md).
 
 Model-dependent paths validate structured outputs, permitted choices, and source IDs. Bounded loops record decisions and stopping reasons. There is no arbitrary shell execution or general-purpose tool execution in this RAG service. The companion workflow runtime owns its own tool and approval policies.
+
+## Evidence decisions and profile identity
+
+`EvidenceAdmission` runs on original authorized passages before answer generation,
+including when `generate=false`. Its result separates successful retrieval from
+insufficient evidence, and identifies unassessed ranking, calibrated relevance,
+calibrated answerability, explicit model review or exact structured data. A
+refusal removes all usable citations. Candidate IDs/counts remain separate
+diagnostics and cannot become downstream evidence.
+
+Compatibility without a profile is explicitly unassessed. Required policy needs
+a configured immutable profile for ordinary passage evidence. The profile
+fingerprints actual model/config/tokenizer artifacts, runtime, scoring convention,
+prompt/window, calibration digest and threshold. It cannot be selected by a
+request. Invalid profiles, unavailable artifacts and malformed scores are
+execution errors. Exact structured aggregates carry complete bounded dataset
+provenance and do not fabricate rows for a zero result.
+
+BGE computes relevance logits through its actual ONNX cross-encoder. Qwen uses a
+pinned local CPU model, a fixed source-only instruction and next-token YES/NO
+logit difference. Both use maximum original-passage score and retain candidate
+order/set on acceptance. Qwen's single-passage question is a material limitation
+for questions requiring multiple passages together; no profile is promoted by
+passing protocol tests. Calibration and held-out measurements remain separate.
+
+The process caches only model state and profile identity. Inference is bounded;
+source-prefix truncation and full prompt windows are explicit. User evidence and
+scores do not become a shared model cache. Federation validates remote decisions
+and removes refused branches before rank fusion. A separately admitted branch
+may still contribute evidence.
+
+## Request-local research execution
+
+The authenticated research sidecar hosts one fixed RAPTOR or LightRAG engine.
+The RAG service sends the original passages already selected for tenant,
+metadata and time. The sidecar verifies its credential's tenant and the fixed
+engine before starting the worker. A finite semaphore bounds active requests;
+capacity exhaustion returns 429 rather than accumulating an unbounded queue.
+
+Each request uses a fixed `python -m rags.research_worker` command, a fresh
+working directory and a fresh temporary index. Its environment contains only
+runtime and selected provider configuration, not RAG/Agent tenant credential
+maps. Source-derived caches/logs are request-local; public weights may be shared.
+A complete wall timeout bounds stdin/output exchange. Output is read through a
+bounded pipe; failures expose fixed codes. Completion, timeout and cancellation
+terminate the process group and remove the temporary directory.
+
+RAPTOR runs upstream cluster/tree construction and retrieval. It traces selected
+summaries through child nodes to authorized original leaves. LightRAG initializes
+its upstream stores, extracts/merges a graph and performs hybrid graph retrieval.
+It resolves internal chunk records and checks both original identity and content.
+Neither generated summaries nor extracted entity descriptions become standalone
+citations. The provider bridge checks exact encoder token windows before calls,
+as well as generation input/output and call-count bounds.
+
+The client validates exact pinned implementation metadata and bounded diagnostic
+fields when present or required. Such metadata is labelled upstream-reported;
+actual source/model execution is established by the independent test reports.
+No health response or configured URL is treated as algorithm verification.
 
 ## External boundaries and authorization
 
 The caller cannot select a tenant, backend URL, or backend credential. Federation and research endpoints come from operator configuration; each tenant has a distinct mapped credential. Requests carry only already authorized source passages or source-scoped query parameters. Research responses can select IDs only from the supplied original leaf records. Federation IDs are source-qualified to prevent collisions.
 
-HTTP adapters reject redirects and compressed responses, enforce byte limits before buffering, and check total deadlines after transport chunks. Numeric scores, aggregation values, usage fields, and token matrices reject nonfinite values and inappropriate types. Invalid Unicode bearer credentials return unauthorized responses. Provider failures surface as explicit errors rather than being relabelled as successful offline execution.
+HTTP adapters reject redirects and compressed responses and enforce byte limits before buffering. Research requests use one asyncio wall deadline spanning connection, headers and all body reads; the synchronous API facade owns that event loop. Federation retains its separately bounded transport checks. Numeric scores, aggregation values, usage fields and token matrices reject nonfinite values and inappropriate types. Invalid Unicode bearer credentials return unauthorized responses. Provider failures remain execution errors.
 
 All document, archive, parent, graph, and original-asset operations use tenant scope. This service's static key map is not OIDC, document-level ACL management, or a complete public API gateway. External services still need appropriate source handling, retention, and credential isolation; local protocol validation cannot prove their internal behavior.
 
 ## Evaluation and operational limits
 
-The [measured 36-question synthetic report](evaluation-v02-summary.json) records applicable retrieval, structured/time, answer, citation-record, refusal, and latency metrics. Offline hybrid Recall@3 was `0.85`; its no-answer refusal recall was `0.0`. Record-valid citations establish that returned evidence exists at the recorded source span, not that it entails every generated claim. Paid-model behavior and named upstream research services remain unverified by live integration.
+The historical [36-question synthetic report](evaluation-v02-summary.json) records offline hybrid Recall@3 `0.85` and no-answer refusal recall `0.0`. The v0.3 evaluation separates raw candidates from admitted evidence and records the frozen quality gates independently from contract tests. Record-valid citations establish source identity and span, not entailment. Actual RAPTOR/LightRAG execution uses real embeddings and labelled deterministic generation fixtures; live paid-generation quality remains unverified.
 
 Actual BGE, ColBERT, and paired CLIP checkpoints were exercised separately. These small fixtures verify encoder/adapter execution and selected invariants; they are not domain-quality benchmarks. Ordinary tests also distinguish deterministic control-flow fixtures from real-model inference.
 

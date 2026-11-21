@@ -3,6 +3,7 @@
 The HTTP adapter is an integration boundary, not a reimplementation of the
 named research systems. Only the operator selects endpoints and credentials.
 """
+import asyncio
 import hashlib
 import importlib.util
 import json
@@ -14,6 +15,8 @@ import time
 from urllib.parse import urlparse
 
 import httpx
+
+from rags.research_protocol import ResearchRequest, UPSTREAMS, validate_result
 
 
 PAPER_BACKENDS = {
@@ -87,9 +90,19 @@ class BackendManager:
                 raise ValueError("Backend tenant_tokens must map tenants to credentials")
             if len(set(tokens.values())) != len(tokens):
                 raise ValueError("Research backends require distinct tenant credentials")
+            timeout = config.get("timeout_seconds", 30)
+            if type(timeout) not in (int, float) or not math.isfinite(timeout) or not 1 <= timeout <= 360:
+                raise ValueError("Research backend timeout_seconds must be finite and between 1 and 360")
+            required = config.get("require_pinned_upstream", False)
+            if type(required) is not bool or required and name not in UPSTREAMS:
+                raise ValueError("Pinned upstream identity is supported only for RAPTOR and LightRAG")
+            model = config.get("model")
+            if model is not None and (not isinstance(model, str) or not 1 <= len(model) <= 200):
+                raise ValueError("Research backend model must be a bounded operator label")
         self._encoder = None
         self._lock = Lock()
         self._vectors = {}
+        self._observed = {}
 
     def catalog(self, tenant: str | None = None) -> list[dict]:
         entries = []
@@ -100,8 +113,10 @@ class BackendManager:
             supported = self.model_name in {m["model"] for m in LateInteractionTextEmbedding.list_supported_models()}
         for name in ("multivector", *PAPER_BACKENDS):
             local = name in {"multivector", "colbert"} and bool(self.model_name)
-            configured = name in self.config and (tenant is None or tenant in self.config[name]["tenant_tokens"])
+            configured = name in self.config and (tenant is None or tenant in self.config[name].get("tenant_tokens", {}))
             available = (local and supported) or (not local and configured)
+            with self._lock:
+                observed = self._observed.get((tenant, name)) if tenant is not None else None
             entries.append({
                 "id": name, "family": PAPER_BACKENDS.get(name, "Multi-vector retrieval"),
                 "implementation": "fastembed_colbert_maxsim" if local else "authorized_evidence_http_v1",
@@ -110,8 +125,10 @@ class BackendManager:
                 "reason": ("Checkpoint loads on first query; availability is not a quality verification"
                            if local and available and self._encoder is None else None if available
                            else "Configure a supported encoder or tenant-authorized research backend"),
-                "evidence_level": ("runtime_encoder_loaded" if self._encoder else "runtime_not_yet_exercised") if local else "external_unverified",
+                "evidence_level": (("runtime_encoder_loaded" if self._encoder else "runtime_not_yet_exercised") if local
+                                   else "pinned_upstream_reported" if observed else "external_unverified"),
                 "model": self.model_name if local else self.config.get(name, {}).get("model"),
+                "upstream": dict(observed) if observed else None,
             })
         return entries
 
@@ -137,6 +154,33 @@ class BackendManager:
             return next(iter(operation([text]))).tolist()
         except Exception as exc:
             raise BackendUnavailable("Late-interaction encoding failed") from exc
+
+    @staticmethod
+    async def _request(config, token: str, encoded: bytes) -> bytes:
+        timeout = config.get("timeout_seconds", 30)
+        deadline = time.monotonic() + timeout
+        # One wall deadline spans connect, headers and every body read. A fresh
+        # synchronous request facade owns this loop; no background task survives.
+        async with asyncio.timeout(timeout):
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+                async with client.stream("POST", config["url"], headers={"Authorization": "Bearer " + token,
+                                         "Accept-Encoding": "identity", "Content-Type": "application/json"},
+                                         content=encoded) as response:
+                    response.raise_for_status()
+                    if response.headers.get("content-encoding", "identity").lower() != "identity":
+                        raise BackendUnavailable("Compressed research responses are not accepted")
+                    if int(response.headers.get("content-length", "0")) > 1_000_000:
+                        raise BackendUnavailable("Research backend response exceeds limit")
+                    body = bytearray()
+                    async for part in response.aiter_bytes():
+                        if time.monotonic() > deadline:
+                            raise BackendUnavailable("Research backend response deadline exceeded")
+                        if len(body) + len(part) > 1_000_000:
+                            raise BackendUnavailable("Research backend response exceeds limit")
+                        body.extend(part)
+                    if time.monotonic() > deadline:
+                        raise BackendUnavailable("Research backend response deadline exceeded")
+                    return bytes(body)
 
     def search(self, mode, *, tenant, question, chunks, top_k, options=None) -> dict:
         if len(chunks) > 1000:
@@ -178,26 +222,18 @@ class BackendManager:
         if len(encoded) > 3_000_000:
             raise BackendUnavailable("Research backend request exceeds 3MB")
         try:
-            deadline = time.monotonic() + 30
-            with httpx.Client(timeout=30, follow_redirects=False) as client:
-                with client.stream("POST", config["url"], headers={"Authorization": "Bearer " + token,
-                                   "Accept-Encoding": "identity", "Content-Type": "application/json"},
-                                   content=encoded) as response:
-                    response.raise_for_status()
-                    if response.headers.get("content-encoding", "identity").lower() != "identity":
-                        raise BackendUnavailable("Compressed research responses are not accepted")
-                    if int(response.headers.get("content-length", "0")) > 1_000_000:
-                        raise BackendUnavailable("Research backend response exceeds limit")
-                    body = bytearray()
-                    # Check each transport read, including a trickle response;
-                    # coalescing into large chunks would delay the deadline check.
-                    for part in response.iter_bytes():
-                        if time.monotonic() > deadline:
-                            raise BackendUnavailable("Research backend response deadline exceeded")
-                        if len(body) + len(part) > 1_000_000:
-                            raise BackendUnavailable("Research backend response exceeds limit")
-                        body.extend(part)
+            request_contract = ResearchRequest.model_validate(payload) if mode in UPSTREAMS else None
+            body = asyncio.run(self._request(config, token, encoded))
             data = json.loads(body)
+            if not isinstance(data, dict):
+                raise ValueError("Invalid backend response")
+            provenance = None
+            diagnostics = None
+            if "implementation" in data or "diagnostics" in data or config.get("require_pinned_upstream"):
+                if request_contract is None:
+                    raise ValueError("Unsupported pinned upstream identity")
+                verified = validate_result(data, request_contract)
+                provenance, diagnostics = verified["implementation"], verified["diagnostics"]
             raw = data.get("hits")
             if not isinstance(raw, list) or len(raw) > 100:
                 raise ValueError("Invalid backend hits")
@@ -219,9 +255,18 @@ class BackendManager:
                 for key, value in usage.items()
             )):
                 raise ValueError("Backend usage must contain bounded nonnegative token counts")
-            return {"hits": hits[:top_k], "trace": [{"operation": "external_backend", "backend": mode}],
+            event = {"operation": "external_backend", "backend": mode,
+                     "evidence_level": "pinned_upstream_reported" if provenance else "external_unverified"}
+            if provenance:
+                event.update(implementation=provenance, diagnostics=diagnostics)
+                if diagnostics.get("engine_executed"):
+                    with self._lock:
+                        self._observed[tenant, mode] = dict(provenance)
+            return {"hits": hits[:top_k], "trace": [event],
                     "engine": mode + ":authorized-evidence-v1", "usage": {"reported": usage}}
         except BackendUnavailable:
             raise
-        except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        except TimeoutError as exc:
+            raise BackendUnavailable("Research backend response deadline exceeded") from exc
+        except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError, OverflowError) as exc:
             raise BackendUnavailable("Research backend failed protocol or evidence validation") from exc

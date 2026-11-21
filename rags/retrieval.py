@@ -12,6 +12,7 @@ from threading import Lock
 
 import httpx
 
+from rags.admission import EvidenceAdmission, finite, metadata as admission_metadata, validate_remote_decision
 from rags.chunking import ALGORITHM_VERSION, ChunkConfig, chunk_document, index_fingerprint
 from rags.native import aggregate_rows, cluster_vectors, cosine, graph_search, row_matches, rrf
 from rags.providers import Providers
@@ -65,12 +66,32 @@ def _answer_citations(answer: str, allowed_ids: set[str]) -> set[str]:
     return references
 
 
+def _federated_metadata(citation: dict) -> dict:
+    """Keep remote provenance typed and bounded; never stringify identities."""
+    result = {}
+    for key, limit, default in (("title", 200, ""), ("source", 500, ""), ("section", 200, ""),
+                                ("revision", 100, None), ("profile_id", 100, None)):
+        value = citation.get(key)
+        if value is not None and (not isinstance(value, str) or len(value) > limit):
+            raise ValueError("Invalid federated source metadata")
+        result[key] = default if value is None else value
+    for key in ("start_char", "end_char"):
+        value = citation.get(key)
+        if value is not None and (type(value) is not int or not 0 <= value <= 2 ** 63 - 1):
+            raise ValueError("Invalid federated source offset")
+        result[key] = value
+    if result["start_char"] is not None and result["end_char"] is not None and result["start_char"] > result["end_char"]:
+        raise ValueError("Reversed federated source offsets")
+    return result
+
+
 class RAGService:
     def __init__(self, store: Store, provider: Providers):
         self.store = store
         self.provider = provider
         self.settings = provider.settings
         self.tokenizer = resolve_tokenizer(self.settings.generation_tokenizer_config)
+        self.admission = EvidenceAdmission(self.settings.admission_policy, self.settings.admission_profile)
         self._backend_manager = None
         self._backend_lock = Lock()
 
@@ -447,11 +468,16 @@ class RAGService:
         elif mode == "structured":
             matches, candidate_ids = [], set()
             seen = set()
+            datasets = []
             for chunk in leaves:
                 key = (chunk["document_id"], chunk["revision"])
                 if key in seen:
                     continue
                 seen.add(key)
+                if isinstance(chunk["metadata"].get("_rags_rows"), list):
+                    datasets.append({field: chunk[field] for field in ("document_id", "revision", "profile_id")})
+                    if len(datasets) > 20:
+                        raise CapabilityError("structured_dataset_limit", "Exact structured provenance supports at most twenty authorized datasets", 422)
                 offset = 0
                 for row_index, row in enumerate(chunk["metadata"].get("_rags_rows", [])):
                     row_length = len(json.dumps(row, ensure_ascii=False, sort_keys=True, allow_nan=False))
@@ -465,8 +491,11 @@ class RAGService:
             else:
                 selected = leaves
             scored = self._hybrid(tenant, question, selected, limit)
+            aggregation = aggregate_rows([m["row"] for m in matches], options.get("aggregate"))
+            if aggregation and aggregation["value"] is not None and not finite(aggregation["value"]):
+                raise CapabilityError("invalid_aggregate", "Structured aggregation did not produce a finite numeric value", 422)
             extra["structured_result"] = {"rows": matches[:100], "matched_rows": len(matches), "rows_truncated": len(matches) > 100,
-                                          "aggregate": aggregate_rows([m["row"] for m in matches], options.get("aggregate"))}
+                                          "aggregate": aggregation, "provenance": {"datasets": datasets}}
             trace.append({"action": "structured_query", "matched_rows": len(matches), "predicates": len(options.get("row_filters") or [])})
         elif mode == "temporal":
             at = datetime.fromisoformat(timestamp(options.get("as_of")))
@@ -537,7 +566,8 @@ class RAGService:
             supported = decision["supported"] and bool(kept)
             selected = [c for c in selected if c["id"] in set(kept)]
             trace.append({"action": "evidence_review", "iteration": iteration + 1, "query": query, "supported": supported,
-                          "kept_ids": kept, "reason": _text(decision.get("reason"), "evaluation reason", 500)})
+                          "reviewed_candidate_count": len(allowed), "kept_ids": kept,
+                          "reason": _text(decision.get("reason"), "evaluation reason", 500)})
             if supported:
                 if draft and not set(draft["cited_ids"]) <= set(kept):
                     raise CapabilityError("invalid_model_output", "Critic removed sources used by the final draft", 502)
@@ -569,7 +599,9 @@ class RAGService:
             if source_id == "local":
                 lookup = {c["id"]: c for c in leaves}
                 local = self._selected(self._hybrid(tenant, question, leaves, top_k), lookup, top_k)
-                return source_id, [dict(c, id="local:" + c["id"], origin_chunk_id=c["id"], origin_source="local") for c in local]
+                decision = {"outcome": "success", "supported": None, "refusal_reason": None,
+                            "admission": admission_metadata("unassessed", "ranked_unassessed", len(local), len(local))}
+                return source_id, [dict(c, id="local:" + c["id"], origin_chunk_id=c["id"], origin_source="local") for c in local], decision
             source = configured[source_id]
             payload = {"question": question, "mode": "hybrid", "top_k": top_k, "generate": False}
             for key in ("filters", "as_of"):
@@ -596,63 +628,90 @@ class RAGService:
             citations = body.get("citations")
             if not isinstance(citations, list) or len(citations) > 20:
                 raise ValueError("Invalid federated citation response")
+            decision = validate_remote_decision(body, len(citations))
+            if decision["outcome"] == "insufficient_evidence":
+                return source_id, [], decision
             result = []
             seen = set()
             for citation in citations:
                 if not isinstance(citation, dict) or any(not isinstance(citation.get(key), str) for key in ("chunk_id", "document_id", "text")):
                     raise ValueError("Invalid federated citation")
-                if len(citation["text"]) > 200_000 or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,200}", citation["chunk_id"]):
+                if (len(citation["text"]) > 200_000 or not citation["text"].strip()
+                        or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,200}", citation["chunk_id"])
+                        or len(source_id) + 1 + len(citation["chunk_id"]) > 200
+                        or not 1 <= len(citation["document_id"]) <= 249 - len(source_id)):
                     raise ValueError("Oversized federated source")
                 if citation["chunk_id"] in seen:
                     raise ValueError("Duplicate federated source identifier")
                 seen.add(citation["chunk_id"])
+                provenance = _federated_metadata(citation)
                 result.append({"id": source_id + ":" + citation["chunk_id"], "document_id": source_id + ":" + citation["document_id"],
                                "origin_chunk_id": citation["chunk_id"], "origin_source": source_id,
-                               "content": citation["text"], "title": str(citation.get("title", ""))[:200],
-                               "source": str(citation.get("source", ""))[:500], "section": str(citation.get("section", ""))[:200],
-                               "revision": citation.get("revision"), "profile_id": citation.get("profile_id"), "role": "leaf",
-                               "start_char": citation.get("start_char"), "end_char": citation.get("end_char"), "metadata": {}})
-            return source_id, result
+                               "content": citation["text"], **provenance, "role": "leaf", "metadata": {}})
+            return source_id, result, decision
         try:
             with ThreadPoolExecutor(max_workers=min(4, len(selected))) as pool:
                 responses = list(pool.map(search, selected))
         except Exception as exc:
             raise CapabilityError("federated_source_failed", "An authorized source failed; no partial result was presented", 502) from exc
-        lookup = {c["id"]: c for _, hits in responses for c in hits}
-        scored = rrf([[c["id"] for c in hits] for _, hits in responses], top_k)
+        lookup = {c["id"]: c for _, hits, _ in responses for c in hits}
+        scored = rrf([[c["id"] for c in hits] for _, hits, _ in responses], top_k)
         return {"chunks": self._selected(scored, lookup, top_k), "mode_used": "federated", "engine": strategy("federated").implementation,
-                "trace": [{"action": "federated_search", "sources": [{"id": source, "hits": len(hits)} for source, hits in responses]}]}
+                "source_decisions": [{"source_id": source, **decision} for source, _, decision in responses],
+                "trace": [{"action": "federated_search", "sources": [{"id": source, "hits": len(hits)} for source, hits, _ in responses]}]}
 
     def query(self, tenant: str, question: str, mode: str = "hybrid", top_k: int = 5, generate: bool = True, **options) -> dict:
         self.provider.begin_usage()
         result = self._retrieve(tenant, question, mode, top_k, options)
         chunks = result.pop("chunks")
-        citations = [{"chunk_id": c["id"], "document_id": c["document_id"], "title": c["title"], "source": c["source"],
-                      "section": c["section"], "score": c["score"], "text": c["content"], "revision": c.get("revision"),
-                      "profile_id": c.get("profile_id"), "start_char": c.get("start_char"), "end_char": c.get("end_char"),
-                      "origin_source": c.get("origin_source", "local"), "origin_chunk_id": c.get("origin_chunk_id", c["id"])} for c in chunks]
-        answer = None
-        budget = None
-        if generate:
-            if not chunks or result.get("supported") is False:
+        diagnostics = {"candidate_count": len(chunks), "candidate_ids": [c["id"] for c in chunks],
+                       "candidate_document_ids": [c["document_id"] for c in chunks], "usable_as_evidence": False}
+        structured = result.get("structured_result") or {}
+        aggregate = structured.get("aggregate")
+        exact = bool(isinstance(aggregate, dict) and finite(aggregate.get("value"))
+                     and structured.get("provenance", {}).get("datasets"))
+        decision = self.admission.assess(question, chunks, model_supported=result.get("supported"), structured_exact=exact)
+        if "admission_trace" in decision:
+            result["trace"].append(decision.pop("admission_trace"))
+        result.update(decision)
+        answer, budget = None, None
+        if result["outcome"] == "insufficient_evidence":
+            chunks = []
+            if generate:
                 answer = "Insufficient evidence in the authorized knowledge base."
-            else:
-                packed = self._evidence(question, chunks)
-                budget = {"input_units": packed.token_count, "unit": packed.unit, "count_kind": packed.count_kind,
-                          "tokenizer": packed.tokenizer_id, "included_ids": packed.included_ids,
-                          "dropped_ids": packed.dropped_ids, "truncated_ids": packed.truncated_ids,
-                          "context_budget": self.settings.context_budget, "output_reserve": self.settings.output_budget,
-                          "envelope_reserve": self.settings.envelope_budget}
-                if not packed.included_ids:
-                    answer = "Insufficient evidence within the configured context budget."
-                else:
-                    # Preserve the counted content while keeping instructions in
-                    # the system role; envelope allowance covers provider framing.
-                    answer = result.pop("draft_answer", None) or self.provider.complete(SYSTEM, packed.text[len(SYSTEM):])
-                    if answer is None:
-                        answer = "Retrieved source evidence (extractive mode):\n" + packed.context
-                    else:
-                        _answer_citations(answer, set(packed.included_ids))
+        elif generate and exact:
+            answer = f"Structured {aggregate['operation']} result: {aggregate['value']}."
+        elif generate:
+            answer, budget, packed_ids = self._generate_answer(question, chunks, result.get("draft_answer"))
+            if not packed_ids:
+                result.update(self.admission.refuse("context_budget_exhausted", "context_budget", len(chunks)))
+                chunks = []
         result.pop("draft_answer", None)
-        return {"question": question, "mode_requested": mode, "answer": answer, "citations": citations,
+        return {"question": question, "mode_requested": mode, "answer": answer,
+                "citations": [self._citation(c) for c in chunks], "retrieval_diagnostics": diagnostics,
                 "budget": budget, "usage": self.provider.usage(), **result}
+
+    @staticmethod
+    def _citation(chunk: dict) -> dict:
+        return {"chunk_id": chunk["id"], "document_id": chunk["document_id"], "title": chunk["title"],
+                "source": chunk["source"], "section": chunk["section"], "score": chunk["score"], "text": chunk["content"],
+                "revision": chunk.get("revision"), "profile_id": chunk.get("profile_id"),
+                "start_char": chunk.get("start_char"), "end_char": chunk.get("end_char"),
+                "origin_source": chunk.get("origin_source", "local"), "origin_chunk_id": chunk.get("origin_chunk_id", chunk["id"])}
+
+    def _generate_answer(self, question: str, chunks: list[dict], draft: str | None) -> tuple:
+        packed = self._evidence(question, chunks)
+        budget = {"input_units": packed.token_count, "unit": packed.unit, "count_kind": packed.count_kind,
+                  "tokenizer": packed.tokenizer_id, "included_ids": packed.included_ids,
+                  "dropped_ids": packed.dropped_ids, "truncated_ids": packed.truncated_ids,
+                  "context_budget": self.settings.context_budget, "output_reserve": self.settings.output_budget,
+                  "envelope_reserve": self.settings.envelope_budget}
+        if not packed.included_ids:
+            return "Insufficient evidence within the configured context budget.", budget, []
+        # Keep the counted instructions in their system role; framing has its own reserve.
+        answer = draft or self.provider.complete(SYSTEM, packed.text[len(SYSTEM):])
+        if answer is None:
+            answer = "Retrieved source evidence (extractive mode):\n" + packed.context
+        else:
+            _answer_citations(answer, set(packed.included_ids))
+        return answer, budget, packed.included_ids

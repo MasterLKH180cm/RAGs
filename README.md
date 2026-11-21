@@ -8,7 +8,7 @@
 
 RAGs provides an authenticated FastAPI knowledge service and a read-only MCP bridge. Use it directly or connect [agentic-system](https://github.com/MasterLKH180cm/agentic-system) for durable workflows. The default runs without paid model credentials, using clearly identified hashing embeddings and extractive evidence output.
 
-Version 0.2 adds six chunking strategies, token-budget packing, real parent/summary indexes, graph traversal, structured queries, temporal revisions, federation, and optional pretrained encoders. The [twenty-family coverage table](#twenty-family-coverage) distinguishes native mechanisms from model-dependent features and upstream research integrations. An unavailable capability returns an explicit error instead of silently running another strategy.
+Version 0.3 adds typed evidence decisions, separately calibrated relevance and answerability profiles, and isolated services executing pinned RAPTOR and LightRAG code. It builds on v0.2's six chunking strategies, token budgets, parent/summary indexes, graph traversal, structured queries, temporal revisions, federation, and pretrained encoders. The [twenty-family coverage table](#twenty-family-coverage) distinguishes native mechanisms, tested upstream execution, and remaining external requirements. An unavailable capability returns an explicit error instead of silently running another strategy.
 
 ## Contents
 
@@ -17,6 +17,8 @@ Version 0.2 adds six chunking strategies, token-budget packing, real parent/summ
 - [Architecture and flows](#architecture-and-flows)
 - [Chunking and token budgets](#chunking-and-token-budgets)
 - [Twenty-family coverage](#twenty-family-coverage)
+- [Evidence admission and refusal](#evidence-admission-and-refusal)
+- [RAPTOR and LightRAG services](#raptor-and-lightrag-services)
 - [Structured and temporal queries](#structured-and-temporal-queries)
 - [Pretrained encoders and image assets](#pretrained-encoders-and-image-assets)
 - [Model providers and federation](#model-providers-and-federation)
@@ -83,7 +85,7 @@ curl --fail-with-body http://127.0.0.1:8000/query \
   -d '{"question":"When do sessions expire?","mode":"hybrid","top_k":3}'
 ```
 
-Responses expose requested/executed mode, engine, ranking score kind, execution trace, citations, and generation-budget information. Citations identify the source document, revision, index profile, exact source text, and character offsets. `"generate":false` returns retrieval evidence without an answer.
+Responses expose requested/executed mode, engine, ranking score kind, execution trace, citations, generation-budget information, and a typed `outcome`/`admission` decision. Citations identify the source document, revision, index profile, exact source text, and character offsets. `"generate":false` still assesses evidence; it returns `answer:null`. An evidence refusal has `outcome:"insufficient_evidence"`, `supported:false`, a fixed `refusal_reason`, and no usable citations.
 
 Inspect runtime availability with authenticated `GET /strategies`. `requires_provider`, `requires_index`, and `requires_backend` explain why a capability cannot currently run. Unknown strategy names are rejected.
 
@@ -147,15 +149,18 @@ flowchart TD
     Retrieve --> Review{"Model-driven refinement requested?"}
     Review -->|Within bounded loop| Retrieve
     Review -->|Ready or limit reached| Evidence["Resolve original source evidence"]
-    Evidence --> Generate{"Generate an answer?"}
+    Evidence --> Admission{"Evidence admitted?"}
+    Admission -->|No| Refusal["Typed refusal; no citations or generation"]
+    Admission -->|Yes or explicitly unassessed| Generate{"Generate an answer?"}
     Generate -->|No| Result["Return evidence and execution trace"]
     Generate -->|Yes| Pack["Pack full prompt within input budget"]
     Pack --> Answer["Extract evidence or call configured generator"]
     Answer --> Validate["Check cited source IDs or report insufficient evidence"]
     Validate --> Result
+    Refusal --> Result
 ```
 
-Source-record validity and correct citation IDs do not establish semantic entailment. The default dense/hybrid paths return the highest-ranked candidates without a learned relevance threshold; the evaluation below records their weak no-answer behavior.
+Source-record validity and correct citation IDs do not establish semantic entailment. Compatibility mode without a scoring profile returns explicitly unassessed ranked candidates. A configured profile adds a query-level gate over original sources; it preserves their ranking on acceptance and removes all usable citations on refusal. Prompt packing can independently refuse when admitted evidence does not fit.
 
 ## Chunking and token budgets
 
@@ -178,7 +183,7 @@ The index fingerprint includes chunking/tokenizer settings, model identities, em
 
 ## Twenty-family coverage
 
-**Native** means the stated mechanism is implemented. **Provider-dependent** paths have control-flow tests; live paid-model behavior remains unverified. **Pretrained encoder** paths have actual local checkpoint smoke tests. **External contract** means the adapter is implemented, while the named upstream engine remains a separately deployed and unverified requirement.
+**Native** means the stated mechanism is implemented. **Provider-dependent** paths have control-flow tests; live paid-model behavior remains unverified. **Pretrained encoder** paths have actual local checkpoint tests. **Pinned upstream** means the upstream code executes through an isolated service, with real embeddings and explicitly deterministic generation fixtures in verification. **External contract** means the named upstream engine still needs implementation and execution evidence.
 
 | Original family | Entry point | Implementation and boundary |
 | --- | --- | --- |
@@ -190,9 +195,9 @@ The index fingerprint includes chunking/tokenizer settings, model identities, em
 | HyDE | `hyde` | Provider-generated hypothetical documents and embedding centroid; hypotheses never become citations |
 | Multi-vector / ColBERT | `multivector`, `colbert` | Actual FastEmbed ColBERT token matrices and normalized sum-MaxSim; checkpoint required |
 | Contextual RAG | `contextual` | Searches generated context in both indexes; contextual ingestion required |
-| Hierarchical / RAPTOR | `parent_child`, `hierarchical`; `raptor` | Native parent expansion and recursive clustered summaries; full RAPTOR is an external contract |
+| Hierarchical / RAPTOR | `parent_child`, `hierarchical`; `raptor` | Native parent expansion and recursive clustered summaries; separate pinned RAPTOR service runs actual UMAP/GMM tree building and upstream retrieval, resolving summaries to original leaves |
 | GraphRAG | `graph`; `full_graphrag` | Native two-hop graph traversal, label-propagation communities, and source lineage; Microsoft GraphRAG is external |
-| LightRAG | `lightrag` | External contract; actual upstream indexing/retrieval is not bundled or verified |
+| LightRAG | `lightrag` | Pinned 1.5.7 service runs actual entity/relation extraction, graph merging and hybrid retrieval; internal chunks resolve to authorized original sources |
 | HippoRAG | `hipporag` | External contract; actual upstream graph/PPR engine is not bundled or verified |
 | Self-RAG | `self_reflective`; `self_rag` | Native bounded draft/critique/refine loop; trained reflection-token Self-RAG remains external |
 | CRAG | `corrective`; `crag` | Native bounded evidence evaluation and corrective retrieval; the paper-specific engine remains external |
@@ -204,6 +209,75 @@ The index fingerprint includes chunking/tokenizer settings, model identities, em
 | Temporal / real-time RAG | `temporal` | Versioned validity/as-of reads, explicit revision updates, and recency ranking; no automatic source-refresh/streaming connector |
 
 `fusion`, `hyde`, `corrective`, `adaptive`, `agentic`, and `self_reflective` require a generator. Corrective, agentic, and self-reflective loops allow at most three iterations; fusion allows at most five generated queries and HyDE at most three hypothetical documents. Model responses are validated; unknown sources and citation IDs are not accepted. These mechanisms are not claims of research-paper reproduction or benchmark parity.
+
+## Evidence admission and refusal
+
+Every text query returns the same evidence contract, including retrieval-only queries and empty authorized scopes:
+
+| Field | Meaning |
+| --- | --- |
+| `outcome` | `success` or `insufficient_evidence`; transport/model/configuration errors remain HTTP errors |
+| `supported` | `null` for unassessed or relevance-only evidence; `true` for an explicit supporting model assessment or exact structured result; `false` for refusal |
+| `admission.decision` | `accept`, `abstain`, or `unassessed` |
+| `admission.basis` | Ranked, calibrated relevance, calibrated answerability, explicit model review, exact structure, empty scope, or context budget |
+| `admission.profile_id` | Identity of the frozen scorer, artifacts, runtime, prompt/window, threshold and calibration evidence |
+| `refusal_reason` | `no_candidates`, `below_admission_threshold`, `model_rejected`, `context_budget_exhausted`, or `null` |
+
+`RAGS_ADMISSION_POLICY=compatibility` is the default. Without a profile it makes no calibrated relevance claim. `RAGS_ADMISSION_POLICY=calibrated_required` requires an applicable operator-selected profile for ordinary source evidence. `RAGS_ADMISSION_PROFILE` names that local JSON file. Missing dependencies or changed artifacts fail explicitly; request parameters cannot select a profile, threshold or model.
+
+The relevance scorer uses actual multilingual BGE ONNX inference. The separate answerability scorer uses pinned Qwen3-1.7B CPU inference and a fixed source-only YES/NO instruction, scored by its next-token logit difference. Profiles identify the exact token window and any source-prefix truncation. Scores are not probabilities. Acceptance preserves the candidate ranking/set; there is no hidden lexical veto or common cutoff for cosine, RRF and learned logits.
+
+Calibration and validation are separate: [48 frozen calibration cases](examples/admission_calibration_v03.json) and [32 topic-disjoint held-out cases](examples/admission_holdout_v03.json), balanced between English and Traditional Chinese. The first BGE profile retained 23/24 calibration positives but refused only 1/24 negatives; [its report](reports/admission-calibration-v03.json) remains a visible failed answerability candidate. A profile's presence is not evidence that it passed the quality gates. The [v0.3 specification](docs/SPEC_V03.md) fixes the objective, holdout targets and amendment history before additional scoring implementation.
+
+**The frozen Qwen profile failed the quality gates and is not enabled by default.** The [final verification report](reports/admission-verification-qwen-v03.json) passed all 21 correctness checks but only 7 of 11 quality checks. Its threshold and prompt were not changed after held-out evaluation.
+
+| Frozen verification | Measured result | Specified target |
+| --- | --- | --- |
+| Held-out answerable cases retained | 15/16 | At least 15/16; passed |
+| Held-out unanswerable cases refused | 9/16 | At least 13/16; failed |
+| Held-out semantic-only cases retained | 7/8 | 8/8; failed |
+| Original hybrid raw / admitted Recall@3 | 0.85 / 0.70 in both generation modes | Preserve 0.85; failed in both modes |
+| Original no-answer cases refused | 4/4 in both generation modes | At least 3/4; passed |
+| Exact structured / temporal cases | 6/6 and 4/4 in both generation modes | Preserve all; passed |
+
+Five of 20 answerable hybrid questions were refused. Two already lacked relevant raw candidates; three lost useful evidence at the admission gate. The regression uses 34 applicable cases from the original 36-case dataset; the two graph-only cases retain their original mode labels. These are synthetic measurements, not a production-quality claim.
+
+Exact structured aggregates are separate from learned relevance. A valid zero carries bounded `structured_result.provenance.datasets`; no authorized dataset produces a refusal. Federation quarantines refused sources before merging other admitted evidence. The companion Agent preserves these decisions through synthesis, durable results, SSE and MCP.
+
+The [actual Qwen HTTP-to-Agent report](reports/agent_admission_http_v03.json) verifies one accepted and one refused frozen calibration fixture through separate APIs, a worker, REST/SSE and both MCP bridges. The refused case makes no synthesis request or usage reservation. This checks the integration contract; it is not an additional quality benchmark.
+
+## RAPTOR and LightRAG services
+
+Each service hosts one operator-selected engine in its own dependency environment. RAPTOR uses official source commit `7da1d48a7e1d7dec61a63c9d9aae84e2dfaa5767`; LightRAG uses release 1.5.7 at commit `28ff1b05f2ac3f3e6fa14dd2cd33656579bd0c9c`. The installer pins dependencies and verifies the official source/wheel; it does not install the unrelated PyPI package named `raptor`.
+
+```bash
+# Python 3.12, separate from the main service environment:
+bash scripts/install_research.sh lightrag .venv-lightrag
+# Or: bash scripts/install_research.sh raptor .venv-raptor ./upstream-raptor
+export RAGS_ENV=development
+export RAGS_RESEARCH_ENGINE=lightrag
+export RAGS_RESEARCH_KEYS_JSON='{"local-research-key":"local"}'
+export RAGS_RESEARCH_TIMEOUT_SECONDS=120
+export RAGS_RESEARCH_CONCURRENCY=1
+export RAGS_EMBEDDING_PROVIDER=fastembed
+export RAGS_FASTEMBED_MODEL=BAAI/bge-small-en-v1.5
+export RAGS_MODEL_CACHE="$PWD/data/models"
+export RAGS_MODEL_PROVIDER=openai
+# Export your OPENAI_API_KEY and compatible OPENAI_CHAT_MODEL separately.
+.venv-lightrag/bin/uvicorn rags.research_service:create_app --factory --host 127.0.0.1 --port 8010
+```
+
+Configure the main RAG API process separately and restart it:
+
+```bash
+export RAGS_RESEARCH_BACKENDS_JSON='{"lightrag":{"url":"http://127.0.0.1:8010/retrieve","tenant_tokens":{"local":"local-research-key"},"timeout_seconds":150,"require_pinned_upstream":true}}'
+```
+
+The localhost example requires development/test mode; production backend URLs require HTTPS and strong sidecar credentials. Keep the client timeout longer than the sidecar's execution deadline. `timeout_seconds` is bounded to 1–360 seconds; the sidecar wall deadline is 0.1–300 seconds. The sidecar concurrency limit is per service process, so start one Uvicorn worker for the stated capacity.
+
+Requests carry at most 64 original passages and 200,000 source characters. Each request gets a fresh process and temporary index built only from its authorized source revision snapshot. The service validates tenant identity, finite scores, original IDs and pinned implementation metadata; it bounds response bytes and terminates process groups on timeout, cancellation or completion. Source-derived indexes are removed afterward. Public model weights can use a shared cache. Embedding inputs exceeding the actual encoder window fail explicitly rather than silently truncating.
+
+RAPTOR projects selected summary nodes through upstream child lineage to original leaves and labels its projected reciprocal-rank scores. LightRAG executes graph extraction/merging and hybrid graph retrieval, then verifies internal chunk content against original passages. The runtime catalog labels returned version metadata `pinned_upstream_reported`; the separate actual execution reports supply verification evidence. A configured URL or health probe alone does not verify an algorithm.
 
 ## Structured and temporal queries
 
@@ -283,7 +357,7 @@ Set credentials locally, outside Git. OpenAI embeddings and generation are indep
 
 `RAGS_SOURCES_JSON` maps source IDs to fixed RAG API URLs and `tenant_keys` mappings. A `federated` request selects those IDs through `sources`; it cannot supply a URL or tenant. Credentials are distinct per tenant. Remote responses are bounded to 2 MB, redirects/compressed responses are rejected, and a failed source does not produce a misleading partial success.
 
-`RAGS_RESEARCH_BACKENDS_JSON` separately configures named upstream adapters using `url`, `model`, and `tenant_tokens`. The `authorized-evidence-v1` protocol sends only scoped source passages and accepts returned source IDs from that set. The adapter is a retrieval integration boundary: installing it does not install or verify RAPTOR, LightRAG, HippoRAG, Microsoft GraphRAG, trained Self-RAG, or CRAG.
+`RAGS_RESEARCH_BACKENDS_JSON` separately configures research adapters using `url`, optional `model` label, `tenant_tokens`, and bounded `timeout_seconds`. Set `require_pinned_upstream:true` for the supplied RAPTOR/LightRAG services. The `authorized-evidence-v1` protocol sends only scoped original passages and accepts IDs from that set. HippoRAG, Microsoft GraphRAG, trained Self-RAG and paper-specific CRAG still require separate upstream integrations; their generic adapter is not an implementation of those engines.
 
 ## MCP and API reference
 
@@ -310,6 +384,8 @@ Start the HTTP service first and use a Python environment with `.[mcp]` installe
 Text uploads are capped at 2,000,000 bytes; extracted document text at 200,000 characters; PDF extraction at 150 pages. Scanned PDFs need an external OCR step.
 
 ## Validation and measured limits
+
+The v0.3 local suite passed **280 tests with 5 opt-in environment/model checks skipped**. The separate actual upstream and pretrained-admission runs are recorded below; these counts overlap and must not be summed as unique tests.
 
 ```bash
 RAGS_ENV=test pytest -q
@@ -338,9 +414,9 @@ The [36-question synthetic dataset](examples/eval_v02.json) covers retrieval, st
 
 The [recorded v0.2 CI run](https://github.com/MasterLKH180cm/RAGs/actions/runs/44798397794) passed both jobs: the ordinary suite finished with **141 passed, 3 skipped**, and the real-encoder job finished with **39 passed**, including all three opt-in model checks. The encoder job also repeats relevant adapter tests, so these counts must not be added as unique tests. BGE smoke verifies actual 384-dimensional semantic chunking and dense retrieval. ColBERT smoke uses a 32 × 96 query matrix and checks a three-document retrieval fixture. Paired CLIP smoke checks simple image/text retrieval and image self-matching. These establish that checkpoints and adapters execute; they do not establish domain quality.
 
-The companion real HTTP/worker/MCP acceptance flow also passed with both Agent SQLite and PostgreSQL 16.2 storage; RAG storage remained SQLite in both runs. Paid generation providers and named upstream research services have not been verified through live integration runs.
+The historical v0.2 companion HTTP/worker/MCP flow also passed with Agent SQLite and PostgreSQL; RAG storage remained SQLite. Version 0.3 additionally executes actual upstream engines through the full HTTP and Agent boundary: [RAPTOR report](reports/research_raptor_http_v03.json) and [LightRAG report](reports/research_lightrag_http_v03.json). Both include tenant isolation, updates/as-of/deletion, process cleanup, independent worker and terminal REST/SSE/MCP checks. These use real BGE and explicitly deterministic generation fixtures; live paid-generation quality remains unverified.
 
-See the [implementation review](docs/IMPLEMENTATION_REVIEW.md), [v0.2 specification](docs/SPEC_V02.md), and [architecture](docs/ARCHITECTURE.md) for requirement-level evidence and remaining work.
+See the [v0.3 implementation review](docs/IMPLEMENTATION_REVIEW_V03.md), [v0.3 specification](docs/SPEC_V03.md), [upstream ledger](docs/RESEARCH_ENGINES.md) and [architecture](docs/ARCHITECTURE.md) for current evidence. The [v0.2 review](docs/IMPLEMENTATION_REVIEW.md) remains a historical record.
 
 ## Deployment and project map
 
@@ -355,6 +431,8 @@ SQLite WAL, full vector scans, bounded local worker threads for federation, and 
 | [`storage.py`](rags/storage.py) | Source revisions, transactional derived indexes, tenant filtering |
 | [`retrieval.py`](rags/retrieval.py), [`native.py`](rags/native.py) | Distinct retrieval paths, bounded loops, graph/structured algorithms |
 | [`providers.py`](rags/providers.py), [`backends.py`](rags/backends.py) | Model adapters, actual late interaction, upstream protocol |
+| [`admission.py`](rags/admission.py), [`answerability.py`](rags/answerability.py), [`admission_eval.py`](rags/admission_eval.py) | Typed evidence decisions, immutable scorer profiles, calibration and held-out evaluation |
+| [`research_service.py`](rags/research_service.py), [`research_worker.py`](rags/research_worker.py), [`research/`](rags/research/) | Bounded process isolation and pinned RAPTOR/LightRAG adapters |
 | [`vision.py`](rags/vision.py), [`multimodal.py`](rags/multimodal.py) | Caption ingestion and separate original-image retrieval |
 | [`evaluate.py`](rags/evaluate.py), [`tests/`](tests/) | Measured evaluation and behavioral integration tests |
 

@@ -1,0 +1,626 @@
+{
+  "schema_version": "admission-evaluation-v1",
+  "split": "holdout",
+  "profile_id": "f1f6f30f3f3003d888dcfa1607bc2bc875cdf7fb13d2a7b36479e4c0fa94cd7e",
+  "threshold": -5.907637596130371,
+  "cases_digest": "0d3de8976b5a1d78e2c54a5a301db5f2602fc8c9561be5e6817fd880f313d773",
+  "scorer": {
+    "model": "BAAI/bge-reranker-v2-m3-int8",
+    "artifacts": {
+      "onnx/model_int8.onnx": "912fc1215c2dbff6499700534bd8d31253af01573861abbfc43afd1fab6cce5d",
+      "tokenizer.json": "8bf8afbfd11306bd872018c53bfdf2e160a56f8edbcf49933324404791c148d3",
+      "tokenizer_config.json": "b87c8703482b0300d3da30e201519aa641f6a450f5eb5bf1e624afbf70c74d80",
+      "special_tokens_map.json": "8c785abebea9ae3257b61681b4e6fd8365ceafde980c21970d001e834cf10835",
+      "config.json": "122e922dcfed6503c8721e6fe1daf090340c3d95ca7f3aa3a72730b321a51cfd"
+    },
+    "runtime": {
+      "fastembed": "0.9.1",
+      "onnxruntime": "1.32.0",
+      "tokenizers": "0.23.3",
+      "python": "3.12",
+      "execution_provider": "CPUExecutionProvider"
+    },
+    "score_convention": "onnx_output_0_first_column_logit_no_activation",
+    "limits": {
+      "max_candidates": 20,
+      "max_question_chars": 2000,
+      "max_passage_chars": 200000,
+      "max_total_passage_chars": 200000,
+      "pair_tokens": 512,
+      "batch_size": 4,
+      "cpu_threads": 2,
+      "window": "right_source_prefix_only_second_v1"
+    },
+    "aggregation": "max_original_passage"
+  },
+  "metrics": {
+    "cases": 32,
+    "positive": 16,
+    "negative": 16,
+    "positive_retained": 15,
+    "negative_refused": 1,
+    "false_refusals": 1,
+    "positive_retention": 0.9375,
+    "refusal_recall": 0.0625,
+    "refusal_precision": 0.5,
+    "false_refusal_rate": 0.0625,
+    "abstentions": 2,
+    "abstention_rate": 0.0625,
+    "semantic_only_positive": 8,
+    "semantic_only_retained": 7
+  },
+  "by_language": {
+    "en": {
+      "cases": 16,
+      "positive": 8,
+      "negative": 8,
+      "positive_retained": 7,
+      "negative_refused": 1,
+      "false_refusals": 1,
+      "positive_retention": 0.875,
+      "refusal_recall": 0.125,
+      "refusal_precision": 0.5,
+      "false_refusal_rate": 0.125,
+      "abstentions": 2,
+      "abstention_rate": 0.125,
+      "semantic_only_positive": 4,
+      "semantic_only_retained": 3
+    },
+    "zh": {
+      "cases": 16,
+      "positive": 8,
+      "negative": 8,
+      "positive_retained": 8,
+      "negative_refused": 0,
+      "false_refusals": 0,
+      "positive_retention": 1.0,
+      "refusal_recall": 0.0,
+      "refusal_precision": null,
+      "false_refusal_rate": 0.0,
+      "abstentions": 0,
+      "abstention_rate": 0.0,
+      "semantic_only_positive": 4,
+      "semantic_only_retained": 4
+    }
+  },
+  "by_category": {
+    "literal": {
+      "cases": 8,
+      "positive": 8,
+      "negative": 0,
+      "positive_retained": 8,
+      "negative_refused": 0,
+      "false_refusals": 0,
+      "positive_retention": 1.0,
+      "refusal_recall": null,
+      "refusal_precision": null,
+      "false_refusal_rate": 0.0,
+      "abstentions": 0,
+      "abstention_rate": 0.0,
+      "semantic_only_positive": 0,
+      "semantic_only_retained": 0
+    },
+    "missing_field": {
+      "cases": 8,
+      "positive": 0,
+      "negative": 8,
+      "positive_retained": 0,
+      "negative_refused": 1,
+      "false_refusals": 0,
+      "positive_retention": null,
+      "refusal_recall": 0.125,
+      "refusal_precision": 1.0,
+      "false_refusal_rate": null,
+      "abstentions": 1,
+      "abstention_rate": 0.125,
+      "semantic_only_positive": 0,
+      "semantic_only_retained": 0
+    },
+    "semantic_only": {
+      "cases": 8,
+      "positive": 8,
+      "negative": 0,
+      "positive_retained": 7,
+      "negative_refused": 0,
+      "false_refusals": 1,
+      "positive_retention": 0.875,
+      "refusal_recall": null,
+      "refusal_precision": 0.0,
+      "false_refusal_rate": 0.125,
+      "abstentions": 1,
+      "abstention_rate": 0.125,
+      "semantic_only_positive": 8,
+      "semantic_only_retained": 7
+    },
+    "wrong_date": {
+      "cases": 4,
+      "positive": 0,
+      "negative": 4,
+      "positive_retained": 0,
+      "negative_refused": 0,
+      "false_refusals": 0,
+      "positive_retention": null,
+      "refusal_recall": 0.0,
+      "refusal_precision": null,
+      "false_refusal_rate": null,
+      "abstentions": 0,
+      "abstention_rate": 0.0,
+      "semantic_only_positive": 0,
+      "semantic_only_retained": 0
+    },
+    "wrong_entity": {
+      "cases": 4,
+      "positive": 0,
+      "negative": 4,
+      "positive_retained": 0,
+      "negative_refused": 0,
+      "false_refusals": 0,
+      "positive_retention": null,
+      "refusal_recall": 0.0,
+      "refusal_precision": null,
+      "false_refusal_rate": null,
+      "abstentions": 0,
+      "abstention_rate": 0.0,
+      "semantic_only_positive": 0,
+      "semantic_only_retained": 0
+    }
+  },
+  "measurements": [
+    {
+      "id": "hold-en-aquarium-positive-literal",
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "score": 8.689672470092773,
+      "passage_scores": [
+        8.689672470092773
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        43
+      ]
+    },
+    {
+      "id": "hold-en-aquarium-positive-semantic-only",
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "score": -2.7125461101531982,
+      "passage_scores": [
+        -2.7125461101531982
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        26
+      ]
+    },
+    {
+      "id": "hold-en-aquarium-negative-missing-field",
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "score": -0.8361117243766785,
+      "passage_scores": [
+        -0.8361117243766785
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        46
+      ]
+    },
+    {
+      "id": "hold-en-aquarium-negative-wrong-entity",
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_entity",
+      "score": 0.7492949366569519,
+      "passage_scores": [
+        0.7492949366569519
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        47
+      ]
+    },
+    {
+      "id": "hold-en-dig-positive-literal",
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "score": 7.003381729125977,
+      "passage_scores": [
+        7.003381729125977
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        37
+      ]
+    },
+    {
+      "id": "hold-en-dig-positive-semantic-only",
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "score": -3.7409396171569824,
+      "passage_scores": [
+        -3.7409396171569824
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        36
+      ]
+    },
+    {
+      "id": "hold-en-dig-negative-missing-field",
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "score": 1.2696534395217896,
+      "passage_scores": [
+        1.2696534395217896
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        50
+      ]
+    },
+    {
+      "id": "hold-en-dig-negative-wrong-date",
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_date",
+      "score": -0.43647047877311707,
+      "passage_scores": [
+        -0.43647047877311707
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        44
+      ]
+    },
+    {
+      "id": "hold-en-kennel-positive-literal",
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "score": 8.008695602416992,
+      "passage_scores": [
+        8.008695602416992
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        41
+      ]
+    },
+    {
+      "id": "hold-en-kennel-positive-semantic-only",
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "score": -1.7449493408203125,
+      "passage_scores": [
+        -1.7449493408203125
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        26
+      ]
+    },
+    {
+      "id": "hold-en-kennel-negative-missing-field",
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "score": -6.0313310623168945,
+      "passage_scores": [
+        -6.0313310623168945
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        42
+      ]
+    },
+    {
+      "id": "hold-en-kennel-negative-wrong-entity",
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_entity",
+      "score": -0.4570089280605316,
+      "passage_scores": [
+        -0.4570089280605316
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        45
+      ]
+    },
+    {
+      "id": "hold-en-film-positive-literal",
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "score": 8.121162414550781,
+      "passage_scores": [
+        8.121162414550781
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        48
+      ]
+    },
+    {
+      "id": "hold-en-film-positive-semantic-only",
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "score": -8.058611869812012,
+      "passage_scores": [
+        -8.058611869812012
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        42
+      ]
+    },
+    {
+      "id": "hold-en-film-negative-missing-field",
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "score": -0.18042755126953125,
+      "passage_scores": [
+        -0.18042755126953125
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        46
+      ]
+    },
+    {
+      "id": "hold-en-film-negative-wrong-date",
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_date",
+      "score": 0.4690638780593872,
+      "passage_scores": [
+        0.4690638780593872
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        47
+      ]
+    },
+    {
+      "id": "hold-zh-radio-positive-literal",
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "score": 8.585505485534668,
+      "passage_scores": [
+        8.585505485534668
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        42
+      ]
+    },
+    {
+      "id": "hold-zh-radio-positive-semantic-only",
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "score": 2.2569868564605713,
+      "passage_scores": [
+        2.2569868564605713
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        33
+      ]
+    },
+    {
+      "id": "hold-zh-radio-negative-missing-field",
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "score": -2.6116788387298584,
+      "passage_scores": [
+        -2.6116788387298584
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        49
+      ]
+    },
+    {
+      "id": "hold-zh-radio-negative-wrong-entity",
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_entity",
+      "score": -3.167020559310913,
+      "passage_scores": [
+        -3.167020559310913
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        46
+      ]
+    },
+    {
+      "id": "hold-zh-choir-positive-literal",
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "score": 7.716856479644775,
+      "passage_scores": [
+        7.716856479644775
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        39
+      ]
+    },
+    {
+      "id": "hold-zh-choir-positive-semantic-only",
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "score": -3.408512592315674,
+      "passage_scores": [
+        -3.408512592315674
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        42
+      ]
+    },
+    {
+      "id": "hold-zh-choir-negative-missing-field",
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "score": 2.3601579666137695,
+      "passage_scores": [
+        2.3601579666137695
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        48
+      ]
+    },
+    {
+      "id": "hold-zh-choir-negative-wrong-date",
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_date",
+      "score": 7.3125224113464355,
+      "passage_scores": [
+        7.3125224113464355
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        50
+      ]
+    },
+    {
+      "id": "hold-zh-games-positive-literal",
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "score": 8.020502090454102,
+      "passage_scores": [
+        8.020502090454102
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        46
+      ]
+    },
+    {
+      "id": "hold-zh-games-positive-semantic-only",
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "score": -5.027890205383301,
+      "passage_scores": [
+        -5.027890205383301
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        38
+      ]
+    },
+    {
+      "id": "hold-zh-games-negative-missing-field",
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "score": -2.857759714126587,
+      "passage_scores": [
+        -2.857759714126587
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        45
+      ]
+    },
+    {
+      "id": "hold-zh-games-negative-wrong-entity",
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_entity",
+      "score": 0.7987445592880249,
+      "passage_scores": [
+        0.7987445592880249
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        44
+      ]
+    },
+    {
+      "id": "hold-zh-luggage-positive-literal",
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "score": 8.472789764404297,
+      "passage_scores": [
+        8.472789764404297
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        52
+      ]
+    },
+    {
+      "id": "hold-zh-luggage-positive-semantic-only",
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "score": -0.328351765871048,
+      "passage_scores": [
+        -0.328351765871048
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        32
+      ]
+    },
+    {
+      "id": "hold-zh-luggage-negative-missing-field",
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "score": -5.553598403930664,
+      "passage_scores": [
+        -5.553598403930664
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        42
+      ]
+    },
+    {
+      "id": "hold-zh-luggage-negative-wrong-date",
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_date",
+      "score": 5.740466117858887,
+      "passage_scores": [
+        5.740466117858887
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        51
+      ]
+    }
+  ],
+  "scope": "Synthetic relevance admission; no semantic entailment or production quality claim",
+  "quality_gate": {
+    "passed": false,
+    "required_positive_retained": 15,
+    "required_negative_refused": 13,
+    "required_semantic_only_retained": 8,
+    "no_retuning": true
+  }
+}

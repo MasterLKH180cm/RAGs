@@ -1,0 +1,260 @@
+{
+  "schema": "research-http-e2e-v03",
+  "verified_at": "2026-11-21T03:26:43.714110+00:00",
+  "engine": "lightrag",
+  "implementation": {
+    "library": "lightrag-hku",
+    "version": "1.5.7",
+    "source_commit": "28ff1b05f2ac3f3e6fa14dd2cd33656579bd0c9c",
+    "adapter_version": "v03"
+  },
+  "embedding_library": "fastembed:0.9.1",
+  "generation": "explicit_local_openai_protocol_deterministic_fixture",
+  "trained_generation_quality_verified": false,
+  "fixture_http_calls": 69,
+  "checks": {
+    "authentication": {
+      "invalid_token": 401,
+      "tenant_mismatch": 403,
+      "no_model_calls": true
+    },
+    "actual_upstream_http": {
+      "implementation": {
+        "library": "lightrag-hku",
+        "version": "1.5.7",
+        "source_commit": "28ff1b05f2ac3f3e6fa14dd2cd33656579bd0c9c",
+        "adapter_version": "v03"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 67,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 3,
+        "generation_calls": 17,
+        "score_kind": "reciprocal_hybrid_chunk_rank",
+        "source_count": 16,
+        "graph_nodes": 16,
+        "graph_edges": 16,
+        "retrieved_chunks": 16,
+        "retrieved_entities": 16,
+        "retrieved_relationships": 16,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "067648d557909a884243f8d34b4ffb7d",
+        "15b5b866df52573ec24265cf85aafb5d",
+        "4cc831e63c6b2d1b67047dd6335eecd7",
+        "516119f8dee8989974cd3eb714f73aa5",
+        "5880dd10aa5ebc2e20188b8ae1d78f13",
+        "5906c2a8ca406c6709726174a3fd83a9",
+        "5a7a1675b7fe365f84b46d022ab4e81e",
+        "8dab0f9e00c01562c5e25c72fa253c09",
+        "8e128c3de489f47981227ddc04f194cc",
+        "9cb64b5fde6ae467869d803a07f1147c",
+        "b0a8ff1a3085328cc336e7f2db6bedbb",
+        "b38f3fd117a75fd3412df967bee18b56",
+        "c318c9a5d54537695f9b6c584f395a72",
+        "c9e0c295abe4d9af6265e4cc1ca1d758",
+        "da87876b3daebf0e73a1b43b2113134a",
+        "e66c7365bbc61ff6071069c80165d543"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "companion_agent_chain": {
+      "completed": true,
+      "mode": "lightrag",
+      "checks": [
+        "Actual upstream lightrag identity and authorized source lineage survive independent Agent worker",
+        "Actual positive answer -> terminal REST/SSE/both MCP; source IDs and safe events"
+      ]
+    },
+    "updated_snapshot": {
+      "implementation": {
+        "library": "lightrag-hku",
+        "version": "1.5.7",
+        "source_commit": "28ff1b05f2ac3f3e6fa14dd2cd33656579bd0c9c",
+        "adapter_version": "v03"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 19,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 3,
+        "generation_calls": 5,
+        "score_kind": "reciprocal_hybrid_chunk_rank",
+        "source_count": 4,
+        "graph_nodes": 4,
+        "graph_edges": 4,
+        "retrieved_chunks": 4,
+        "retrieved_entities": 4,
+        "retrieved_relationships": 4,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "285d8dd45ffeccac7dda1929a34d2b8a",
+        "5880dd10aa5ebc2e20188b8ae1d78f13",
+        "5a7a1675b7fe365f84b46d022ab4e81e",
+        "da87876b3daebf0e73a1b43b2113134a"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "historical_snapshot": {
+      "implementation": {
+        "library": "lightrag-hku",
+        "version": "1.5.7",
+        "source_commit": "28ff1b05f2ac3f3e6fa14dd2cd33656579bd0c9c",
+        "adapter_version": "v03"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 19,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 3,
+        "generation_calls": 5,
+        "score_kind": "reciprocal_hybrid_chunk_rank",
+        "source_count": 4,
+        "graph_nodes": 4,
+        "graph_edges": 4,
+        "retrieved_chunks": 4,
+        "retrieved_entities": 4,
+        "retrieved_relationships": 4,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "5880dd10aa5ebc2e20188b8ae1d78f13",
+        "5a7a1675b7fe365f84b46d022ab4e81e",
+        "9cb64b5fde6ae467869d803a07f1147c",
+        "da87876b3daebf0e73a1b43b2113134a"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "tenant_source_isolation": {
+      "implementation": {
+        "library": "lightrag-hku",
+        "version": "1.5.7",
+        "source_commit": "28ff1b05f2ac3f3e6fa14dd2cd33656579bd0c9c",
+        "adapter_version": "v03"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 6,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 2,
+        "generation_calls": 2,
+        "score_kind": "reciprocal_hybrid_chunk_rank",
+        "source_count": 1,
+        "graph_nodes": 2,
+        "graph_edges": 1,
+        "retrieved_chunks": 1,
+        "retrieved_entities": 2,
+        "retrieved_relationships": 1,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "9e47a9939f95e2932aadcf431aa4e171"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "deleted_current_snapshot": {
+      "implementation": {
+        "library": "lightrag-hku",
+        "version": "1.5.7",
+        "source_commit": "28ff1b05f2ac3f3e6fa14dd2cd33656579bd0c9c",
+        "adapter_version": "v03"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 11,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 3,
+        "generation_calls": 3,
+        "score_kind": "reciprocal_hybrid_chunk_rank",
+        "source_count": 2,
+        "graph_nodes": 3,
+        "graph_edges": 2,
+        "retrieved_chunks": 2,
+        "retrieved_entities": 3,
+        "retrieved_relationships": 2,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "5880dd10aa5ebc2e20188b8ae1d78f13",
+        "5a7a1675b7fe365f84b46d022ab4e81e"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "deleted_historical_snapshot": {
+      "implementation": {
+        "library": "lightrag-hku",
+        "version": "1.5.7",
+        "source_commit": "28ff1b05f2ac3f3e6fa14dd2cd33656579bd0c9c",
+        "adapter_version": "v03"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 11,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 3,
+        "generation_calls": 3,
+        "score_kind": "reciprocal_hybrid_chunk_rank",
+        "source_count": 2,
+        "graph_nodes": 3,
+        "graph_edges": 2,
+        "retrieved_chunks": 2,
+        "retrieved_entities": 3,
+        "retrieved_relationships": 2,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "5880dd10aa5ebc2e20188b8ae1d78f13",
+        "5a7a1675b7fe365f84b46d022ab4e81e"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "empty_scope": {
+      "implementation": {
+        "library": "lightrag-hku",
+        "version": "1.5.7",
+        "source_commit": "28ff1b05f2ac3f3e6fa14dd2cd33656579bd0c9c",
+        "adapter_version": "v03"
+      },
+      "diagnostics": {
+        "source_count": 0,
+        "engine_executed": false
+      },
+      "cited_chunk_ids": [],
+      "outcome": "insufficient_evidence",
+      "request_index_removed": true
+    },
+    "deadline_cleanup": {
+      "http_status": 504,
+      "code": "upstream_timeout",
+      "request_index_removed": true
+    }
+  },
+  "passed": true
+}
