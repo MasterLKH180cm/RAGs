@@ -8,18 +8,29 @@ from typing import Annotated, Literal
 
 import httpx
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from rags.chunking import ChunkConfig
 from rags.config import Settings
 from rags.limits import BodyLimitMiddleware
-from rags.providers import Providers
 from rags.multimodal import install_multimodal_routes
-from rags.retrieval import MODES, RAGService, now
+from rags.providers import Providers
 from rags.registry import CapabilityError
+from rags.retrieval import MODES, RAGService, now
 from rags.storage import Store, timestamp
 from rags.tokenization import TokenizerConfig
+
+
+def validation_details(errors: list[dict]) -> list[dict]:
+    """Keep useful validation paths/messages without echoing unsafe request values."""
+    def safe_text(value: str) -> str:
+        return value.encode("utf-8", "backslashreplace").decode("utf-8")
+
+    return [{"type": safe_text(error["type"]),
+             "loc": [safe_text(part) if isinstance(part, str) else part for part in error["loc"]],
+             "msg": safe_text(error["msg"])} for error in errors]
 
 
 class DocumentIn(BaseModel):
@@ -43,7 +54,7 @@ class DocumentIn(BaseModel):
             raise ValueError("Provide exactly one of text or structured rows")
         validate_processing(self.chunking, self.tokenizer)
         validate_validity(self.valid_from, self.valid_to)
-        json.dumps(self.metadata, allow_nan=False)
+        json.dumps(self.metadata, ensure_ascii=False, allow_nan=False).encode("utf-8")
         return self
 
 
@@ -78,7 +89,7 @@ class QueryFilter(BaseModel):
         if len(self.metadata) > 20 or any(not isinstance(k, str) or len(k) > 128 or type(v) not in (str, int, float, bool, type(None)) for k, v in self.metadata.items()):
             raise ValueError("Metadata filters require at most20 scalar equality fields")
         validate_validity(self.valid_after, self.valid_before)
-        json.dumps(self.metadata, allow_nan=False)
+        json.dumps(self.metadata, ensure_ascii=False, allow_nan=False).encode("utf-8")
         return self
 
 
@@ -168,6 +179,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     service = RAGService(store, Providers(config))
     app.state.service = service
 
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request, exc):
+        return JSONResponse(status_code=422, content={"detail": validation_details(exc.errors())})
+
     @app.exception_handler(CapabilityError)
     async def capability_error(request, exc):
         return JSONResponse(status_code=exc.status_code, content={"detail": {"code": exc.code, "reason": exc.reason}})
@@ -200,21 +215,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def strategies(tenant: Annotated[str, Depends(auth)]) -> dict:
         return {"strategies": MODES, "tenant": tenant, "capabilities": [*service.catalog(tenant), multimodal.capability()]}
 
-    @app.post("/documents", status_code=201)
-    def ingest(data: DocumentIn, tenant: Annotated[str, Depends(auth)]) -> dict:
-        if len(json.dumps(data.metadata)) > 16_000:
-            raise HTTPException(status_code=413, detail="metadata too large")
+    def ingest_source(tenant: str, **document) -> dict:
         try:
-            return service.ingest(
-                tenant, data.title, data.text or "", data.source,
-                data.metadata, data.document_id,
-                chunking=data.chunking, tokenizer=data.tokenizer, index_features=data.index_features,
-                rows=data.rows, valid_from=data.valid_from, valid_to=data.valid_to, expected_revision=data.expected_revision,
-            )
+            return service.ingest(tenant, **document)
         except CapabilityError:
             raise
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/documents", status_code=201)
+    def ingest(data: DocumentIn, tenant: Annotated[str, Depends(auth)]) -> dict:
+        if len(json.dumps(data.metadata)) > 16_000:
+            raise HTTPException(status_code=413, detail="metadata too large")
+        return ingest_source(
+            tenant, title=data.title, text=data.text or "", source=data.source,
+            metadata=data.metadata, document_id=data.document_id,
+            chunking=data.chunking, tokenizer=data.tokenizer, index_features=data.index_features,
+            rows=data.rows, valid_from=data.valid_from, valid_to=data.valid_to, expected_revision=data.expected_revision,
+        )
 
     @app.post("/documents/upload", status_code=201)
     async def upload(
@@ -252,7 +270,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail="No extractable text")
         if len(body) > 200_000:
             raise HTTPException(status_code=413, detail="Extracted text exceeds the document limit")
-        return service.ingest(tenant, filename, body, "upload:" + filename)
+        return ingest_source(tenant, title=filename, text=body, source="upload:" + filename)
 
     @app.post("/images", status_code=201)
     async def ingest_image(
@@ -275,12 +293,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         filename = os.path.basename(file.filename or "image")
-        return service.ingest(
-            tenant, filename,
-            "# Image description (model-generated; verify against original)\n" + description,
-            "image:" + filename,
-            {"kind": "image", "media_type": media_type,
-             "caption_generated_by": config.model_provider},
+        return ingest_source(
+            tenant, title=filename,
+            text="# Image description (model-generated; verify against original)\n" + description,
+            source="image:" + filename,
+            metadata={"kind": "image", "media_type": media_type,
+                      "caption_generated_by": config.model_provider},
         )
 
     @app.get("/documents")

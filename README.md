@@ -383,19 +383,26 @@ Start the HTTP service first and use a Python environment with `.[mcp]` installe
 
 Text uploads are capped at 2,000,000 bytes; extracted document text at 200,000 characters; PDF extraction at 150 pages. Scanned PDFs need an external OCR step.
 
+Invalid request data returns `422` with field locations and messages; rejected
+input values are omitted. Nested metadata must contain finite JSON values and
+valid Unicode before it can replace a source. JSON, text-upload and image-caption
+ingestion share the same `400` response for invalid processing bounds, while
+provider failures retain their typed status, including `502`.
+
 ## Validation and measured limits
 
-The current local core suite passes **335 unit tests and 152 integration tests**
-(**487 unique cases, zero selected skips**). Five actual encoder/research tests
+The current local core suite passes **336 unit tests and 170 integration tests**
+(**506 unique cases, zero selected skips**). Five actual encoder/research tests
 are explicitly deselected here and have separately provisioned CI jobs. Every
 pytest case has one primary layer, and a machine-readable inventory identifies
 each node ID and its resource requirements. See the committed
-[test specification](docs/TEST_SPEC.md) and [test/code review](docs/TEST_REVIEW.md).
+[test specification](docs/TEST_SPEC.md), [request-boundary polish specification](docs/POLISH_SPEC.md)
+and [test/code review](docs/TEST_REVIEW.md).
 
-| Coverage of the complete production Python package | Before this iteration | Current local result | Required floor |
+| Coverage of the complete production Python package | Original test baseline | Current local result | Required floor |
 | --- | ---: | ---: | ---: |
-| Statements | 75.88% | **80.66%** | 80% |
-| Branches | 68.51% | **74.83%** | 72% |
+| Statements | 75.88% | **80.86%** | 80% |
+| Branches | 68.51% | **74.97%** | 72% |
 
 Both measurements use ordinary parent-process tests, including every production
 module in the denominator. Optional models and independent MCP/worker processes
@@ -409,6 +416,7 @@ Ordinary CI runs actual Qwen acceptance/refusal on two preselected calibration c
 
 ```bash
 python -m pip install -e ".[dev,pdf,mcp,vision]"
+export ORT_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_TELEMETRY=1
 RAGS_ENV=test python -m pytest -q -m unit --require-no-skips \
   --test-inventory reports/testing/inventory-unit.json \
   --junitxml reports/testing/junit-unit.xml \
@@ -454,6 +462,36 @@ See the [v0.3 implementation review](docs/IMPLEMENTATION_REVIEW_V03.md), [v0.3 s
 ## Deployment and project map
 
 Production requires `RAGS_KEYS_JSON` mapping strong API keys to tenant IDs; production keys must be at least 24 characters. Authentication precedes source selection, hierarchy expansion, graph traversal, historical reads, and asset access. The local development keys are examples for localhost.
+
+For the paired Agent/RAG setup, use the companion's
+[production credential bootstrap](https://github.com/MasterLKH180cm/agentic-system#production-credential-bootstrap).
+It generates separate requester, approver and RAG tokens for `tenant-a`, each
+from 32 random bytes. It writes a private (`0600`) `data/production.env` in each
+repository without printing credentials or overwriting existing files.
+
+| Setting | Mapping | Where to load it |
+| --- | --- | --- |
+| `RAGS_KEYS_JSON` | Generated RAG token → `tenant-a` | RAG API |
+| `AGENT_RAG_KEYS_JSON` | `tenant-a` → the same RAG token | Agent API and worker |
+| `AGENT_KEYS_JSON`, `AGENT_APPROVER_KEYS_JSON` | Separate requester/approver tokens → `tenant-a` | Agent configuration |
+
+After generating those files, open a fresh Bash terminal in `RAGs`, activate its
+installed Python environment, and run:
+
+```bash
+set -a
+source data/production.env
+set +a
+uvicorn rags.api:app --host 127.0.0.1 --port 8000
+```
+
+The companion instructions start the Agent API and worker with their own shared
+configuration. For a standalone deployment, provision `RAGS_ENV=production`
+and `RAGS_KEYS_JSON` through your secret manager with an independently generated
+token; use the same token in `AGENT_RAG_KEYS_JSON` if adding Agent later.
+`data/production.env` is loaded explicitly by the Python instructions; the
+standalone Compose quick start continues to read its development `.env`.
+The [polish specification](docs/POLISH_SPEC.md) records the setup contract.
 
 SQLite WAL, full vector scans, bounded local worker threads for federation, and on-demand research encodings target small deployments. Multi-node operation requires different storage/indexing infrastructure. A public deployment also needs identity integration, document-level policy where required, quotas, TLS, backups, and monitoring. No universal answer-grounding guarantee or production quality claim is made by the smoke tests.
 
