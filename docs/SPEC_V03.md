@@ -307,6 +307,43 @@ Missing dependencies, changed artifacts, malformed scores or profile mismatch
 remain execution errors. No automatic fallback to BGE or lexical overlap is
 permitted when an answerability profile is configured.
 
+## 9. CI resource and evidence amendment
+
+This amendment precedes the corresponding CI change. The full frozen local
+verification already executed472 model forward passes:32 held-out passages and
+440 original-regression candidates across both generation modes. It recorded
+21/21 correctness checks and7/11 quality checks, with failed promotion. The
+actual companion CI contract subsequently took140.627 seconds for six model
+scorings, versus18.606 seconds locally; raw logits also varied slightly while
+the two contract decisions agreed. Repeating the full benchmark on every PR
+would impose a substantial CPU cost without turning this failed candidate into
+an approved profile. The first PR replay is replaced by the split below; an
+unfinished replay is not a completed quality measurement.
+
+- Ordinary PR CI must execute actual pinned Qwen inference for the same two
+  preselected calibration contract cases already used by the Agent HTTP gate:
+  `cal-en-apiary-positive-literal` and `cal-en-apiary-negative-missing-field`.
+  Verify artifact/runtime/profile identity and typed acceptance/refusal. Only
+  question and original passage text enter inference. These cases do not add
+  held-out quality evidence.
+- A separately identified recorded-evidence audit must check the immutable
+  complete local report's SHA-256, profile identity, dataset digests and
+  recomputed correctness/quality gates. It must fail on corruption or missing
+  evidence, keep all failed targets visible and label those measurements as
+  recorded rather than newly scored. Auditing a report never promotes a model.
+- A manual `workflow_dispatch` full-benchmark job must retain the same
+  `rags.verify_admission --enforce-quality` command, unchanged frozen files and
+  all section5 gates, with a bounded CPU budget up to360 minutes. Upload the
+  report even when quality enforcement exits2. No automatic model retries,
+  threshold changes, dataset edits or concealed successful promotion are allowed.
+- Changes to scoring/retrieval behavior or a proposed profile promotion require
+  a fresh complete benchmark before any quality claim. PR contract success and
+  an older report audit alone do not satisfy that requirement. The failed Qwen
+  profile remains disabled by default.
+
+This separates CI cadence from quality acceptance; section5 targets and the
+completed local measurement remain unchanged.
+
 ## Primary references
 
 - https://github.com/parthsarthi03/raptor/tree/7da1d48a7e1d7dec61a63c9d9aae84e2dfaa5767
