@@ -1,0 +1,576 @@
+{
+  "schema_version": "admission-cases-v1",
+  "split": "holdout",
+  "synthetic": true,
+  "description": "Frozen v0.3 topic-disjoint evidence-admission holdout. All facts are invented fixture facts. Independent of admission_calibration_v03.json and eval_v02.json. The answer is determined solely by the supplied passages.",
+  "schema_notes": {
+    "inference_fields": [
+      "question",
+      "passages[].text"
+    ],
+    "evaluation_only_fields": [
+      "id",
+      "topic",
+      "answerable",
+      "language",
+      "category",
+      "expected_answer",
+      "label_rationale"
+    ],
+    "answerable": "True only when the passages supply the requested fact for the correct entity and time; knowing that a field is absent is not an answer to its requested value.",
+    "semantic_only": "A deliberately paraphrased positive that must not require exact content-word overlap. Chinese examples test semantic phrasing; this label does not assert zero shared characters.",
+    "passages": "One or more original evidence texts. Passage IDs are identifiers, never model input or evidence of answerability.",
+    "acceptance": {
+      "positive_retained_at_least": 15,
+      "positive_total": 16,
+      "negative_refused_at_least": 13,
+      "negative_total": 16,
+      "named_semantic_only_positives": "All eight must be retained."
+    },
+    "holdout_rule": "Labels are evaluation-only. Do not use this split to choose thresholds, alter prompts, select a checkpoint, or revise these fixtures after model execution. A failed gate is reported as failed."
+  },
+  "counts": {
+    "cases": 32,
+    "positive": 16,
+    "negative": 16,
+    "by_language": {
+      "en": {
+        "positive": 8,
+        "negative": 8
+      },
+      "zh": {
+        "positive": 8,
+        "negative": 8
+      }
+    }
+  },
+  "topics": [
+    "aquarium_care",
+    "archaeological_excavation",
+    "dog_boarding",
+    "film_archive",
+    "合唱團排練",
+    "桌遊借用中心",
+    "業餘無線電社",
+    "行李寄存處"
+  ],
+  "cases_digest": {
+    "algorithm": "sha256",
+    "canonicalization": "UTF-8 JSON of cases; ensure_ascii=False, sort_keys=True, separators=(comma,colon)",
+    "value": "0d3de8976b5a1d78e2c54a5a301db5f2602fc8c9561be5e6817fd880f313d773"
+  },
+  "cases": [
+    {
+      "id": "hold-en-aquarium-positive-literal",
+      "topic": "aquarium_care",
+      "question": "How many litres of water does the coral nursery tank hold?",
+      "passages": [
+        {
+          "id": "hold-en-aquarium-positive-literal-p1",
+          "text": "The coral nursery tank holds six hundred litres of water. A separate reservoir supplies water for routine changes."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "expected_answer": "Six hundred litres.",
+      "label_rationale": "The requested tank volume is explicit."
+    },
+    {
+      "id": "hold-en-aquarium-positive-semantic-only",
+      "topic": "aquarium_care",
+      "question": "How often are the tiny swimmers given something to eat?",
+      "passages": [
+        {
+          "id": "hold-en-aquarium-positive-semantic-only-p1",
+          "text": "Juvenile fish receive meals twice daily."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "expected_answer": "Twice daily.",
+      "label_rationale": "Tiny swimmers and eating paraphrase juvenile fish and meals without shared content words."
+    },
+    {
+      "id": "hold-en-aquarium-negative-missing-field",
+      "topic": "aquarium_care",
+      "question": "What salinity must the coral nursery tank maintain?",
+      "passages": [
+        {
+          "id": "hold-en-aquarium-negative-missing-field-p1",
+          "text": "The coral nursery tank has a salinity probe beside the circulation pump. A caretaker records the probe reading each morning."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "The instrument and recording routine do not state a salinity target."
+    },
+    {
+      "id": "hold-en-aquarium-negative-wrong-entity",
+      "topic": "aquarium_care",
+      "question": "How many seahorses live in the Harbour Aquarium?",
+      "passages": [
+        {
+          "id": "hold-en-aquarium-negative-wrong-entity-p1",
+          "text": "The Lagoon Aquarium houses eleven seahorses in its coastal exhibit. The animal inventory covers Lagoon Aquarium only."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_entity",
+      "expected_answer": null,
+      "label_rationale": "The inventory belongs to a different named aquarium."
+    },
+    {
+      "id": "hold-en-dig-positive-literal",
+      "topic": "archaeological_excavation",
+      "question": "How deep is excavation trench C?",
+      "passages": [
+        {
+          "id": "hold-en-dig-positive-literal-p1",
+          "text": "Excavation trench C is eighty centimetres deep. Trench D has not yet been opened."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "expected_answer": "Eighty centimetres.",
+      "label_rationale": "The requested trench depth is stated."
+    },
+    {
+      "id": "hold-en-dig-positive-semantic-only",
+      "topic": "archaeological_excavation",
+      "question": "Which object helps researchers loosen earth around fragile remains?",
+      "passages": [
+        {
+          "id": "hold-en-dig-positive-semantic-only-p1",
+          "text": "Excavators gently lift sediment beside delicate bones with a soft brush."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "expected_answer": "A soft brush.",
+      "label_rationale": "Sediment, delicate bones, and excavators paraphrase earth, fragile remains, and researchers."
+    },
+    {
+      "id": "hold-en-dig-negative-missing-field",
+      "topic": "archaeological_excavation",
+      "question": "How old is the bronze buckle found in trench C?",
+      "passages": [
+        {
+          "id": "hold-en-dig-negative-missing-field-p1",
+          "text": "A bronze buckle was found in trench C beside three ceramic fragments. It was placed in a numbered finds tray."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "Discovery location and storage do not date the buckle."
+    },
+    {
+      "id": "hold-en-dig-negative-wrong-date",
+      "topic": "archaeological_excavation",
+      "question": "How many volunteers participated in the 2021 excavation season?",
+      "passages": [
+        {
+          "id": "hold-en-dig-negative-wrong-date-p1",
+          "text": "The 2028 excavation season has eighteen registered volunteers. This registration list applies to the 2028 season only."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_date",
+      "expected_answer": null,
+      "label_rationale": "The available count is for a different season."
+    },
+    {
+      "id": "hold-en-kennel-positive-literal",
+      "topic": "dog_boarding",
+      "question": "How many outdoor walks does each boarding dog receive per day?",
+      "passages": [
+        {
+          "id": "hold-en-kennel-positive-literal-p1",
+          "text": "Each boarding dog receives three outdoor walks per day. The final walk takes place before the evening meal."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "expected_answer": "Three outdoor walks per day.",
+      "label_rationale": "The daily walk count is explicit."
+    },
+    {
+      "id": "hold-en-kennel-positive-semantic-only",
+      "topic": "dog_boarding",
+      "question": "Where do pets sleep during their stay?",
+      "passages": [
+        {
+          "id": "hold-en-kennel-positive-semantic-only-p1",
+          "text": "Overnight canine guests rest in individual indoor kennels."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "expected_answer": "In individual indoor kennels.",
+      "label_rationale": "Overnight canine guests resting paraphrases pets sleeping during a stay."
+    },
+    {
+      "id": "hold-en-kennel-negative-missing-field",
+      "topic": "dog_boarding",
+      "question": "What is the overnight boarding fee for a large dog?",
+      "passages": [
+        {
+          "id": "hold-en-kennel-negative-missing-field-p1",
+          "text": "The boarding centre accepts both large and small dogs. Owners bring the usual food in labelled containers."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "Accepted sizes and food instructions do not state a fee."
+    },
+    {
+      "id": "hold-en-kennel-negative-wrong-entity",
+      "topic": "dog_boarding",
+      "question": "How many indoor kennels does Willow Lodge have?",
+      "passages": [
+        {
+          "id": "hold-en-kennel-negative-wrong-entity-p1",
+          "text": "Maple Lodge has sixteen indoor kennels arranged around an enclosed exercise yard. The facility description is for Maple Lodge."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_entity",
+      "expected_answer": null,
+      "label_rationale": "The capacity belongs to Maple Lodge rather than Willow Lodge."
+    },
+    {
+      "id": "hold-en-film-positive-literal",
+      "topic": "film_archive",
+      "question": "How many reels can a researcher request in one archive appointment?",
+      "passages": [
+        {
+          "id": "hold-en-film-positive-literal-p1",
+          "text": "A researcher may request at most four reels in one archive appointment. Reels must remain in the supervised viewing room."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "expected_answer": "Four reels.",
+      "label_rationale": "The per-appointment allowance is explicit."
+    },
+    {
+      "id": "hold-en-film-positive-semantic-only",
+      "topic": "film_archive",
+      "question": "How can someone inspect a reel without shining light through the old original?",
+      "passages": [
+        {
+          "id": "hold-en-film-positive-semantic-only-p1",
+          "text": "Viewing takes place on a digitized copy; the nitrate master remains in its protective canister."
+        }
+      ],
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "expected_answer": "Use the digitized copy while the nitrate master stays in its canister.",
+      "label_rationale": "A digital viewing copy permits inspection without projecting the physical master."
+    },
+    {
+      "id": "hold-en-film-negative-missing-field",
+      "topic": "film_archive",
+      "question": "What relative humidity is maintained in the film archive vault?",
+      "passages": [
+        {
+          "id": "hold-en-film-negative-missing-field-p1",
+          "text": "The film archive vault has separate temperature and humidity sensors. Staff inspect both sensors at the start of each shift."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "Monitoring equipment and inspection do not specify the humidity level."
+    },
+    {
+      "id": "hold-en-film-negative-wrong-date",
+      "topic": "film_archive",
+      "question": "How many reels did the archive restore during 2020?",
+      "passages": [
+        {
+          "id": "hold-en-film-negative-wrong-date-p1",
+          "text": "The annual report for 2027 records the restoration of sixty-two reels. The totals in this report cover calendar year 2027."
+        }
+      ],
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_date",
+      "expected_answer": null,
+      "label_rationale": "A later annual total does not answer the requested year."
+    },
+    {
+      "id": "hold-zh-radio-positive-literal",
+      "topic": "業餘無線電社",
+      "question": "無線電社的新生練習使用哪一個頻道？",
+      "passages": [
+        {
+          "id": "hold-zh-radio-positive-literal-p1",
+          "text": "無線電社的新生練習使用第六頻道。指導員會在開始前確認所有設備已切換到指定頻道。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "expected_answer": "第六頻道。",
+      "label_rationale": "指定頻道直接載明。"
+    },
+    {
+      "id": "hold-zh-radio-positive-semantic-only",
+      "topic": "業餘無線電社",
+      "question": "訊號發不出去時先看哪裡？",
+      "passages": [
+        {
+          "id": "hold-zh-radio-positive-semantic-only-p1",
+          "text": "若無法順利送話，請先確認天線接頭是否鎖緊。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "expected_answer": "先確認天線接頭是否鎖緊。",
+      "label_rationale": "發送失敗的口語描述對應送話問題與接頭檢查。"
+    },
+    {
+      "id": "hold-zh-radio-negative-missing-field",
+      "topic": "業餘無線電社",
+      "question": "社團借用的手持無線電額定輸出功率是多少？",
+      "passages": [
+        {
+          "id": "hold-zh-radio-negative-missing-field-p1",
+          "text": "社團借用的手持無線電附有充電座與備用電池。歸還前須將電池充滿並擦乾外殼。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "配件及歸還要求不包含輸出功率。"
+    },
+    {
+      "id": "hold-zh-radio-negative-wrong-entity",
+      "topic": "業餘無線電社",
+      "question": "海角無線電社每週在哪一天聚會？",
+      "passages": [
+        {
+          "id": "hold-zh-radio-negative-wrong-entity-p1",
+          "text": "山嶺無線電社每週四晚上聚會，場地設在活動中心二樓。公告只代表山嶺社的安排。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_entity",
+      "expected_answer": null,
+      "label_rationale": "另一個社團的聚會時間不能回答海角社。"
+    },
+    {
+      "id": "hold-zh-choir-positive-literal",
+      "topic": "合唱團排練",
+      "question": "合唱團的分部排練一次持續幾分鐘？",
+      "passages": [
+        {
+          "id": "hold-zh-choir-positive-literal-p1",
+          "text": "合唱團的分部排練一次持續四十五分鐘，休息後再進行全團合唱。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "expected_answer": "四十五分鐘。",
+      "label_rationale": "排練時長直接載明。"
+    },
+    {
+      "id": "hold-zh-choir-positive-semantic-only",
+      "topic": "合唱團排練",
+      "question": "發不出平常的聲音還能照原來的音量唱嗎？",
+      "passages": [
+        {
+          "id": "hold-zh-choir-positive-semantic-only-p1",
+          "text": "嗓子沙啞的團員應停止高聲演唱，改為聆聽並在譜上做筆記。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "expected_answer": "不能；應停止高聲演唱，改為聆聽及做筆記。",
+      "label_rationale": "聲音異常與原音量演唱的描述可由沙啞時的排練規則回答。"
+    },
+    {
+      "id": "hold-zh-choir-negative-missing-field",
+      "topic": "合唱團排練",
+      "question": "本次合唱演出的鋼琴伴奏者是誰？",
+      "passages": [
+        {
+          "id": "hold-zh-choir-negative-missing-field-p1",
+          "text": "本次合唱演出使用鋼琴伴奏，團員須依照指揮的手勢進出舞臺。伴奏排練安排在總彩排之前。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "伴奏形式與排練安排沒有提供伴奏者身分。"
+    },
+    {
+      "id": "hold-zh-choir-negative-wrong-date",
+      "topic": "合唱團排練",
+      "question": "合唱團二〇二二年的年度演出在哪一天舉行？",
+      "passages": [
+        {
+          "id": "hold-zh-choir-negative-wrong-date-p1",
+          "text": "合唱團二〇二九年的年度演出定於六月二十一日舉行。海報只介紹二〇二九年這場演出。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_date",
+      "expected_answer": null,
+      "label_rationale": "海報未提供所詢問年度的演出日期。"
+    },
+    {
+      "id": "hold-zh-games-positive-literal",
+      "topic": "桌遊借用中心",
+      "question": "桌遊借用中心一次最多可借幾盒遊戲？",
+      "passages": [
+        {
+          "id": "hold-zh-games-positive-literal-p1",
+          "text": "桌遊借用中心每位會員一次最多可借三盒遊戲。借出前須與館員共同清點配件。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "expected_answer": "三盒遊戲。",
+      "label_rationale": "借用數量上限直接載明。"
+    },
+    {
+      "id": "hold-zh-games-positive-semantic-only",
+      "topic": "桌遊借用中心",
+      "question": "玩完發現少了一顆小棋子該怎麼辦？",
+      "passages": [
+        {
+          "id": "hold-zh-games-positive-semantic-only-p1",
+          "text": "套件若有零件遺失，請立即告知櫃檯，由館員登記缺件狀況。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "expected_answer": "立即告知櫃檯，讓館員登記缺件。",
+      "label_rationale": "小棋子不見屬於零件遺失的情形。"
+    },
+    {
+      "id": "hold-zh-games-negative-missing-field",
+      "topic": "桌遊借用中心",
+      "question": "遺失一顆木製棋子的賠償金額是多少？",
+      "passages": [
+        {
+          "id": "hold-zh-games-negative-missing-field-p1",
+          "text": "遺失木製棋子時，館員會先核對遊戲配件表，再通知借用人後續處理方式。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "處理流程未提供任何賠償金額。"
+    },
+    {
+      "id": "hold-zh-games-negative-wrong-entity",
+      "topic": "桌遊借用中心",
+      "question": "松果桌遊站的會員借期是幾天？",
+      "passages": [
+        {
+          "id": "hold-zh-games-negative-wrong-entity-p1",
+          "text": "橡樹桌遊站的會員借期為十天。這份借用規則只適用橡樹站收藏的遊戲。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_entity",
+      "expected_answer": null,
+      "label_rationale": "橡樹站的借期不能代替松果站規則。"
+    },
+    {
+      "id": "hold-zh-luggage-positive-literal",
+      "topic": "行李寄存處",
+      "question": "行李寄存處的大型置物櫃最多可放幾個行李箱？",
+      "passages": [
+        {
+          "id": "hold-zh-luggage-positive-literal-p1",
+          "text": "行李寄存處的大型置物櫃最多可放兩個標準行李箱，開關櫃門時須確認背帶沒有夾住。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "expected_answer": "兩個標準行李箱。",
+      "label_rationale": "置物容量直接載明。"
+    },
+    {
+      "id": "hold-zh-luggage-positive-semantic-only",
+      "topic": "行李寄存處",
+      "question": "暫放的東西要拿回來時得出示什麼？",
+      "passages": [
+        {
+          "id": "hold-zh-luggage-positive-semantic-only-p1",
+          "text": "領取寄存物品時，請向服務人員提供原始收據。"
+        }
+      ],
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "expected_answer": "原始收據。",
+      "label_rationale": "暫放物品取回的情境對應寄存物領取要求。"
+    },
+    {
+      "id": "hold-zh-luggage-negative-missing-field",
+      "topic": "行李寄存處",
+      "question": "大型行李箱寄存一整天需要多少錢？",
+      "passages": [
+        {
+          "id": "hold-zh-luggage-negative-missing-field-p1",
+          "text": "大型行李箱寄存後會貼上編號標籤。工作人員依照編號把箱子放入專用置物區。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "expected_answer": null,
+      "label_rationale": "標記及存放方式不包含寄存費用。"
+    },
+    {
+      "id": "hold-zh-luggage-negative-wrong-date",
+      "topic": "行李寄存處",
+      "question": "寄存處在二〇二四年元旦營業到幾點？",
+      "passages": [
+        {
+          "id": "hold-zh-luggage-negative-wrong-date-p1",
+          "text": "二〇二八年元旦的行李寄存服務營業至晚上八點。本公告僅適用二〇二八年一月一日。"
+        }
+      ],
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_date",
+      "expected_answer": null,
+      "label_rationale": "不同年份的單日公告不能作為所詢日期的依據。"
+    }
+  ]
+}
