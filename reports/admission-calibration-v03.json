@@ -1,0 +1,843 @@
+{
+  "schema_version": "admission-evaluation-v1",
+  "split": "calibration",
+  "profile_id": "f1f6f30f3f3003d888dcfa1607bc2bc875cdf7fb13d2a7b36479e4c0fa94cd7e",
+  "threshold": -5.907637596130371,
+  "cases_digest": "7f655a11c85d4d87b5b295e24bef879848d298dddd34822dc296bfbeed13ee42",
+  "scorer": {
+    "model": "BAAI/bge-reranker-v2-m3-int8",
+    "artifacts": {
+      "onnx/model_int8.onnx": "912fc1215c2dbff6499700534bd8d31253af01573861abbfc43afd1fab6cce5d",
+      "tokenizer.json": "8bf8afbfd11306bd872018c53bfdf2e160a56f8edbcf49933324404791c148d3",
+      "tokenizer_config.json": "b87c8703482b0300d3da30e201519aa641f6a450f5eb5bf1e624afbf70c74d80",
+      "special_tokens_map.json": "8c785abebea9ae3257b61681b4e6fd8365ceafde980c21970d001e834cf10835",
+      "config.json": "122e922dcfed6503c8721e6fe1daf090340c3d95ca7f3aa3a72730b321a51cfd"
+    },
+    "runtime": {
+      "fastembed": "0.9.1",
+      "onnxruntime": "1.32.0",
+      "tokenizers": "0.23.3",
+      "python": "3.12",
+      "execution_provider": "CPUExecutionProvider"
+    },
+    "score_convention": "onnx_output_0_first_column_logit_no_activation",
+    "limits": {
+      "max_candidates": 20,
+      "max_question_chars": 2000,
+      "max_passage_chars": 200000,
+      "max_total_passage_chars": 200000,
+      "pair_tokens": 512,
+      "batch_size": 4,
+      "cpu_threads": 2,
+      "window": "right_source_prefix_only_second_v1"
+    },
+    "aggregation": "max_original_passage"
+  },
+  "metrics": {
+    "cases": 48,
+    "positive": 24,
+    "negative": 24,
+    "positive_retained": 23,
+    "negative_refused": 1,
+    "false_refusals": 1,
+    "positive_retention": 0.9583333333333334,
+    "refusal_recall": 0.041666666666666664,
+    "refusal_precision": 0.5,
+    "false_refusal_rate": 0.041666666666666664,
+    "abstentions": 2,
+    "abstention_rate": 0.041666666666666664,
+    "semantic_only_positive": 12,
+    "semantic_only_retained": 11
+  },
+  "by_language": {
+    "en": {
+      "cases": 24,
+      "positive": 12,
+      "negative": 12,
+      "positive_retained": 11,
+      "negative_refused": 0,
+      "false_refusals": 1,
+      "positive_retention": 0.9166666666666666,
+      "refusal_recall": 0.0,
+      "refusal_precision": 0.0,
+      "false_refusal_rate": 0.08333333333333333,
+      "abstentions": 1,
+      "abstention_rate": 0.041666666666666664,
+      "semantic_only_positive": 6,
+      "semantic_only_retained": 5
+    },
+    "zh": {
+      "cases": 24,
+      "positive": 12,
+      "negative": 12,
+      "positive_retained": 12,
+      "negative_refused": 1,
+      "false_refusals": 0,
+      "positive_retention": 1.0,
+      "refusal_recall": 0.08333333333333333,
+      "refusal_precision": 1.0,
+      "false_refusal_rate": 0.0,
+      "abstentions": 1,
+      "abstention_rate": 0.041666666666666664,
+      "semantic_only_positive": 6,
+      "semantic_only_retained": 6
+    }
+  },
+  "by_category": {
+    "literal": {
+      "cases": 12,
+      "positive": 12,
+      "negative": 0,
+      "positive_retained": 12,
+      "negative_refused": 0,
+      "false_refusals": 0,
+      "positive_retention": 1.0,
+      "refusal_recall": null,
+      "refusal_precision": null,
+      "false_refusal_rate": 0.0,
+      "abstentions": 0,
+      "abstention_rate": 0.0,
+      "semantic_only_positive": 0,
+      "semantic_only_retained": 0
+    },
+    "missing_field": {
+      "cases": 12,
+      "positive": 0,
+      "negative": 12,
+      "positive_retained": 0,
+      "negative_refused": 1,
+      "false_refusals": 0,
+      "positive_retention": null,
+      "refusal_recall": 0.08333333333333333,
+      "refusal_precision": 1.0,
+      "false_refusal_rate": null,
+      "abstentions": 1,
+      "abstention_rate": 0.08333333333333333,
+      "semantic_only_positive": 0,
+      "semantic_only_retained": 0
+    },
+    "semantic_only": {
+      "cases": 12,
+      "positive": 12,
+      "negative": 0,
+      "positive_retained": 11,
+      "negative_refused": 0,
+      "false_refusals": 1,
+      "positive_retention": 0.9166666666666666,
+      "refusal_recall": null,
+      "refusal_precision": 0.0,
+      "false_refusal_rate": 0.08333333333333333,
+      "abstentions": 1,
+      "abstention_rate": 0.08333333333333333,
+      "semantic_only_positive": 12,
+      "semantic_only_retained": 11
+    },
+    "wrong_date": {
+      "cases": 6,
+      "positive": 0,
+      "negative": 6,
+      "positive_retained": 0,
+      "negative_refused": 0,
+      "false_refusals": 0,
+      "positive_retention": null,
+      "refusal_recall": 0.0,
+      "refusal_precision": null,
+      "false_refusal_rate": null,
+      "abstentions": 0,
+      "abstention_rate": 0.0,
+      "semantic_only_positive": 0,
+      "semantic_only_retained": 0
+    },
+    "wrong_entity": {
+      "cases": 6,
+      "positive": 0,
+      "negative": 6,
+      "positive_retained": 0,
+      "negative_refused": 0,
+      "false_refusals": 0,
+      "positive_retention": null,
+      "refusal_recall": 0.0,
+      "refusal_precision": null,
+      "false_refusal_rate": null,
+      "abstentions": 0,
+      "abstention_rate": 0.0,
+      "semantic_only_positive": 0,
+      "semantic_only_retained": 0
+    }
+  },
+  "measurements": [
+    {
+      "id": "cal-en-apiary-positive-literal",
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "score": 4.7523393630981445,
+      "passage_scores": [
+        4.7523393630981445
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        39
+      ]
+    },
+    {
+      "id": "cal-en-apiary-positive-semantic-only",
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "score": -1.1704944372177124,
+      "passage_scores": [
+        -1.1704944372177124
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        43
+      ]
+    },
+    {
+      "id": "cal-en-apiary-negative-missing-field",
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "score": -5.07923698425293,
+      "passage_scores": [
+        -5.07923698425293
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        38
+      ]
+    },
+    {
+      "id": "cal-en-apiary-negative-wrong-entity",
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_entity",
+      "score": -2.8865702152252197,
+      "passage_scores": [
+        -2.8865702152252197
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        44
+      ]
+    },
+    {
+      "id": "cal-en-laundry-positive-literal",
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "score": 7.582683086395264,
+      "passage_scores": [
+        7.582683086395264
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        34
+      ]
+    },
+    {
+      "id": "cal-en-laundry-positive-semantic-only",
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "score": -4.42672872543335,
+      "passage_scores": [
+        -4.42672872543335
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        35
+      ]
+    },
+    {
+      "id": "cal-en-laundry-negative-missing-field",
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "score": -3.8394834995269775,
+      "passage_scores": [
+        -3.8394834995269775
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        42
+      ]
+    },
+    {
+      "id": "cal-en-laundry-negative-wrong-date",
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_date",
+      "score": -2.7498843669891357,
+      "passage_scores": [
+        -2.7498843669891357
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        46
+      ]
+    },
+    {
+      "id": "cal-en-observatory-positive-literal",
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "score": 7.1182427406311035,
+      "passage_scores": [
+        7.1182427406311035
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        38
+      ]
+    },
+    {
+      "id": "cal-en-observatory-positive-semantic-only",
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "score": -7.867592811584473,
+      "passage_scores": [
+        -7.867592811584473
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        34
+      ]
+    },
+    {
+      "id": "cal-en-observatory-negative-missing-field",
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "score": -3.3308935165405273,
+      "passage_scores": [
+        -3.3308935165405273
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        39
+      ]
+    },
+    {
+      "id": "cal-en-observatory-negative-wrong-entity",
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_entity",
+      "score": -1.1887317895889282,
+      "passage_scores": [
+        -1.1887317895889282
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        39
+      ]
+    },
+    {
+      "id": "cal-en-rowing-positive-literal",
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "score": 5.441143035888672,
+      "passage_scores": [
+        5.441143035888672
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        41
+      ]
+    },
+    {
+      "id": "cal-en-rowing-positive-semantic-only",
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "score": 2.13546085357666,
+      "passage_scores": [
+        2.13546085357666
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        30
+      ]
+    },
+    {
+      "id": "cal-en-rowing-negative-missing-field",
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "score": 2.3820459842681885,
+      "passage_scores": [
+        2.3820459842681885
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        46
+      ]
+    },
+    {
+      "id": "cal-en-rowing-negative-wrong-date",
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_date",
+      "score": 2.6259536743164062,
+      "passage_scores": [
+        2.6259536743164062
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        44
+      ]
+    },
+    {
+      "id": "cal-en-binding-positive-literal",
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "score": 6.8321614265441895,
+      "passage_scores": [
+        6.8321614265441895
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        45
+      ]
+    },
+    {
+      "id": "cal-en-binding-positive-semantic-only",
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "score": -3.912684440612793,
+      "passage_scores": [
+        -3.912684440612793
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        35
+      ]
+    },
+    {
+      "id": "cal-en-binding-negative-missing-field",
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "score": -3.3221523761749268,
+      "passage_scores": [
+        -3.3221523761749268
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        44
+      ]
+    },
+    {
+      "id": "cal-en-binding-negative-wrong-entity",
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_entity",
+      "score": -0.36327114701271057,
+      "passage_scores": [
+        -0.36327114701271057
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        45
+      ]
+    },
+    {
+      "id": "cal-en-seed-positive-literal",
+      "answerable": true,
+      "language": "en",
+      "category": "literal",
+      "score": 7.0940022468566895,
+      "passage_scores": [
+        7.0940022468566895
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        44
+      ]
+    },
+    {
+      "id": "cal-en-seed-positive-semantic-only",
+      "answerable": true,
+      "language": "en",
+      "category": "semantic_only",
+      "score": -5.907637596130371,
+      "passage_scores": [
+        -5.907637596130371
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        32
+      ]
+    },
+    {
+      "id": "cal-en-seed-negative-missing-field",
+      "answerable": false,
+      "language": "en",
+      "category": "missing_field",
+      "score": -3.411766290664673,
+      "passage_scores": [
+        -3.411766290664673
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        47
+      ]
+    },
+    {
+      "id": "cal-en-seed-negative-wrong-date",
+      "answerable": false,
+      "language": "en",
+      "category": "wrong_date",
+      "score": 0.8595929741859436,
+      "passage_scores": [
+        0.8595929741859436
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        48
+      ]
+    },
+    {
+      "id": "cal-zh-baking-positive-literal",
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "score": 8.019737243652344,
+      "passage_scores": [
+        8.019737243652344
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        44
+      ]
+    },
+    {
+      "id": "cal-zh-baking-positive-semantic-only",
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "score": -1.5372304916381836,
+      "passage_scores": [
+        -1.5372304916381836
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        34
+      ]
+    },
+    {
+      "id": "cal-zh-baking-negative-missing-field",
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "score": 0.4705183207988739,
+      "passage_scores": [
+        0.4705183207988739
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        45
+      ]
+    },
+    {
+      "id": "cal-zh-baking-negative-wrong-entity",
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_entity",
+      "score": 0.8913035988807678,
+      "passage_scores": [
+        0.8913035988807678
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        45
+      ]
+    },
+    {
+      "id": "cal-zh-pottery-positive-literal",
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "score": 7.967479228973389,
+      "passage_scores": [
+        7.967479228973389
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        43
+      ]
+    },
+    {
+      "id": "cal-zh-pottery-positive-semantic-only",
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "score": -1.419917106628418,
+      "passage_scores": [
+        -1.419917106628418
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        34
+      ]
+    },
+    {
+      "id": "cal-zh-pottery-negative-missing-field",
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "score": -7.718472480773926,
+      "passage_scores": [
+        -7.718472480773926
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        44
+      ]
+    },
+    {
+      "id": "cal-zh-pottery-negative-wrong-date",
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_date",
+      "score": 7.975673198699951,
+      "passage_scores": [
+        7.975673198699951
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        45
+      ]
+    },
+    {
+      "id": "cal-zh-wood-positive-literal",
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "score": 8.654406547546387,
+      "passage_scores": [
+        8.654406547546387
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        45
+      ]
+    },
+    {
+      "id": "cal-zh-wood-positive-semantic-only",
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "score": -3.499072313308716,
+      "passage_scores": [
+        -3.499072313308716
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        38
+      ]
+    },
+    {
+      "id": "cal-zh-wood-negative-missing-field",
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "score": -2.416604518890381,
+      "passage_scores": [
+        -2.416604518890381
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        48
+      ]
+    },
+    {
+      "id": "cal-zh-wood-negative-wrong-entity",
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_entity",
+      "score": 1.653335452079773,
+      "passage_scores": [
+        1.653335452079773
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        40
+      ]
+    },
+    {
+      "id": "cal-zh-shuttle-positive-literal",
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "score": 7.289529800415039,
+      "passage_scores": [
+        7.289529800415039
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        38
+      ]
+    },
+    {
+      "id": "cal-zh-shuttle-positive-semantic-only",
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "score": -0.40660354495048523,
+      "passage_scores": [
+        -0.40660354495048523
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        31
+      ]
+    },
+    {
+      "id": "cal-zh-shuttle-negative-missing-field",
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "score": 1.165082335472107,
+      "passage_scores": [
+        1.165082335472107
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        45
+      ]
+    },
+    {
+      "id": "cal-zh-shuttle-negative-wrong-date",
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_date",
+      "score": 3.997213125228882,
+      "passage_scores": [
+        3.997213125228882
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        52
+      ]
+    },
+    {
+      "id": "cal-zh-birds-positive-literal",
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "score": 8.650731086730957,
+      "passage_scores": [
+        8.650731086730957
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        39
+      ]
+    },
+    {
+      "id": "cal-zh-birds-positive-semantic-only",
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "score": -2.0021374225616455,
+      "passage_scores": [
+        -2.0021374225616455
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        40
+      ]
+    },
+    {
+      "id": "cal-zh-birds-negative-missing-field",
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "score": 1.5076534748077393,
+      "passage_scores": [
+        1.5076534748077393
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        41
+      ]
+    },
+    {
+      "id": "cal-zh-birds-negative-wrong-entity",
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_entity",
+      "score": 1.6552848815917969,
+      "passage_scores": [
+        1.6552848815917969
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        44
+      ]
+    },
+    {
+      "id": "cal-zh-dye-positive-literal",
+      "answerable": true,
+      "language": "zh",
+      "category": "literal",
+      "score": 7.826707363128662,
+      "passage_scores": [
+        7.826707363128662
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        42
+      ]
+    },
+    {
+      "id": "cal-zh-dye-positive-semantic-only",
+      "answerable": true,
+      "language": "zh",
+      "category": "semantic_only",
+      "score": 1.1460819244384766,
+      "passage_scores": [
+        1.1460819244384766
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        41
+      ]
+    },
+    {
+      "id": "cal-zh-dye-negative-missing-field",
+      "answerable": false,
+      "language": "zh",
+      "category": "missing_field",
+      "score": -1.8206806182861328,
+      "passage_scores": [
+        -1.8206806182861328
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        48
+      ]
+    },
+    {
+      "id": "cal-zh-dye-negative-wrong-date",
+      "answerable": false,
+      "language": "zh",
+      "category": "wrong_date",
+      "score": 2.9637317657470703,
+      "passage_scores": [
+        2.9637317657470703
+      ],
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        48
+      ]
+    }
+  ],
+  "scope": "Synthetic relevance admission; no semantic entailment or production quality claim"
+}
