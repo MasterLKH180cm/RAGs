@@ -275,8 +275,8 @@ def validate_remote_decision(body: dict, citation_count: int) -> dict:
     if not {"outcome", "supported", "refusal_reason", "admission"} <= body.keys():
         raise ValueError("Incomplete federated decision")
     outcome, supported, reason, item = (body.get(k) for k in ("outcome", "supported", "refusal_reason", "admission"))
-    if (outcome not in {"success", "insufficient_evidence"} or supported is not None and type(supported) is not bool
-            or reason is not None and reason not in REFUSALS or not isinstance(item, dict) or set(item) != METADATA_KEYS):
+    if (outcome not in {"success", "insufficient_evidence"} or (supported is not None and type(supported) is not bool)
+            or (reason is not None and reason not in REFUSALS) or not isinstance(item, dict) or set(item) != METADATA_KEYS):
         raise ValueError("Invalid federated decision")
     if (item["policy_version"] != POLICY_VERSION or item["decision"] not in {"accept", "abstain", "unassessed"}
             or item["basis"] not in BASES or any(type(item[k]) is not int or not 0 <= item[k] <= 20 for k in ("candidate_count", "accepted_count"))
@@ -294,7 +294,7 @@ def validate_remote_decision(body: dict, citation_count: int) -> dict:
             raise ValueError("Refused federated response contains usable evidence")
         expected_bases = {"no_candidates": {"no_candidates"}, "below_admission_threshold": CALIBRATED_BASES,
                           "model_rejected": {"model_review"}, "context_budget_exhausted": {"context_budget"}}[reason]
-        if item["basis"] not in expected_bases or reason == "no_candidates" and item["candidate_count"] != 0:
+        if item["basis"] not in expected_bases or (reason == "no_candidates" and item["candidate_count"] != 0):
             raise ValueError("Contradictory federated refusal reason")
         if reason == "below_admission_threshold" and item["score"] >= item["threshold"]:
             raise ValueError("Federation refused above its calibrated threshold")

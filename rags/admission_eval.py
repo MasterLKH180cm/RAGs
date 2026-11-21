@@ -137,7 +137,7 @@ def main() -> None:
         parser.error("Calibration cannot use held-out labels")
     if args.action == "evaluate" and dataset["split"] != "holdout":
         parser.error("Use evaluate only for the frozen holdout; calibration reports already contain calibration metrics")
-    if Path(args.report).exists() or args.action == "calibrate" and Path(args.profile).exists():
+    if Path(args.report).exists() or (args.action == "calibrate" and Path(args.profile).exists()):
         parser.error("Refusing to overwrite an existing profile or report")
     profile = load_profile(args.profile) if args.action == "evaluate" else None
     use_qwen = args.scorer == "qwen" if profile is None else profile["scorer"]["model"] == "Qwen/Qwen3-1.7B"

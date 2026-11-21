@@ -9,7 +9,7 @@ def cosine(left: list[float], right: list[float]) -> float:
     if any(not math.isfinite(x) for x in (*left, *right)):
         raise ValueError("Embeddings must be finite")
     norm = math.sqrt(sum(x*x for x in left) * sum(x*x for x in right))
-    return sum(x*y for x, y in zip(left, right)) / norm if norm else 0.0
+    return sum(x*y for x, y in zip(left, right, strict=True)) / norm if norm else 0.0
 
 
 def rrf(rankings: list[list[str]], limit: int) -> list[tuple[str, float]]:

@@ -385,22 +385,53 @@ Text uploads are capped at 2,000,000 bytes; extracted document text at 200,000 c
 
 ## Validation and measured limits
 
-The v0.3 local suite passed **280 tests with 5 opt-in environment/model checks skipped**. The separate actual upstream and pretrained-admission runs are recorded below; these counts overlap and must not be summed as unique tests.
+The current local core suite passes **335 unit tests and 152 integration tests**
+(**487 unique cases, zero selected skips**). Five actual encoder/research tests
+are explicitly deselected here and have separately provisioned CI jobs. Every
+pytest case has one primary layer, and a machine-readable inventory identifies
+each node ID and its resource requirements. See the committed
+[test specification](docs/TEST_SPEC.md) and [test/code review](docs/TEST_REVIEW.md).
+
+| Coverage of the complete production Python package | Before this iteration | Current local result | Required floor |
+| --- | ---: | ---: | ---: |
+| Statements | 75.88% | **80.66%** | 80% |
+| Branches | 68.51% | **74.83%** | 72% |
+
+Both measurements use ordinary parent-process tests, including every production
+module in the denominator. Optional models and independent MCP/worker processes
+have separate execution evidence; their coverage is not folded into this figure.
+No new module omissions or coverage exclusions were added. CI publishes JUnit,
+collection inventories and per-file JSON/XML/HTML coverage. A selected
+skip/xfail/xpass, an unclassified test or a missing production coverage file
+fails the required gate.
 
 Ordinary CI runs actual Qwen acceptance/refusal on two preselected calibration cases and audits the immutable complete quality report. It checks all file/dataset/profile identities and recomputes the recorded gates, while clearly labelling those metrics as historical. The full 472-forward benchmark is a separate manual workflow option, `full_admission_benchmark`, using the unchanged `--enforce-quality` command and a bounded CPU budget. Any scoring/retrieval change or proposed profile promotion requires a new complete benchmark; a successful contract smoke or recorded-report audit cannot substitute for it. See [the CI resource specification](docs/SPEC_V03.md#9-ci-resource-and-evidence-amendment).
 
 ```bash
-RAGS_ENV=test pytest -q
-ruff check rags tests --select E4,E7,E9,F
+python -m pip install -e ".[dev,pdf,mcp,vision]"
+RAGS_ENV=test python -m pytest -q -m unit --require-no-skips \
+  --test-inventory reports/testing/inventory-unit.json \
+  --junitxml reports/testing/junit-unit.xml \
+  --cov=rags --cov-branch --cov-config=pyproject.toml --cov-report=json:reports/testing/coverage-unit.json
+RAGS_ENV=test python -m pytest -q -m "integration and not external" --require-no-skips \
+  --test-inventory reports/testing/inventory-integration.json \
+  --junitxml reports/testing/junit-integration.xml \
+  --cov=rags --cov-branch --cov-config=pyproject.toml --cov-append \
+  --cov-report=json:reports/testing/coverage-core.json \
+  --cov-report=xml:reports/testing/coverage-core.xml \
+  --cov-report=html:reports/testing/coverage-html
+python scripts/check_coverage.py
+ruff check rags tests scripts conftest.py --select E4,E7,E9,F
+ruff check rags --select B,RUF021
 RAGS_ENV=test python -m rags.evaluate --dataset examples/eval_v02.json --k 3 --generate
 ```
 
 Model downloads are opt-in for the integration tests:
 
 ```bash
-RAGS_TEST_COLBERT=1 RAGS_MODEL_CACHE=./data/models pytest tests/test_backends.py -q
-RAGS_TEST_MULTIMODAL=1 RAGS_MODEL_CACHE=./data/models pytest tests/test_multimodal.py -q
-RAGS_TEST_ENCODERS=1 RAGS_MODEL_CACHE=./data/models pytest tests/test_semantic_encoder.py -q
+RAGS_TEST_COLBERT=1 RAGS_MODEL_CACHE=./data/models python -m pytest tests/test_backends.py -q -m encoders --require-no-skips
+RAGS_TEST_MULTIMODAL=1 RAGS_MODEL_CACHE=./data/models python -m pytest tests/test_multimodal.py -q -m encoders --require-no-skips
+RAGS_TEST_ENCODERS=1 RAGS_MODEL_CACHE=./data/models python -m pytest tests/test_semantic_encoder.py -q -m encoders --require-no-skips
 ```
 
 The [36-question synthetic dataset](examples/eval_v02.json) covers retrieval, structured rows, temporal versions, and no-answer cases. The [recorded local report](docs/evaluation-v02-summary.json) includes applicable recall/MRR/nDCG, exact structured/time checks, answer metrics, refusal behavior, citation-record validity, and latency. Unmeasured provider usage, cost, and semantic citation entailment remain `null` with reasons.

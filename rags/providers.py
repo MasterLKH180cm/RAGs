@@ -1,20 +1,63 @@
 """Model and embedding adapters: deterministic offline demo and opt-in external models."""
-from collections import Counter
-from contextvars import ContextVar
-from functools import lru_cache
 import hashlib
 import json
 import math
 import os
 import re
+from collections import Counter
+from contextvars import ContextVar
+from functools import lru_cache
 
 import httpx
 
 from rags.config import Settings
 from rags.registry import CapabilityError
 
-
 _calls: ContextVar[list | None] = ContextVar("rags_provider_calls", default=None)
+
+
+def response_object(response: httpx.Response, code: str, reason: str) -> dict:
+    """Validate an upstream success envelope without exposing its body to callers."""
+    response.raise_for_status()
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise CapabilityError(code, reason, 502) from exc
+    if not isinstance(payload, dict):
+        raise CapabilityError(code, reason, 502)
+    return payload
+
+
+def _first_object(payload: dict, field: str) -> dict:
+    items = payload.get(field)
+    return items[0] if isinstance(items, list) and items and isinstance(items[0], dict) else {}
+
+
+def response_text(payload: dict, provider: str) -> str:
+    """Read validated text from shared chat and vision provider envelopes."""
+    if provider == "openai":
+        message = _first_object(payload, "choices").get("message")
+        answer = message.get("content") if isinstance(message, dict) else None
+    else:
+        blocks = payload.get("content")
+        if not isinstance(blocks, list) or any(not isinstance(block, dict) for block in blocks):
+            raise CapabilityError("invalid_model_output", "Generation provider returned invalid content blocks", 502)
+        parts = [block.get("text") for block in blocks if block.get("type") == "text"]
+        if any(not isinstance(part, str) for part in parts):
+            raise CapabilityError("invalid_model_output", "Generation provider returned invalid text content", 502)
+        answer = "".join(parts)
+    if not isinstance(answer, str) or not answer.strip():
+        raise CapabilityError("invalid_model_output", "Generation provider returned no text", 502)
+    return answer
+
+
+def _finite_number(value) -> bool:
+    if type(value) not in (int, float):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 @lru_cache(maxsize=2)
@@ -59,8 +102,8 @@ class Providers:
     @property
     def has_generation(self) -> bool:
         return bool(
-            self.settings.model_provider == "openai" and self.settings.openai_key
-            or self.settings.model_provider == "anthropic" and self.settings.anthropic_key
+            (self.settings.model_provider == "openai" and self.settings.openai_key)
+            or (self.settings.model_provider == "anthropic" and self.settings.anthropic_key)
         )
 
     def begin_usage(self) -> None:
@@ -145,13 +188,13 @@ class Providers:
             json={"model": self.settings.embedding_model, "input": text},
             timeout=30,
         )
-        response.raise_for_status()
-        payload = response.json()
-        vector = payload["data"][0]["embedding"]
+        reason = "Provider returned an invalid embedding vector"
+        payload = response_object(response, "invalid_embedding", reason)
+        vector = _first_object(payload, "data").get("embedding")
         if not isinstance(vector, list) or not 1 <= len(vector) <= 16_384 or any(
-            type(v) not in (int, float) or not math.isfinite(v) for v in vector
+            not _finite_number(v) for v in vector
         ):
-            raise CapabilityError("invalid_embedding", "Provider returned an invalid embedding vector", 502)
+            raise CapabilityError("invalid_embedding", reason, 502)
         self.record("embedding", self.embedding_model, payload)
         return vector
 
@@ -185,13 +228,9 @@ class Providers:
                 },
                 timeout=90,
             )
-            response.raise_for_status()
-            payload = response.json()
+            payload = response_object(response, "invalid_model_output", "Generation provider returned an invalid response")
             self.record("generation", self.model_identity, payload)
-            answer = payload["choices"][0]["message"]["content"]
-            if not isinstance(answer, str) or not answer.strip():
-                raise CapabilityError("invalid_model_output", "Generation provider returned no text", 502)
-            return answer
+            return response_text(payload, self.settings.model_provider)
         if not self.settings.anthropic_key:
             raise ValueError("ANTHROPIC_API_KEY required for Anthropic generation")
         response = httpx.post(
@@ -208,12 +247,6 @@ class Providers:
             },
             timeout=90,
         )
-        response.raise_for_status()
-        payload = response.json()
+        payload = response_object(response, "invalid_model_output", "Generation provider returned an invalid response")
         self.record("generation", self.model_identity, payload)
-        answer = "".join(
-            b["text"] for b in payload["content"] if b.get("type") == "text"
-        )
-        if not answer.strip():
-            raise CapabilityError("invalid_model_output", "Generation provider returned no text", 502)
-        return answer
+        return response_text(payload, self.settings.model_provider)

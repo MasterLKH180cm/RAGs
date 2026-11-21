@@ -1,0 +1,596 @@
+{
+  "schema_version": 1,
+  "tests": {
+    "tests/test_admission.py::test_answerability_basis_requires_explicit_support_in_federation": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_admission.py::test_api_does_not_accept_caller_admission_configuration": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_admission.py::test_compatibility_exposes_unassessed_and_empty_scope_contract": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_admission.py::test_concurrent_cold_start_constructs_only_one_large_model": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_admission.py::test_context_exhaustion_is_typed_refusal": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_admission.py::test_encoder_bounds_apply_before_inference": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_admission.py::test_encoder_numeric_output_is_validated_without_real_inference": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_admission.py::test_evaluation_uses_outcomes_without_generation_and_ignores_env_profile": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_admission.py::test_exact_zero_has_provenance_and_no_dataset_refuses": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_admission.py::test_federated_calibration_scores_and_counts_are_not_trusted_blindly": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_admission.py::test_federated_invalid_citation_provenance_is_rejected": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_admission.py::test_federated_typed_contradictions_fail": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_admission.py::test_federated_valid_citation_provenance_is_preserved": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_admission.py::test_federation_drops_refused_branch_and_preserves_independent_evidence": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_admission.py::test_federation_rejects_incomplete_and_wrong_basis_decisions": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_admission.py::test_huge_json_integer_profile_threshold_is_a_typed_configuration_error": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_admission.py::test_legacy_federated_support_is_boolean_or_null": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_admission.py::test_max_admission_preserves_order_all_candidates_and_semantic_only": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_admission.py::test_model_rejected_reason_survives_an_empty_kept_source_set": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_admission.py::test_positive_model_review_does_not_bypass_required_calibration": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_admission.py::test_profiles_are_content_bound_and_never_overwritten": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_admission.py::test_refusal_removes_citations_and_never_generates": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_admission.py::test_required_profile_and_explicit_model_rejection": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_admission.py::test_scoring_sees_only_authorized_selected_revision": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_admission.py::test_structured_dataset_limit_is_not_silent_truncation": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_admission.py::test_structured_numeric_overflow_is_not_valid_exact_evidence": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_admission.py::test_threshold_objective_and_no_holdout_calibration": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_answerability.py::test_exactly_one_forward_per_passage_uses_label_logit_difference": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_answerability.py::test_fixed_prompt_is_the_committed_specification": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_answerability.py::test_oversized_fixed_prompt_never_drops_the_question": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_answerability.py::test_source_instructions_stay_in_json_data_and_short_input_is_unchanged": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_answerability.py::test_truncation_preserves_question_system_and_valid_source_prefix": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_api.py::test_config_production_requires_keys": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_api.py::test_fail_closed_and_validation": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_api.py::test_isolation_replace_and_delete": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_api.py::test_offline_paths_and_explicit_advanced_requirements": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_backends.py::test_actual_http_deadline_covers_headers_and_stalled_body": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_backends.py::test_catalog_is_tenant_aware_and_unknown_encoder_is_unavailable": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_backends.py::test_configuration_rejects_ambiguous_identity": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_backends.py::test_empty_upstream_probe_does_not_claim_algorithm_execution": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_backends.py::test_http_passes_only_authorized_sources_and_tenant_credential": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_backends.py::test_http_rejects_forged_evidence_scores_and_usage": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_backends.py::test_http_response_byte_deadline_and_compression_limits": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_backends.py::test_maxsim_exact_masked_and_large_finite_vectors": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_backends.py::test_maxsim_rejects_invalid_matrices_and_masks": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_backends.py::test_pinned_upstream_provenance_and_deadline_are_tenant_scoped": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_backends.py::test_real_colbert_checkpoint_query_document_encoding_and_maxsim": {
+      "layer": "integration",
+      "resources": [
+        "external",
+        "encoders"
+      ]
+    },
+    "tests/test_backends.py::test_research_timeout_is_a_bounded_operator_setting": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_chunking.py::test_all_local_strategies_preserve_multilingual_source_and_limits": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_chunking.py::test_chunk_configuration_is_validated": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_chunking.py::test_contextual_missing_or_invalid_generator_fails_explicitly": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_chunking.py::test_contextual_separates_generated_context_from_original_citation_text": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_chunking.py::test_excessive_contextual_plan_is_rejected_before_provider_calls": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_chunking.py::test_index_profile_changes_for_every_processing_identity": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_chunking.py::test_markdown_paths_ignore_fenced_headings_and_identify_blocks": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_chunking.py::test_recursive_handles_oversized_unbroken_units": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_chunking.py::test_recursive_prefers_complete_paragraphs_when_they_fit": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_chunking.py::test_semantic_breaks_follow_supplied_encoder_discontinuity": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_chunking.py::test_semantic_rejects_dimension_changes": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_chunking.py::test_semantic_rejects_invalid_provider_vectors": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_chunking.py::test_semantic_requires_explicit_non_hash_encoder": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_chunking.py::test_setext_heading_is_retained_in_source": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_evaluate.py::test_answer_metrics_and_unanswerable_cases": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evaluate.py::test_labelled_retrieval_evaluation_is_repeatable": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evaluate.py::test_offline_evaluation_never_uses_configured_external_engines": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evaluate.py::test_v02_labelled_categories_and_exact_mechanisms": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_limits.py::test_api_installs_body_limit_before_json_or_multipart_parsing": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_limits.py::test_chunked_body_without_content_length_stops_before_parser": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_limits.py::test_complete_body_at_limit_reaches_handler_once": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_limits.py::test_deadline_covers_total_intake_instead_of_resetting_each_chunk": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_limits.py::test_declared_oversize_does_not_read_body": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_limits.py::test_disconnect_during_intake_does_not_run_handler_or_send_response": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_limits.py::test_invalid_or_conflicting_content_length_is_rejected": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_limits.py::test_lifespan_is_passed_through_without_body_reads": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_limits.py::test_replay_preserves_real_disconnect_for_streaming_response": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_limits.py::test_stalled_body_returns_single_timeout_before_handler": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_multimodal.py::test_authenticated_asset_lifecycle_is_tenant_scoped": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_multimodal.py::test_concurrent_update_cannot_be_overwritten_after_encoding": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_multimodal.py::test_idempotence_failed_encoding_and_stale_model_reindex": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_multimodal.py::test_image_and_request_limits_are_explicit": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_multimodal.py::test_image_query_and_stored_vectors_are_normalized": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_multimodal.py::test_invalid_vectors_are_never_indexed": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_multimodal.py::test_model_is_disabled_until_operator_configures_it": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_multimodal.py::test_real_clip_text_image_and_image_image_retrieval": {
+      "layer": "integration",
+      "resources": [
+        "external",
+        "encoders"
+      ]
+    },
+    "tests/test_native_integration.py::test_backend_cannot_promote_generated_summary_to_source_evidence": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_native_integration.py::test_context_budget_includes_question_and_source_headers": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_native_integration.py::test_federation_checks_deadline_for_each_small_transport_chunk": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_native_integration.py::test_federation_stream_limit_closes_oversized_response": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_native_integration.py::test_federation_uses_distinct_tenant_credentials_and_rejects_unknown_sources": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_native_integration.py::test_generated_context_is_indexed_but_never_substitutes_source_text": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_native_integration.py::test_graph_traverses_two_hops_without_foreign_edges": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_native_integration.py::test_migration_marks_legacy_processing_and_requires_real_reindex": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_native_integration.py::test_model_modes_have_distinct_queries_and_bounded_control_flow": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_native_integration.py::test_non_ascii_bearer_is_rejected_without_server_error": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_native_integration.py::test_parent_expansion_hierarchy_and_source_offsets": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_native_integration.py::test_predicate_lists_reject_nonfinite_values": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_native_integration.py::test_reflective_draft_validates_inline_citations_even_without_answer_generation": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_native_integration.py::test_reindex_atomicity_profile_and_conflicting_revision": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_native_integration.py::test_self_reflective_and_agentic_success_require_valid_evidence": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_native_integration.py::test_structured_predicates_aggregate_and_scalar_types": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_native_integration.py::test_temporal_versions_metadata_selection_and_purge": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_reindex.py::test_source_metadata_and_embedding_changes_trigger_reindex": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_research_service.py::test_actual_fixed_worker_empty_request_and_missing_provider": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_research_service.py::test_authenticated_tenant_and_engine_before_worker": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_research_service.py::test_cancellation_cleans_actual_worker": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_research_service.py::test_capacity_rejects_without_queueing_extra_work": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_research_service.py::test_child_environment_does_not_receive_service_keys_or_unrelated_secrets": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_research_service.py::test_configuration_limits": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_research_service.py::test_descendants_are_cleaned_even_after_successful_leader_exit": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_research_service.py::test_invalid_request_never_reaches_worker_or_echoes_source": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_research_service.py::test_real_process_is_terminated_and_directory_removed": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_research_service.py::test_request_body_limit_before_parsing_or_work": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_research_service.py::test_worker_response_is_validated_before_exposure": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_research_upstreams.py::test_actual_lightrag_extracts_and_retrieves_hybrid_graph_with_source_mapping": {
+      "layer": "integration",
+      "resources": [
+        "external",
+        "research_lightrag"
+      ]
+    },
+    "tests/test_research_upstreams.py::test_actual_raptor_umap_gmm_summary_retrieval_and_source_lineage": {
+      "layer": "integration",
+      "resources": [
+        "external",
+        "research_raptor"
+      ]
+    },
+    "tests/test_research_upstreams.py::test_bridge_rejects_invalid_model_vectors": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_research_upstreams.py::test_bridge_uses_separate_query_encoding_and_full_prompt_budget": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_research_upstreams.py::test_extraction_format_bounds_and_unknown_entity_references": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_research_upstreams.py::test_invalid_keyword_generation_is_not_a_domain_refusal": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_research_upstreams.py::test_lightrag_projection_requires_exact_authorized_source": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_research_upstreams.py::test_missing_or_changed_upstream_source_is_explicit": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_research_upstreams.py::test_raptor_projection_rejects_broken_lineage": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_research_upstreams.py::test_raptor_projection_uses_all_descendant_original_leaves": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_research_upstreams.py::test_rejects_demo_providers_before_import_or_index": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_research_upstreams.py::test_rejects_invalid_authorized_snapshot": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_research_upstreams.py::test_request_preserves_unicode_and_requires_fresh_index": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_semantic_encoder.py::test_real_bge_semantic_boundaries_and_dense_retrieval": {
+      "layer": "integration",
+      "resources": [
+        "external",
+        "encoders"
+      ]
+    },
+    "tests/test_tokenization.py::test_bpe_overlap_is_recounted_after_boundary_adjustment": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_tokenization.py::test_duplicate_context_ids_and_unlabelled_counters_fail": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_tokenization.py::test_external_counter_is_used_and_provenance_is_explicit": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_tokenization.py::test_fixed_prompt_is_never_silently_removed": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_tokenization.py::test_impossible_unicode_boundary_budget_fails_without_corruption": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_tokenization.py::test_invalid_tokenizer_configuration_is_rejected": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_tokenization.py::test_invalid_unicode_and_overlap_are_rejected": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_tokenization.py::test_prompt_packing_counts_headers_fixed_text_and_delimiters": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_tokenization.py::test_source_spans_are_lossless_and_bounded": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_tokenization.py::test_tiktoken_counts_match_actual_selected_encoding": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_tokenization.py::test_unicode_backend_is_explicitly_not_a_model_tokenizer": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_tokenization.py::test_unknown_model_does_not_guess_encoding": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_verify_admission.py::test_contract_gate_rejects_refused_citations_and_generation_mode_disagreement": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_verify_admission.py::test_exact_mechanism_accuracy_cannot_pass_on_only_a_subset": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_verify_admission.py::test_quality_failure_has_nonzero_exit_and_explicit_correctness_only_override": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_vision.py::test_image_type_validation": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_vision.py::test_vision_caption_ingestion": {
+      "layer": "integration",
+      "resources": []
+    }
+  }
+}

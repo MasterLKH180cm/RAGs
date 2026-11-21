@@ -270,6 +270,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             media_type = validate_image(raw)
             description = describe_image(raw, media_type, config)
+        except CapabilityError:
+            raise
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         filename = os.path.basename(file.filename or "image")

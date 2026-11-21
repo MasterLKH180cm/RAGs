@@ -363,7 +363,7 @@ class MultimodalService:
                 stored = normalized_vector(json.loads(row.pop("vector")), encoder.dimensions)
             except (ValueError, CapabilityError) as exc:
                 raise CapabilityError("invalid_asset_index", "Stored image vector is invalid; reindex the asset", 409) from exc
-            score = max(-1.0, min(1.0, sum(a * b for a, b in zip(query, stored))))
+            score = max(-1.0, min(1.0, sum(a * b for a, b in zip(query, stored, strict=True))))
             ranked.append((score, row))
         ranked.sort(key=lambda item: (-item[0], item[1]["id"]))
         citations = [{**row, "asset_id": row["id"], "asset_uri": f"/assets/images/{row['id']}",

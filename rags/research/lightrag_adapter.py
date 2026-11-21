@@ -71,7 +71,7 @@ async def project_chunks(chunks: list[dict], store, sources: dict[str, str], top
     if not isinstance(records, list) or len(records) != len(chunks):
         raise CapabilityError("invalid_source_lineage", "LightRAG source records are unavailable", 502)
     hits = {}
-    for rank, (chunk, record) in enumerate(zip(chunks, records)):
+    for rank, (chunk, record) in enumerate(zip(chunks, records, strict=True)):
         if not isinstance(record, dict) or record.get("full_doc_id") not in sources:
             raise CapabilityError("invalid_source_lineage", "Unknown LightRAG original source", 502)
         identifier = record["full_doc_id"]

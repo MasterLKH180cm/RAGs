@@ -1,13 +1,13 @@
 """Tenant-scoped, versioned source records and transactional derived indexes."""
-from contextlib import contextmanager
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import sqlite3
-from typing import Iterator
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import UTC, datetime
+from pathlib import Path
 
-from rags.registry import CapabilityError
 from rags.native import equal_value
+from rags.registry import CapabilityError
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS documents (
@@ -59,15 +59,15 @@ CHUNK_COLUMNS = {
 def timestamp(value: str | None = None) -> str:
     """Canonical UTC ISO timestamps make SQLite comparisons deterministic."""
     if value is None:
-        parsed = datetime.now(timezone.utc)
+        parsed = datetime.now(UTC)
     else:
         try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(value)
         except (TypeError, ValueError) as exc:
             raise ValueError("Timestamps must be ISO 8601 with an explicit timezone") from exc
         if parsed.tzinfo is None:
             raise ValueError("Timestamps require an explicit timezone")
-    return parsed.astimezone(timezone.utc).isoformat(timespec="microseconds")
+    return parsed.astimezone(UTC).isoformat(timespec="microseconds")
 
 
 class Store:
@@ -96,11 +96,11 @@ class Store:
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.path, timeout=20)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.execute("PRAGMA busy_timeout=20000")
-        conn.execute("PRAGMA journal_mode=WAL")
         try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.execute("PRAGMA busy_timeout=20000")
+            conn.execute("PRAGMA journal_mode=WAL")
             yield conn
             conn.commit()
         except BaseException:
@@ -154,12 +154,12 @@ class Store:
             current = conn.execute("SELECT revision,valid_from,valid_to FROM documents WHERE tenant=? AND id=?", (tenant, document["id"])).fetchone()
             if (current["revision"] if current else None) != expected_revision:
                 raise CapabilityError("revision_conflict", "Document changed during indexing; retry against its current revision", 409)
-            if current and current["valid_from"] < document["valid_from"]:
-                if current["valid_to"] is None or current["valid_to"] > document["valid_from"]:
-                    conn.execute(
-                        "UPDATE document_revisions SET valid_to=? WHERE tenant=? AND id=? AND revision=?",
-                        (document["valid_from"], tenant, document["id"], current["revision"]),
-                    )
+            if (current and current["valid_from"] < document["valid_from"]
+                    and (current["valid_to"] is None or current["valid_to"] > document["valid_from"])):
+                conn.execute(
+                    "UPDATE document_revisions SET valid_to=? WHERE tenant=? AND id=? AND revision=?",
+                    (document["valid_from"], tenant, document["id"], current["revision"]),
+                )
             values = (
                 tenant, document["id"], document["revision"], document["title"], document["source"], document["body"],
                 json.dumps(document["metadata"]), document["checksum"], document["recorded_at"],

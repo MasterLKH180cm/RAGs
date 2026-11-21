@@ -65,7 +65,7 @@ def maxsim(query, document, query_mask=None, document_mask=None) -> float:
     d = normalize(document, document_mask)
     if len(q[0]) != len(d[0]):
         raise ValueError("Query and document dimensions differ")
-    return sum(max(sum(x * y for x, y in zip(qv, dv)) for dv in d) for qv in q)
+    return sum(max(sum(x * y for x, y in zip(qv, dv, strict=True)) for dv in d) for qv in q)
 
 
 class BackendManager:
@@ -94,7 +94,7 @@ class BackendManager:
             if type(timeout) not in (int, float) or not math.isfinite(timeout) or not 1 <= timeout <= 360:
                 raise ValueError("Research backend timeout_seconds must be finite and between 1 and 360")
             required = config.get("require_pinned_upstream", False)
-            if type(required) is not bool or required and name not in UPSTREAMS:
+            if type(required) is not bool or (required and name not in UPSTREAMS):
                 raise ValueError("Pinned upstream identity is supported only for RAPTOR and LightRAG")
             model = config.get("model")
             if model is not None and (not isinstance(model, str) or not 1 <= len(model) <= 200):

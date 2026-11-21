@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import hashlib
+from itertools import pairwise
 import json
 import math
 import re
@@ -117,7 +118,7 @@ def _recursive_units(text: str, start: int, end: int, tokenizer: Tokenizer,
         boundaries = sorted(set([*boundaries, end]))
         if len(boundaries) > 2:
             result = []
-            for left, right in zip(boundaries, boundaries[1:]):
+            for left, right in pairwise(boundaries):
                 result.extend(_recursive_units(text, left, right, tokenizer, limit, index + 1))
             return result
     return [(start + span.start_char, start + span.end_char)
@@ -275,7 +276,7 @@ def _semantic_ranges(text: str, tokenizer: Tokenizer, config: ChunkConfig,
     ends = [match.end() for match in re.finditer(r"(?<=[.!?。！？])\s*|\n[ \t]*\n", text)]
     points = sorted(set([0, *ends, len(text)]))
     units = []
-    for left, right in zip(points, points[1:]):
+    for left, right in pairwise(points):
         units.extend(_recursive_units(text, left, right, tokenizer, config.max_tokens))
     if len(units) > 2048:
         raise ValueError("Semantic chunking is limited to 2048 sentence units per document")
@@ -303,7 +304,7 @@ def _semantic_ranges(text: str, tokenizer: Tokenizer, config: ChunkConfig,
     groups, current = [], []
     for index, unit in enumerate(units):
         distance = 0.0 if index == 0 else 1 - max(-1.0, min(1.0, sum(
-            left * right for left, right in zip(vectors[index - 1], vectors[index])
+            left * right for left, right in zip(vectors[index - 1], vectors[index], strict=True)
         )))
         if current and distance > config.semantic_threshold:
             groups.append(current)
@@ -420,7 +421,7 @@ def chunk_document(
         for start, end, path, extra in ranges:
             append(start, end, path, extra)
     leaves = [chunk for chunk in chunks if chunk.role == "leaf"]
-    for previous, current in zip(leaves, leaves[1:]):
+    for previous, current in pairwise(leaves):
         overlap = text[current.start_char:min(previous.end_char, current.end_char)] if current.start_char < previous.end_char else ""
         current.metadata["overlap_with_previous"] = tokenizer.count(overlap)
     return ChunkPlan(chunks, profile)

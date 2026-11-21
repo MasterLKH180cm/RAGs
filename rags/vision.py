@@ -10,6 +10,7 @@ import warnings
 import httpx
 
 from rags.config import Settings
+from rags.providers import response_object, response_text
 
 
 def validate_image(raw: bytes) -> str:
@@ -67,8 +68,6 @@ def describe_image(raw: bytes, media_type: str, settings: Settings) -> str:
             },
             timeout=90,
         )
-        response.raise_for_status()
-        answer = response.json()["choices"][0]["message"]["content"]
     else:
         if not settings.anthropic_key:
             raise ValueError("ANTHROPIC_API_KEY is required for image description")
@@ -95,11 +94,5 @@ def describe_image(raw: bytes, media_type: str, settings: Settings) -> str:
             },
             timeout=90,
         )
-        response.raise_for_status()
-        answer = "".join(
-            item["text"] for item in response.json()["content"]
-            if item.get("type") == "text"
-        )
-    if not isinstance(answer, str) or not answer.strip():
-        raise ValueError("Vision provider returned no text")
-    return answer[:12_000]
+    payload = response_object(response, "invalid_model_output", "Vision provider returned an invalid response")
+    return response_text(payload, settings.model_provider)[:12_000]

@@ -415,7 +415,7 @@ class RAGService:
             vectors = [self.provider.embedding(text) for text in hypothetical]
             if len({len(v) for v in vectors}) != 1:
                 raise CapabilityError("invalid_embedding", "Hypothetical embeddings have different dimensions", 502)
-            vector = [sum(values) / len(vectors) for values in zip(*vectors)]
+            vector = [sum(values) / len(vectors) for values in zip(*vectors, strict=True)]
             scored = [(key, 1 / (i + 1)) for i, key in enumerate(self._dense(question, leaves, limit, vector))]
             trace.append({"action": "hypothetical_embedding", "hypotheses": len(hypothetical), "used_as_evidence": False})
         elif mode == "contextual":

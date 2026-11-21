@@ -22,14 +22,35 @@ pdf = ["pypdf>=5,<7"]
 vision = ["pillow>=11,<13"]
 encoders = ["fastembed>=0.9.1,<0.10"]
 answerability = ["torch==2.15.0", "transformers==4.57.6", "tokenizers==0.22.2", "safetensors==0.8.0", "huggingface-hub==0.36.2"]
-dev = ["pytest>=8,<10", "ruff>=0.8,<1"]
+dev = ["pytest-cov>=7.1,<8", "pytest>=8,<10", "ruff>=0.8,<1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["rags"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = ["--strict-markers", "--strict-config"]
+junit_family = "xunit2"
 
 [tool.ruff]
 target-version = "py311"
 line-length = 110
+
+[tool.coverage.run]
+branch = true
+source = ["rags"]
+relative_files = true
+
+[tool.coverage.report]
+show_missing = true
+precision = 2
+
+[tool.testing.coverage]
+baseline = "docs/testing-baseline.json"
+package = "rags"
+minimum_lines = 80
+minimum_branches = 72
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI File is a declarative request-field descriptor.
+extend-immutable-calls = ["fastapi.File"]

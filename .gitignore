@@ -11,3 +11,9 @@ data/
 dist/
 build/
 *.egg-info/
+
+# Generated test evidence (published by CI; summaries live in docs)
+.coverage
+.coverage.*
+htmlcov/
+reports/testing/
