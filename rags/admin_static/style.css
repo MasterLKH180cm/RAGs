@@ -35,3 +35,25 @@ input:not([type="checkbox"]),textarea,select{width:100%;background:var(--surface
 .citation-id{display:inline-block;max-width:100%;overflow-wrap:anywhere;user-select:text;
   padding:3px 7px;background:var(--accent-faint);border:1px solid var(--border);
   border-radius:6px;color:var(--accent);font-size:11px;line-height:1.6}
+
+/* v0.8 Agent workspace: clarity, high-contrast approval states and responsive pipeline. */
+.agent-banner{margin-bottom:20px;min-height:192px}
+.agent-pipeline{display:flex;gap:11px;align-items:center;flex-wrap:wrap;justify-content:flex-end;max-width:410px;position:relative;z-index:1}
+.agent-pipeline span{border:1px solid rgba(143,220,206,.32);border-radius:11px;padding:11px 14px;background:rgba(36,87,102,.55);font-size:12px;font-weight:740;color:#d9f2ed}
+.agent-pipeline b{color:#75e1bc;font-weight:500}
+.agent-layout{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr)}
+.agent-result{margin-top:23px}
+.agent-result h3,.approval-panel h3{font-size:14px;margin:0 0 12px}
+.agent-result .result-answer{max-height:300px;overflow-y:auto;overflow-wrap:anywhere}
+.approval-panel{border:1px solid var(--accent);border-radius:12px;padding:20px;margin-top:22px;background:var(--accent-faint)}
+.approval-panel>p{color:var(--muted);font-size:12px;line-height:1.7}
+.approval-panel .metric-list{margin:14px 0}
+.tool-preview{font-size:11px;line-height:1.7;border-radius:9px;border:1px solid var(--border);background:var(--surface);padding:14px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--text)}
+#agent-run-id{font-family:ui-monospace,Consolas,monospace;font-size:11px;word-break:break-all}
+@media(max-width:1120px){.agent-layout{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:650px){.agent-pipeline{margin-top:14px;justify-content:flex-start;gap:7px}
+  .agent-banner{flex-direction:column;align-items:flex-start}
+  .agent-pipeline span{padding:8px 10px;font-size:11px}
+  .approval-panel{padding:15px}
+  .approval-panel .modal-actions{flex-wrap:wrap}
+}
