@@ -106,6 +106,7 @@ jobs:
           result = json.load(open("reports/testing/pgvector-synthetic-benchmark.json", encoding="utf-8"))
           assert result["workload"] == "synthetic_temp_tables"
           assert result["measurements"]["scoped_revision_join"]["rows"] == 16
+          print("Synthetic pgvector benchmark:", result["measurements"])
           PYTHON
       - name: Verify standalone wheel installation and packaged CLI templates
         run: |

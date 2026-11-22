@@ -289,7 +289,8 @@ def main(argv: list[str] | None = None) -> int:
                           f"rows={value['rows']}")
             return 0
         parser.error("Unknown command")
-    except (ValueError, FileExistsError, PermissionError, OSError) as exc:
+    except Exception as exc:
+        # CLI failures must not leak credentials embedded in provider/DB exceptions.
         # Never echo arbitrary configuration content from exception strings.
         print("rags: " + (str(exc) if args.command == "init" else
                           "Unable to complete command; validate inputs and selected dependencies"), file=sys.stderr)

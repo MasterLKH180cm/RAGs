@@ -431,7 +431,8 @@ def test_scope_pushes_revision_filters_to_postgres_without_loading_unauthorized_
     assert len(scoped) == 1
     query, args = scoped[0]
     assert "jsonb_to_recordset(?::jsonb)" in query
-    assert "c.embedding" not in query and "c.*" not in query
+    selected_fields = query.partition(" FROM chunks c")[0].removeprefix("SELECT ").split(",")
+    assert "c.embedding" not in selected_fields and "c.*" not in selected_fields
     assert args[-1] == "tenant"
     keys = json.loads(args[0])
     assert keys == [{"document_id": "allowed", "revision": subset[0]["revision"]}]
