@@ -133,7 +133,7 @@ class StateStore:
             db.execute("BEGIN IMMEDIATE")
             if self.store.is_postgres:
                 postgres.lock_mutation(db, "agent_run", tenant, run_id)
-            row = db.execute("SELECT revision,fingerprint,status FROM agent_runs "
+            row = db.execute("SELECT kind,revision,fingerprint,status FROM agent_runs "
                              "WHERE tenant=? AND run_id=?", (tenant, run_id)).fetchone()
             if row is None:
                 raise CapabilityError("not_found", "Run not found", 404)
@@ -150,6 +150,5 @@ class StateStore:
             )
             if cursor.rowcount != 1:
                 raise CapabilityError("revision_conflict", "Concurrent checkpoint update", 409)
-        return Checkpoint(tenant, run_id, row.get("kind", "agent") if isinstance(row, dict) else
-                          self.get(tenant, run_id).kind, expected_revision + 1, status,
+        return Checkpoint(tenant, run_id, row["kind"], expected_revision + 1, status,
                           fingerprint, state, now)

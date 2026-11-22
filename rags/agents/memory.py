@@ -6,7 +6,6 @@ Memory is marked untrusted when assembled into a model prompt.
 from datetime import UTC, datetime, timedelta
 import hashlib
 import json
-import re
 
 from rags import postgres
 from rags.agents.state import StateStore, _id, _when
