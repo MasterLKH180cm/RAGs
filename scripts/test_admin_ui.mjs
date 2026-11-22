@@ -62,11 +62,13 @@ function element(selector) {
   if (!dom.has(selector)) dom.set(selector, new Element(selector));
   return dom.get(selector);
 }
+const agentNav = element("#test-agents-nav");
+agentNav.dataset.view = "agents";
 const document = {
   body: { dataset: { theme: "dark" } },
   hidden: false,
   querySelector: element,
-  querySelectorAll: () => [],
+  querySelectorAll: (selector) => selector === ".nav-item" ? [agentNav] : [],
   createElement: (name) => new Element(name),
   addEventListener() {},
 };
@@ -125,6 +127,32 @@ async function fetch(url, options = {}) {
     auth_mode: "api_key", storage: "sqlite", embedding_provider: "local",
     generation_provider: "extractive", permissions: ["rags:admin"], features: {},
   });
+  if (url === "/admin/api/agents/capabilities") return reply(200, {
+    models: [], tools: [], router_ready: false,
+  });
+  if (url === "/admin/api/agents/workflows") return reply(200, {
+    templates: [{name: "evidence_review", title: "Evidence review",
+      description: "Registered review graph", version: "v1",
+      nodes: [
+        {name: "retrieve", kind: "then", approval: false},
+        {name: "quality_gate", kind: "branch", approval: false},
+        {name: "cross_checks", kind: "parallel", approval: false},
+        {name: "human_approval", kind: "then", approval: true},
+        {name: "finalize", kind: "then", approval: false},
+      ]}],
+  });
+  if (url === "/admin/api/agents/workflows/evidence_review/runs" && method === "POST") {
+    return reply(201, {run_id: "workflow-" + current, kind: "workflow",
+      revision: 3, status: "waiting_for_approval",
+      state: {cursor: 3, input: {question: "private-" + current},
+        outputs: {retrieve: {citations: [{chunk_id: "secret-" + current}]}}}});
+  }
+  if (url.startsWith("/admin/api/agents/workflows/runs/") && url.endsWith("/resume") &&
+      method === "POST") {
+    return reply(200, {run_id: "workflow-" + current, revision: 5,
+      status: "completed", state: {cursor: 5,
+        outputs: {retrieve: {citations: [{chunk_id: "secret-" + current}]}}}});
+  }
   if (url === "/admin/api/query" && method === "POST") {
     queryRequests++;
     const identity = current;
@@ -170,7 +198,8 @@ function snapshot(node, seen = new Set()) {
     (node.children || []).map((c) => snapshot(c, seen)).join(" ");
 }
 function assertNoOldTenant() {
-  const sensitive = ["PRIVATE A", "SECRET A", "Proprietary evidence of tenant A", "secret-A", "source-ID-A"];
+  const sensitive = ["PRIVATE A", "SECRET A", "Proprietary evidence of tenant A", "secret-A",
+    "source-ID-A", "workflow-A"];
   for (const value of sensitive) {
     for (const [key, node] of dom.entries()) {
       assert.equal(snapshot(node).includes(value), false,
@@ -213,4 +242,26 @@ assert.equal(element("#query-submit").disabled, false);
 assert.equal(element("#add-submit").disabled, false);
 assert.equal(element("#query-submit").textContent, "開始檢索 ↗");
 assert.ok(queryRequests >= 2);
+await trigger("#test-agents-nav");
+await microtasks();
+assert.equal(element("#workflow-template").children.length, 1);
+assert.equal(element("#workflow-graph").children.length, 5);
+element("#workflow-template").value = "evidence_review";
+element("#workflow-question").value = "Records policy evidence";
+element("#workflow-mode").value = "sparse";
+element("#workflow-topk").value = "3";
+await trigger("#workflow-form", "submit");
+assert.equal(element("#workflow-approval").hidden, false);
+assert.equal(element("#workflow-run-id").textContent, "執行 ID：workflow-B");
+assert.equal(element("#workflow-graph").children.length, 5);
+await trigger("#workflow-approve");
+assert.equal(element("#workflow-approval").hidden, true);
+assert.equal(element("#workflow-status").textContent, "completed");
+await trigger("#logout-button");
+assertNoOldTenant();
+await login("A");
+assert.equal(element("#workflow-actions").hidden, true);
+assert.equal(element("#workflow-graph").children.length, 0,
+  "Workflow graph must not survive switching identity");
+await trigger("#logout-button");
 console.log("Admin UI identity switch, DOM reset and stale request isolation: passed");
