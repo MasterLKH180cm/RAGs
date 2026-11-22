@@ -220,6 +220,7 @@ def install_admin(app: FastAPI, *, settings: Settings, authenticator: Authentica
     @app.get("/admin/api/overview", include_in_schema=False)
     def overview(request: Request):
         principal, _ = require(request, "rags:read")
+        settings.features.require("documents")
         with store.connect() as conn:
             documents = conn.execute("SELECT count(*) AS n FROM documents WHERE tenant=?",
                                      (principal.tenant,)).fetchone()["n"]
@@ -249,6 +250,7 @@ def install_admin(app: FastAPI, *, settings: Settings, authenticator: Authentica
                   limit: int = Query(default=20, ge=1, le=50),
                   offset: int = Query(default=0, ge=0, le=1_000_000)):
         principal, _ = require(request, "rags:read")
+        settings.features.require("documents")
         pattern = _equality_params(search.strip())
         predicate = "tenant=? AND (lower(title) LIKE ? ESCAPE '!' OR lower(id) LIKE ? ESCAPE '!')"
         params = (principal.tenant, pattern, pattern)
