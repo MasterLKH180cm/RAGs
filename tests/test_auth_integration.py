@@ -142,3 +142,38 @@ def test_global_feature_flag_remains_additional_requirement(base_settings):
             "question": "anything?", "mode": "sparse", "generate": False
         })
         assert r.status_code == 403 and r.json()["detail"]["code"] == "feature_disabled"
+
+
+def test_editor_can_reindex_plain_sources_without_generation_scope(base_settings, monkeypatch):
+    """An unrelated configured chat model must not prevent ordinary editor reindex."""
+    cfg = replace(base_settings, model_provider="openai", openai_key="private-model-key",
+                  keys={"editor": "tenant", "admin": "tenant"},
+                  key_roles={"editor": ("editor",), "admin": ("admin",)})
+    app = create_app(cfg)
+    monkeypatch.setattr(app.state.service.provider, "json_task",
+                        lambda *_a, **_kw: pytest.fail("Plain reindex must not generate text"))
+    with TestClient(app) as client:
+        created = client.post("/documents", headers=headers("admin"), json={
+            "title": "Engineering policy", "document_id": "policy",
+            "text": "All records have an explicit retention period.",
+        })
+        assert created.status_code == 201, created.text
+        first_revision = created.json()["revision"]
+        plain = client.post("/documents/policy/reindex", headers=headers("editor"), json={
+            "expected_revision": first_revision,
+        })
+        assert plain.status_code == 200, plain.text
+        current_revision = plain.json()["revision"]
+        assert current_revision != first_revision
+        contextual = client.post("/documents/policy/reindex", headers=headers("editor"), json={
+            "expected_revision": current_revision,
+            "chunking": {"strategy": "contextual"},
+        })
+        assert contextual.status_code == 403
+        assert contextual.json()["detail"]["code"] == "insufficient_scope"
+        graph = client.post("/documents/policy/reindex", headers=headers("editor"), json={
+            "expected_revision": current_revision, "index_features": ["graph"],
+        })
+        assert graph.status_code == 403
+        assert graph.json()["detail"]["code"] == "insufficient_scope"
+        assert client.get("/documents/policy", headers=headers("editor")).json()["revision"] == current_revision

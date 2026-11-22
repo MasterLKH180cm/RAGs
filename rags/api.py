@@ -220,13 +220,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 config.features.require("ingestion")
                 if path == "/documents/upload":
                     config.features.require("uploads")
-                    if (config.model_provider != "extractive" and
-                            config.chunking_config.get("strategy") == "contextual"):
-                        principal.require("rags:generate")
+                    require_index_generation(principal, chunking=config.chunking_config,
+                                             index_features=[])
                     service.preflight_ingestion()
                 elif path.endswith("/reindex"):
                     config.features.require("reindex")
         return principal.tenant
+
+    def require_index_generation(principal: Principal, *, chunking: dict,
+                                 index_features: list[str]) -> None:
+        # Model-provider configuration alone does not make ordinary indexing
+        # model-generated. Evaluate the actual requested processing profile.
+        if (config.model_provider != "extractive"
+                and (chunking.get("strategy") == "contextual"
+                     or "graph" in index_features or "hierarchy" in index_features)):
+            principal.require("rags:generate")
 
     def effective_features(principal: Principal) -> dict[str, bool]:
         """Advertise only features the authenticated caller is allowed to use."""
@@ -295,11 +303,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/documents", status_code=201)
     def ingest(data: DocumentIn, request: Request, tenant: Annotated[str, Depends(auth)]) -> dict:
-        processing = data.chunking or config.chunking_config
-        if config.model_provider != "extractive" and (
-                processing.get("strategy") == "contextual"
-                or "graph" in data.index_features or "hierarchy" in data.index_features):
-            request.state.principal.require("rags:generate")
+        require_index_generation(
+            request.state.principal, chunking=data.chunking or config.chunking_config,
+            index_features=data.index_features,
+        )
         if len(json.dumps(data.metadata)) > 16_000:
             raise HTTPException(status_code=413, detail="metadata too large")
         return ingest_source(
@@ -402,8 +409,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/documents/{document_id}/reindex")
     def reindex(document_id: str, data: ReindexIn, request: Request,
                 tenant: Annotated[str, Depends(auth)]) -> dict:
-        if config.model_provider != "extractive":
-            request.state.principal.require("rags:generate")
+        existing = store.get_document(tenant, document_id)
+        if existing is not None:
+            profile = existing["index_profile"]
+            require_index_generation(
+                request.state.principal,
+                chunking=data.chunking or profile.get("chunking") or config.chunking_config,
+                index_features=(data.index_features if data.index_features is not None
+                                else profile.get("features", [])),
+            )
         try:
             return service.reindex(tenant, document_id, **data.model_dump())
         except CapabilityError:
