@@ -3,8 +3,8 @@
   'use strict';
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
-  const titles = {overview:'總覽',documents:'知識文件',explorer:'檢索探索',observability:'可觀測性',settings:'設定與權限'};
-  const state = {csrf:'',tenant:'',permissions:[],view:'overview',offset:0,search:'',limit:20,deleteTarget:null,loading:false,authenticated:false,epoch:0};
+  const titles = {overview:'總覽',documents:'知識文件',explorer:'檢索探索',agents:'自主代理',observability:'可觀測性',settings:'設定與權限'};
+  const state = {csrf:'',tenant:'',permissions:[],view:'overview',offset:0,search:'',limit:20,deleteTarget:null,agentRun:null,loading:false,authenticated:false,epoch:0};
   const pending=new Set();
   let searchTimer,toastTimer;
   function el(tag,klass,label){
@@ -29,27 +29,33 @@
     for(const controller of pending)controller.abort();
     pending.clear();
     state.csrf='';state.tenant='';state.permissions=[];state.offset=0;
-    state.search='';state.loading=false;state.deleteTarget=null;
+    state.search='';state.loading=false;state.deleteTarget=null;state.agentRun=null;
     clearTimeout(searchTimer);
     for(const id of ['#query-citations','#documents-body',
         '#activity-list','#feature-list','#permission-list','#overview-chart','#monitor-chart']){
       $(id).replaceChildren();
     }
     $('#query-output').hidden=true;$('#query-empty').hidden=false;
+    $('#agent-output').hidden=true;$('#agent-empty').hidden=false;
+    $('#agent-approval').hidden=true;
     $('#login-error').hidden=true;$('#login-error').textContent='';
-    $('#query-form').reset();$('#add-form').reset();$('#delete-form').reset();
+    $('#query-form').reset();$('#add-form').reset();$('#delete-form').reset();$('#agent-form').reset();
     $('#document-search').value='';$('#delete-confirm').value='';
     $('#delete-submit').disabled=true;
     // Async request finalizers skip a changed identity by design; restore all
     // tenant-specific controls here instead of leaving them busy for the next login.
     $('#query-submit').disabled=false;$('#query-submit').textContent='開始檢索 ↗';
     $('#add-submit').disabled=false;$('#add-submit').textContent='建立並索引';
+    $('#agent-submit').disabled=false;$('#agent-submit').textContent='執行代理任務 ↗';
+    $('#agent-approve').disabled=false;$('#agent-deny').disabled=false;
     for(const id of ['#add-dialog','#delete-dialog'])if($(id).open)$(id).close();
     for(const id of ['#query-answer','#citation-count','#query-status',
         '#document-count','#document-range','#stat-documents','#stat-chunks',
         '#stat-revisions','#stat-images','#setting-tenant','#setting-auth',
         '#setting-storage','#setting-embedding','#setting-generation',
-        '#tenant-sidebar','#session-expiry','#monitor-requests',
+        '#tenant-sidebar','#session-expiry','#agent-answer','#agent-run-id',
+        '#agent-steps','#agent-tool-count','#agent-stop-reason','#agent-pending-tool',
+        '#agent-pending-args','#agent-status','#agent-availability','#monitor-requests',
         '#monitor-errors','#monitor-p50','#monitor-p95','#exported-spans',
         '#dropped-spans','#failed-exports','#collector-status'])txt(id,'—');
     $('#global-notice').classList.remove('visible');
@@ -123,6 +129,7 @@
     if(view==='overview'||view==='observability')refreshOverview();
     if(view==='documents')loadDocuments();
     if(view==='settings')loadOperations();
+    if(view==='agents')loadAgentCapabilities();
   }
   function drawChart(target,series){
     const root=$(target);root.replaceChildren();
@@ -310,6 +317,77 @@
     }catch(e){if(epoch===state.epoch){txt('#query-status','執行失敗');notice(errorText(e),true);}}
     finally{if(epoch===state.epoch)busy(btn,false,'開始檢索 ↗');}
   }
+  async function loadAgentCapabilities(){
+    const epoch=state.epoch, select=$('#agent-model');select.replaceChildren();
+    const placeholder=el('option','', '檢查可用模型…');placeholder.value='';select.append(placeholder);
+    try{
+      const data=await api('agents/capabilities');
+      if(epoch!==state.epoch)return;
+      select.replaceChildren();
+      const models=Array.isArray(data.models)?data.models:[];
+      for(const model of models){
+        const option=el('option','',model);option.value=model;select.append(option);
+      }
+      if(!models.length){
+        const empty=el('option','', '尚未設定模型');empty.value='';select.append(empty);
+      }
+      $('#agent-submit').disabled=!models.length;
+      txt('#agent-availability',models.length?('已授權 · '+models.length+' 個模型'):'沒有可用的模型');
+    }catch(e){
+      if(epoch!==state.epoch)return;
+      $('#agent-submit').disabled=true;txt('#agent-availability','代理功能未啟用');
+      const empty=el('option','', '代理服務尚不可用');empty.value='';select.replaceChildren(empty);
+    }
+  }
+  function renderAgent(result){
+    state.agentRun=result;$('#agent-empty').hidden=true;$('#agent-output').hidden=false;
+    txt('#agent-status',result.status||'未知');
+    txt('#agent-run-id',result.run_id);txt('#agent-steps',n(result.steps));
+    txt('#agent-tool-count',n(result.tool_calls));
+    txt('#agent-stop-reason',result.stop_reason||'—');
+    txt('#agent-answer',result.answer||(
+      result.status==='waiting_for_approval'?'代理已暫停，等待人工核准。'
+        :result.status==='stopped'?'代理達到停止條件。':'代理尚未提供最終回答。'));
+    const gate=$('#agent-approval');
+    const pending=result.pending_approval;
+    gate.hidden=!(result.status==='waiting_for_approval'&&pending);
+    if(!gate.hidden){
+      txt('#agent-pending-tool',pending.name);
+      txt('#agent-pending-args',JSON.stringify(pending.arguments,null,2));
+    }else{
+      txt('#agent-pending-tool','—');txt('#agent-pending-args','');
+    }
+  }
+  async function startAgent(event){
+    event.preventDefault();const epoch=state.epoch;
+    const goal=$('#agent-goal').value.trim(),model=$('#agent-model').value;
+    const session_id=$('#agent-session').value.trim();
+    if(goal.length<2||!model||!session_id){
+      notice('請填寫目標、模型與有效的工作階段 ID。',true);return;
+    }
+    const button=$('#agent-submit');busy(button,true,'代理執行中…');
+    try{
+      const result=await api('agents/runs',{method:'POST',body:{goal,model,session_id}});
+      if(epoch!==state.epoch)return;
+      renderAgent(result);notice(result.status==='waiting_for_approval'
+        ?'任務已暫停，請確認受保護的工具操作。':'已更新代理任務狀態。');
+    }catch(e){if(epoch===state.epoch)notice(errorText(e),true);}
+    finally{if(epoch===state.epoch)busy(button,false,'執行代理任務 ↗');}
+  }
+  async function decideAgent(approved){
+    const run=state.agentRun,epoch=state.epoch;
+    if(!run||run.status!=='waiting_for_approval')return;
+    const approve=$('#agent-approve'),deny=$('#agent-deny');
+    approve.disabled=true;deny.disabled=true;
+    try{
+      const result=await api('agents/runs/'+encodeURIComponent(run.run_id)+'/resume',{
+        method:'POST',body:{expected_revision:run.revision,approved},
+      });
+      if(epoch!==state.epoch)return;
+      renderAgent(result);notice(approved?'已核准，代理繼續執行。':'已拒絕受保護操作。');
+    }catch(e){if(epoch===state.epoch)notice(errorText(e),true);}
+    finally{if(epoch===state.epoch){approve.disabled=false;deny.disabled=false;}}
+  }
   async function bootstrap(){
     const epoch=state.epoch;
     try{const info=await api('session');if(epoch===state.epoch)showApp(info);}
@@ -353,6 +431,9 @@
     $('#add-form').addEventListener('submit',addSource);
     $('#delete-form').addEventListener('submit',removeSource);
     $('#query-form').addEventListener('submit',runQuery);
+    $('#agent-form').addEventListener('submit',startAgent);
+    $('#agent-approve').addEventListener('click',()=>decideAgent(true));
+    $('#agent-deny').addEventListener('click',()=>decideAgent(false));
     $('#delete-confirm').addEventListener('input',()=>{
       $('#delete-submit').disabled=!state.deleteTarget||
         $('#delete-confirm').value.trim()!==state.deleteTarget.id;
