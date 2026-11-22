@@ -34,12 +34,22 @@ class ConversationStore:
     def __init__(self, state: StateStore):
         self.state = state
 
-    def append(self, tenant: str, session_id: str, role: str, content: str) -> int:
+    def append(self, tenant: str, session_id: str, role: str, content: str,
+               *, evidence_ids: list[str] | None = None) -> int:
         _id(tenant, "tenant")
         _id(session_id, "session")
         if role not in {"user", "assistant", "tool"}:
             raise ValueError("Invalid history role")
         body = _fact(content, 4000)
+        citations = [] if evidence_ids is None else evidence_ids
+        if (not isinstance(citations, list) or len(citations) > 80
+                or (role != "assistant" and citations) or any(
+                    not isinstance(value, str) or not 1 <= len(value) <= 128
+                    or any(ord(ch) < 33 or ord(ch) > 126 for ch in value)
+                    for value in citations
+                ) or len(set(citations)) != len(citations)):
+            raise ValueError("Verified citation IDs must be bounded, unique assistant provenance")
+        provenance = json.dumps(citations, separators=(",", ":"))
         with self.state.store.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             if self.state.store.is_postgres:
@@ -48,25 +58,29 @@ class ConversationStore:
                              "WHERE tenant=? AND session_id=?", (tenant, session_id)).fetchone()
             sequence = row["n"] + 1
             db.execute("INSERT INTO agent_messages "
-                       "(tenant,session_id,sequence,role,body,created_at) VALUES(?,?,?,?,?,?)",
-                       (tenant, session_id, sequence, role, body, _when()))
+                       "(tenant,session_id,sequence,role,body,evidence_ids,created_at) "
+                       "VALUES(?,?,?,?,?,?,?)",
+                       (tenant, session_id, sequence, role, body, provenance, _when()))
         return sequence
 
     def last(self, tenant: str, session_id: str, *, limit: int = 12,
-             chars: int = 14000) -> list[dict]:
+             chars: int = 14000, with_evidence: bool = False) -> list[dict]:
         _id(tenant, "tenant")
         _id(session_id, "session")
         if type(limit) is not int or not 1 <= limit <= 20 or type(chars) is not int or not 1 <= chars <= 20000:
             raise ValueError("History budget exceeded")
         with self.state.store.connect() as db:
-            rows = db.execute("SELECT role,body,sequence FROM agent_messages "
+            rows = db.execute("SELECT role,body,sequence,evidence_ids FROM agent_messages "
                               "WHERE tenant=? AND session_id=? ORDER BY sequence DESC LIMIT ?",
                               (tenant, session_id, limit)).fetchall()
         result, budget = [], chars
         for row in rows:
             if len(row["body"]) > budget:
                 break
-            result.append({"role": row["role"], "content": row["body"]})
+            message = {"role": row["role"], "content": row["body"]}
+            if with_evidence and row["role"] == "assistant":
+                message["evidence_ids"] = json.loads(row["evidence_ids"])
+            result.append(message)
             budget -= len(row["body"])
         return list(reversed(result))
 

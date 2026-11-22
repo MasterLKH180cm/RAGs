@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS agent_runs (
 CREATE INDEX IF NOT EXISTS agent_runs_status ON agent_runs(tenant,status,updated_at);
 CREATE TABLE IF NOT EXISTS agent_messages (
  tenant TEXT NOT NULL,session_id TEXT NOT NULL,sequence INTEGER NOT NULL,
- role TEXT NOT NULL,body TEXT NOT NULL,created_at TEXT NOT NULL,
+ role TEXT NOT NULL,body TEXT NOT NULL,
+ evidence_ids TEXT NOT NULL DEFAULT '[]',created_at TEXT NOT NULL,
  PRIMARY KEY(tenant,session_id,sequence)
 );
 CREATE INDEX IF NOT EXISTS agent_messages_recent ON agent_messages(tenant,session_id,sequence);
@@ -86,6 +87,12 @@ class StateStore:
             if store.is_postgres:
                 postgres.lock_mutation(db, "agent_schema", "global")
             db.executescript(SCHEMA)
+            # Upgrade already-initialized SQLite/PostgreSQL agent databases,
+            # without rewriting or reclassifying any existing conversation.
+            fields = {row["name"] for row in db.execute("PRAGMA table_info(agent_messages)")}
+            if "evidence_ids" not in fields:
+                db.execute("ALTER TABLE agent_messages ADD COLUMN "
+                           "evidence_ids TEXT NOT NULL DEFAULT '[]'")
 
     @staticmethod
     def _read(row) -> Checkpoint:
