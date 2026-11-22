@@ -20,9 +20,9 @@ class Strategy:
 
 NATIVE = (
     Strategy("naive", "Naive RAG", "single dense retrieval and evidence assembly"),
-    Strategy("sparse", "Sparse RAG", "SQLite FTS5 BM25"),
+    Strategy("sparse", "Sparse RAG", "backend-native full-text ranking"),
     Strategy("dense", "Dense RAG", "cosine similarity with declared encoder"),
-    Strategy("hybrid", "Hybrid RAG", "BM25 and cosine reciprocal rank fusion"),
+    Strategy("hybrid", "Hybrid RAG", "full-text and cosine reciprocal rank fusion"),
     Strategy("fusion", "RAG-Fusion", "validated generated queries and rank fusion", ("generation",)),
     Strategy("hyde", "HyDE", "hypothetical-document embedding centroid", ("generation",)),
     Strategy("contextual", "Contextual RAG", "generated context in sparse and vector indexes", ("contextual_index",)),

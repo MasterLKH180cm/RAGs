@@ -7,7 +7,7 @@ import os
 from typing import Annotated, Literal
 
 import httpx
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -173,7 +173,9 @@ class QueryIn(BaseModel):
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings or Settings.from_env()
-    app = FastAPI(title="RAGs", version="0.3.0")
+    docs = config.features.enabled("api_docs")
+    app = FastAPI(title="RAGs", version="0.4.0", docs_url="/docs" if docs else None,
+                  redoc_url="/redoc" if docs else None, openapi_url="/openapi.json" if docs else None)
     app.add_middleware(BodyLimitMiddleware, max_body_bytes=2_100_000)
     store = Store(config.db_path)
     service = RAGService(store, Providers(config))
@@ -191,16 +193,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def provider_error(request, exc):
         return JSONResponse(status_code=502, content={"detail": {"code": "provider_failed", "reason": "Configured provider request failed"}})
 
-    def auth(authorization: Annotated[str | None, Header()] = None) -> str:
+    def auth(request: Request, authorization: Annotated[str | None, Header()] = None) -> str:
         if not authorization or not authorization.startswith("Bearer "):
             raise HTTPException(status_code=401, detail="Bearer token required")
         supplied = authorization[7:]
         for key, tenant in config.keys.items():
             if hmac.compare_digest(supplied.encode("utf-8"), key.encode("utf-8")):
+                if request.headers.get("X-RAGS-Interface") == "mcp":
+                    config.features.require("mcp")
+                path = request.url.path
+                if path == "/query":
+                    config.features.require("query")
+                elif path == "/images":
+                    config.features.require("uploads", "ingestion", "image_captioning", "model_generation",
+                                            "embedding." + config.embedding_provider)
+                elif path == "/documents" or path.startswith("/documents/"):
+                    if request.method == "GET":
+                        config.features.require("documents")
+                    elif request.method == "DELETE":
+                        config.features.require("deletion")
+                    else:
+                        config.features.require("ingestion")
+                        if path == "/documents/upload":
+                            config.features.require("uploads")
+                        elif path.endswith("/reindex"):
+                            config.features.require("reindex")
                 return tenant
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    multimodal = install_multimodal_routes(app, auth, db_path=config.db_path)
+    multimodal = install_multimodal_routes(app, auth, db_path=config.db_path, features=config.features)
 
     @app.get("/live")
     def live() -> dict:
@@ -209,11 +230,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/health")
     def health(tenant: Annotated[str, Depends(auth)]) -> dict:
         return {"status": "ok", "tenant": tenant,
-                "embedding_model": service.provider.embedding_model}
+                "embedding_model": service.provider.embedding_model,
+                "storage": {"backend": store.storage_backend, "vector_search": store.vector_search}}
+
+    @app.get("/capabilities")
+    def capabilities(tenant: Annotated[str, Depends(auth)]) -> dict:
+        return {"features": config.features.as_dict(),
+                "storage": {"backend": store.storage_backend, "vector_search": store.vector_search},
+                "generation": {"provider": config.model_provider, "model": service.provider.model_identity},
+                "capabilities": service.catalog(tenant),
+                "image_assets": multimodal.capability()}
 
     @app.get("/strategies")
     def strategies(tenant: Annotated[str, Depends(auth)]) -> dict:
-        return {"strategies": MODES, "tenant": tenant, "capabilities": [*service.catalog(tenant), multimodal.capability()]}
+        catalog = service.catalog(tenant)
+        return {"strategies": [item["id"] for item in catalog if item["enabled"]], "tenant": tenant,
+                "features": config.features.as_dict(), "capabilities": [*catalog, multimodal.capability()]}
 
     def ingest_source(tenant: str, **document) -> dict:
         try:

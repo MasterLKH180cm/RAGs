@@ -9,6 +9,7 @@ import secrets
 import sys
 
 from rags.research_protocol import MAX_BODY_BYTES, MAX_RESPONSE_BYTES, UPSTREAMS, ResearchRequest, validate_result
+from rags.features import FeatureFlags, strategy_features
 
 
 def provider_settings():
@@ -26,6 +27,7 @@ def provider_settings():
 async def execute(request: ResearchRequest) -> dict:
     if request.engine != os.getenv("RAGS_RESEARCH_ENGINE"):
         raise ValueError("engine_mismatch")
+    FeatureFlags.from_env().require(*strategy_features(request.engine))
     if not request.passages:
         return {"hits": [], "implementation": UPSTREAMS[request.engine],
                 "diagnostics": {"source_count": 0, "engine_executed": False}, "usage": None}
@@ -72,8 +74,8 @@ def main():
         from rags.registry import CapabilityError
         if isinstance(error, (ImportError, ModuleNotFoundError)):
             code = "requires_dependency"
-        elif isinstance(error, CapabilityError) and error.code == "requires_provider":
-            code = "requires_provider"
+        elif isinstance(error, CapabilityError) and error.code in {"requires_provider", "feature_disabled"}:
+            code = error.code
         elif isinstance(error, CapabilityError) and error.code == "requires_backend":
             code = "requires_dependency"
         elif isinstance(error, ValueError) and str(error) in {"requires_provider", "requires_source"}:

@@ -6,6 +6,29 @@ from pathlib import Path
 import re
 from urllib.parse import urlparse
 
+from rags.chunking import ChunkConfig
+from rags.features import FeatureFlags
+from rags.tokenization import TokenizerConfig
+
+
+def secret(name: str) -> str:
+    value = os.getenv(name, "")
+    filename = os.getenv(name + "_FILE")
+    if filename:
+        if value:
+            raise ValueError(f"Choose {name} or {name}_FILE, not both")
+        value = Path(filename).read_text(encoding="utf-8").strip()
+    return value
+
+
+def endpoint(value: str, name: str) -> str:
+    value = value.rstrip("/")
+    parsed = urlparse(value)
+    if (parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username
+            or parsed.password or parsed.query or parsed.fragment):
+        raise ValueError(f"{name} must be an HTTP(S) endpoint without credentials or query parameters")
+    return value
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -30,6 +53,29 @@ class Settings:
     generation_tokenizer_config: dict = field(default_factory=lambda: {"backend": "unicode"})
     admission_policy: str = "compatibility"
     admission_profile: str | None = None
+    features: FeatureFlags = field(default_factory=FeatureFlags)
+    embedding_base_url: str | None = None
+    embedding_api_key: str | None = None
+    generation_base_url: str | None = None
+    generation_api_key: str | None = None
+
+    @property
+    def embedding_endpoint(self) -> str:
+        return (self.embedding_base_url or self.openai_base_url) if self.embedding_provider == "openai" else "local"
+
+    @property
+    def embedding_credential(self) -> str:
+        return self.embedding_api_key if self.embedding_api_key is not None else self.openai_key
+
+    @property
+    def generation_endpoint(self) -> str:
+        return self.generation_base_url or (self.openai_base_url if self.model_provider == "openai"
+                                           else "https://api.anthropic.com/v1")
+
+    @property
+    def generation_credential(self) -> str:
+        return self.generation_api_key if self.generation_api_key is not None else (
+            self.openai_key if self.model_provider == "openai" else self.anthropic_key)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -55,14 +101,23 @@ class Settings:
             raise ValueError("Unsupported embedding provider")
         if model_provider not in {"extractive", "openai", "anthropic"}:
             raise ValueError("Unsupported model provider")
-        db_path = os.getenv("RAGS_DB_PATH", str(Path("data") / "rags.db"))
-        openai_base = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-        parsed_base = urlparse(openai_base)
-        if parsed_base.scheme not in {"http", "https"} or not parsed_base.netloc or parsed_base.username or parsed_base.password or parsed_base.query or parsed_base.fragment:
-            raise ValueError("OPENAI_BASE_URL must be an HTTP(S) endpoint without credentials or query parameters")
+        database_url = os.getenv("RAGS_DATABASE_URL")
+        if database_url and not database_url.startswith(("postgresql://", "postgres://")):
+            raise ValueError("RAGS_DATABASE_URL must select PostgreSQL")
+        db_path = database_url or os.getenv("RAGS_DB_PATH") or str(Path("data") / "rags.db")
+        openai_base = endpoint(os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1", "OPENAI_BASE_URL")
+        embedding_base = os.getenv("RAGS_EMBEDDING_BASE_URL")
+        generation_base = os.getenv("RAGS_GENERATION_BASE_URL") or (
+            os.getenv("ANTHROPIC_BASE_URL") if model_provider == "anthropic" else None)
+        if embedding_base:
+            embedding_base = endpoint(embedding_base, "RAGS_EMBEDDING_BASE_URL")
+        if generation_base:
+            generation_base = endpoint(generation_base, "RAGS_GENERATION_BASE_URL")
+        chat_model = os.getenv("RAGS_GENERATION_MODEL") or os.getenv("OPENAI_CHAT_MODEL") or "gpt-4.1-mini"
+        features = FeatureFlags.from_env()
         def object_env(name: str, fallback: str) -> dict:
             try:
-                value = json.loads(os.getenv(name, fallback))
+                value = json.loads(os.getenv(name) or fallback)
             except json.JSONDecodeError as exc:
                 raise ValueError(f"{name} must be a JSON object") from exc
             if not isinstance(value, dict):
@@ -70,9 +125,15 @@ class Settings:
             return value
 
         tokenizer = object_env("RAGS_TOKENIZER_JSON", '{"backend":"unicode"}')
-        generation_default = json.dumps({"backend": "tiktoken", "model": os.getenv("OPENAI_CHAT_MODEL", "gpt-4.1-mini")}) if model_provider == "openai" else '{"backend":"unicode"}'
+        generation_default = json.dumps({"backend": "tiktoken", "model": chat_model}) if model_provider == "openai" else '{"backend":"unicode"}'
         generation_tokenizer = object_env("RAGS_GENERATION_TOKENIZER_JSON", generation_default)
         chunking = object_env("RAGS_CHUNKING_JSON", '{"strategy":"structure","max_tokens":850,"overlap_tokens":120}')
+        try:
+            TokenizerConfig(**tokenizer)
+            TokenizerConfig(**generation_tokenizer)
+            ChunkConfig(**chunking)
+        except TypeError as exc:
+            raise ValueError("Unknown tokenizer or chunking configuration field") from exc
         sources = object_env("RAGS_SOURCES_JSON", "{}")
         if len(sources) > 8:
             raise ValueError("Configure at most eight federated sources")
@@ -103,17 +164,19 @@ class Settings:
         admission_policy = os.getenv("RAGS_ADMISSION_POLICY", "compatibility")
         if admission_policy not in {"compatibility", "calibrated_required"}:
             raise ValueError("RAGS_ADMISSION_POLICY must be compatibility or calibrated_required")
+        if admission_policy == "calibrated_required" and not features.enabled("admission_scoring"):
+            raise ValueError("Required evidence policy needs admission_scoring")
         return cls(
             db_path=db_path,
             keys=keys,
             embedding_provider=embedding_provider,
             model_provider=model_provider,
-            openai_key=os.getenv("OPENAI_API_KEY", ""),
+            openai_key=secret("OPENAI_API_KEY"),
             openai_base_url=openai_base,
-            embedding_model=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
-            chat_model=os.getenv("OPENAI_CHAT_MODEL", "gpt-4.1-mini"),
-            anthropic_key=os.getenv("ANTHROPIC_API_KEY", ""),
-            anthropic_model=os.getenv("ANTHROPIC_CHAT_MODEL", "claude-sonnet-4-5"),
+            embedding_model=os.getenv("RAGS_EMBEDDING_MODEL") or os.getenv("OPENAI_EMBEDDING_MODEL") or "text-embedding-3-small",
+            chat_model=chat_model,
+            anthropic_key=secret("ANTHROPIC_API_KEY"),
+            anthropic_model=os.getenv("RAGS_GENERATION_MODEL") or os.getenv("ANTHROPIC_CHAT_MODEL") or "claude-sonnet-4-5",
             tokenizer_config=tokenizer,
             chunking_config=chunking,
             context_budget=context_budget,
@@ -121,8 +184,13 @@ class Settings:
             envelope_budget=envelope_budget,
             max_iterations=iterations,
             federated_sources=sources,
-            fastembed_model=os.getenv("RAGS_FASTEMBED_MODEL", "BAAI/bge-small-en-v1.5"),
+            fastembed_model=os.getenv("RAGS_EMBEDDING_MODEL") or os.getenv("RAGS_FASTEMBED_MODEL") or "BAAI/bge-small-en-v1.5",
             generation_tokenizer_config=generation_tokenizer,
             admission_policy=admission_policy,
             admission_profile=os.getenv("RAGS_ADMISSION_PROFILE") or None,
+            features=features,
+            embedding_base_url=embedding_base,
+            embedding_api_key=secret("RAGS_EMBEDDING_API_KEY") or None,
+            generation_base_url=generation_base,
+            generation_api_key=secret("RAGS_GENERATION_API_KEY") or None,
         )

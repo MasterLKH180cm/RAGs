@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from rags.features import FeatureFlags, strategy_features
 from rags.research_protocol import ResearchRequest, UPSTREAMS, validate_result
 
 
@@ -70,9 +71,10 @@ def maxsim(query, document, query_mask=None, document_mask=None) -> float:
 
 class BackendManager:
     def __init__(self, settings=None):
+        self.features = settings.features if settings is not None else FeatureFlags.from_env()
         self.model_name = os.getenv("RAGS_LATE_INTERACTION_MODEL", "")
         self.cache_dir = os.getenv("RAGS_MODEL_CACHE", "") or None
-        self.config = json.loads(os.getenv("RAGS_RESEARCH_BACKENDS_JSON", "{}"))
+        self.config = json.loads(os.getenv("RAGS_RESEARCH_BACKENDS_JSON") or "{}")
         if not isinstance(self.config, dict):
             raise ValueError("RAGS_RESEARCH_BACKENDS_JSON must be an object")
         for name, config in self.config.items():
@@ -104,11 +106,15 @@ class BackendManager:
         self._vectors = {}
         self._observed = {}
 
+    def _requirements(self, mode: str) -> tuple[str, ...]:
+        local_encoder = mode in {"multivector", "colbert"} and bool(self.model_name)
+        return (*strategy_features(mode), "embedding.fastembed" if local_encoder else "research")
+
     def catalog(self, tenant: str | None = None) -> list[dict]:
         entries = []
         encoder_installed = importlib.util.find_spec("fastembed") is not None
         supported = False
-        if encoder_installed and self.model_name:
+        if encoder_installed and self.model_name and self.features.enabled("embedding.fastembed"):
             from fastembed import LateInteractionTextEmbedding
             supported = self.model_name in {m["model"] for m in LateInteractionTextEmbedding.list_supported_models()}
         for name in ("multivector", *PAPER_BACKENDS):
@@ -130,9 +136,14 @@ class BackendManager:
                 "model": self.model_name if local else self.config.get(name, {}).get("model"),
                 "upstream": dict(observed) if observed else None,
             })
+            disabled = [feature for feature in self._requirements(name) if not self.features.enabled(feature)]
+            entries[-1].update(enabled=not disabled, disabled_by=disabled)
+            if disabled:
+                entries[-1].update(status="feature_disabled", reason="Disabled features: " + ", ".join(disabled))
         return entries
 
     def _load_encoder(self):
+        self.features.require("embedding.fastembed")
         if not self.model_name:
             raise BackendUnavailable("Set RAGS_LATE_INTERACTION_MODEL for actual token embeddings")
         if self._encoder is None:
@@ -183,6 +194,7 @@ class BackendManager:
                     return bytes(body)
 
     def search(self, mode, *, tenant, question, chunks, top_k, options=None) -> dict:
+        self.features.require(*self._requirements(mode))
         if len(chunks) > 1000:
             raise BackendUnavailable("Research query candidate limit is 1000 authorized chunks")
         if sum(len(c["content"].encode()) for c in chunks) > 2_000_000:

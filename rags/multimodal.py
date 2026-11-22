@@ -25,6 +25,8 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
+from rags import postgres
+from rags.features import FeatureFlags
 from rags.registry import CapabilityError
 
 
@@ -194,6 +196,8 @@ CREATE TABLE IF NOT EXISTS image_assets (
 CREATE INDEX IF NOT EXISTS image_assets_encoder ON image_assets(tenant,encoder_id);
 """
 _METADATA = "id,revision,title,description,filename,media_type,width,height,checksum,encoder_id,dimensions,encoder_profile,created_at,updated_at"
+ASSET_FIELDS = ("tenant", "id", "revision", "title", "description", "filename", "media_type", "width", "height",
+                "checksum", "original", "vector", "encoder_id", "dimensions", "encoder_profile", "created_at", "updated_at")
 
 
 class AssetStore:
@@ -201,17 +205,29 @@ class AssetStore:
         if path == ":memory:":
             raise ValueError("Image assets require a file-backed database")
         self.path = path
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        self.is_postgres = postgres.is_postgres(path)
+        self.storage_backend = "postgresql" if self.is_postgres else "sqlite"
+        self.vector_search = "pgvector_exact" if self.is_postgres else "python_exact"
+        if not self.is_postgres:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as connection:
-            connection.executescript(_SCHEMA)
+            if self.is_postgres:
+                postgres.initialize(connection, _SCHEMA)
+                postgres.migrate_vector_column(connection, "image_assets", "vector")
+            else:
+                connection.executescript(_SCHEMA)
 
     @contextmanager
     def connect(self):
+        if self.is_postgres:
+            with postgres.connect(self.path) as connection:
+                yield connection
+            return
         connection = sqlite3.connect(self.path, timeout=20)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA busy_timeout=20000")
-        connection.execute("PRAGMA journal_mode=WAL")
         try:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA busy_timeout=20000")
+            connection.execute("PRAGMA journal_mode=WAL")
             yield connection
             connection.commit()
         except BaseException:
@@ -246,28 +262,69 @@ class AssetStore:
         return [self.decode(row) for row in rows]
 
     def save(self, tenant: str, value: dict, expected_revision: str | None):
+        vector = (postgres.vector_literal(value["vector"], code="invalid_asset_vector") if self.is_postgres
+                  else json.dumps(value["vector"], allow_nan=False))
+        if self.is_postgres and len(value["vector"]) != value["dimensions"]:
+            raise CapabilityError("invalid_asset_vector", "Image vector does not match its encoder dimensions", 502)
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            if self.is_postgres:
+                postgres.lock_mutation(connection, "assets", tenant)
             current = connection.execute("SELECT revision,created_at FROM image_assets WHERE tenant=? AND id=?", (tenant, value["id"])).fetchone()
             if (current["revision"] if current else None) != expected_revision:
                 raise CapabilityError("revision_conflict", "Image asset changed during encoding; retry with its current revision", 409)
             if current is None and connection.execute("SELECT count(*) FROM image_assets WHERE tenant=?", (tenant,)).fetchone()[0] >= MAX_TENANT_ASSETS:
                 raise CapabilityError("asset_limit", "Tenant image asset limit reached", 409)
             created = current["created_at"] if current else value["updated_at"]
+            placeholders = ["?::vector" if self.is_postgres and field == "vector" else "?" for field in ASSET_FIELDS]
             connection.execute(
-                "INSERT INTO image_assets VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                "INSERT INTO image_assets(" + ",".join(ASSET_FIELDS) + ") VALUES (" + ",".join(placeholders) + ") "
                 "ON CONFLICT(tenant,id) DO UPDATE SET revision=excluded.revision,title=excluded.title,description=excluded.description,"
                 "filename=excluded.filename,media_type=excluded.media_type,width=excluded.width,height=excluded.height,"
                 "checksum=excluded.checksum,original=excluded.original,vector=excluded.vector,encoder_id=excluded.encoder_id,"
                 "dimensions=excluded.dimensions,encoder_profile=excluded.encoder_profile,updated_at=excluded.updated_at",
                 (tenant, value["id"], value["revision"], value["title"], value["description"], value["filename"], value["media_type"],
-                 value["width"], value["height"], value["checksum"], value["original"], json.dumps(value["vector"], allow_nan=False),
+                 value["width"], value["height"], value["checksum"], value["original"], vector,
                  value["encoder_id"], value["dimensions"], json.dumps(value["encoder_profile"], sort_keys=True), created, value["updated_at"]),
             )
 
     def delete(self, tenant: str, asset_id: str) -> bool:
         with self.connect() as connection:
+            if self.is_postgres:
+                postgres.lock_mutation(connection, "assets", tenant)
             return connection.execute("DELETE FROM image_assets WHERE tenant=? AND id=?", (tenant, asset_id)).rowcount > 0
+
+    def dense(self, tenant: str, vector: list[float], top_k: int, *, encoder_id: str,
+              dimensions: int) -> tuple[list[dict], int]:
+        """PostgreSQL ranking over one consistent tenant/encoder snapshot."""
+        if not self.is_postgres:
+            raise ValueError("Native SQL image search requires PostgreSQL")
+        if type(top_k) is not int or not 1 <= top_k <= 20:
+            raise ValueError("Image top_k must be 1..20")
+        literal = postgres.vector_literal(vector, code="invalid_asset_vector")
+        if len(vector) != dimensions:
+            raise CapabilityError("asset_reindex_required", "Image query has incompatible encoder dimensions", 409)
+        with self.connect() as connection:
+            connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+            candidates = connection.execute(
+                "SELECT encoder_id,dimensions,vector_dims(vector) AS stored_dimensions FROM image_assets WHERE tenant=?",
+                (tenant,),
+            ).fetchall()
+            if any(row["encoder_id"] != encoder_id or row["dimensions"] != dimensions
+                   or row["stored_dimensions"] != dimensions for row in candidates):
+                raise CapabilityError("asset_reindex_required", "Image assets use another encoder; reindex them before searching", 409)
+            distance = postgres.cosine_distance("a.vector")
+            rows = connection.execute(
+                "WITH query AS (SELECT ?::vector AS embedding) "
+                f"SELECT {_METADATA},{distance} AS distance FROM image_assets a CROSS JOIN query q "
+                "WHERE a.tenant=? ORDER BY distance,a.id LIMIT ?", (literal, tenant, top_k),
+            ).fetchall()
+        result = []
+        for row in rows:
+            value = self.decode(row)
+            value["score"] = max(-1.0, min(1.0, 1.0 - value.pop("distance")))
+            result.append(value)
+        return result, len(candidates)
 
 
 def _asset_id(value: str) -> str:
@@ -277,7 +334,9 @@ def _asset_id(value: str) -> str:
 
 
 class MultimodalService:
-    def __init__(self, db_path: str, model_name: str | None = None, encoder: AlignedEncoder | None = None):
+    def __init__(self, db_path: str, model_name: str | None = None, encoder: AlignedEncoder | None = None,
+                 features: FeatureFlags | None = None):
+        self.features = features if features is not None else FeatureFlags()
         self.store = AssetStore(db_path)
         self.model_name = (os.getenv("RAGS_MULTIMODAL_MODEL", "") if model_name is None else model_name).strip().lower()
         if self.model_name and self.model_name != CLIP_PAIR:
@@ -287,6 +346,7 @@ class MultimodalService:
         self._exercised = False
 
     def encoder(self) -> AlignedEncoder:
+        self.features.require("multimodal", "embedding.fastembed")
         if self._encoder is None:
             if not self.model_name:
                 raise CapabilityError("requires_backend", "Set RAGS_MULTIMODAL_MODEL=clip-vit-b-32 and install encoders,vision extras")
@@ -294,19 +354,27 @@ class MultimodalService:
         return self._encoder
 
     def capability(self) -> dict:
+        dependencies = ("multimodal", "query", "strategy.multimodal_native", "embedding.fastembed")
+        disabled = [name for name in dependencies if not self.features.enabled(name)]
         return {"id": "multimodal_assets", "family": "Multimodal RAG",
-                "status": "available" if self._encoder else "configured" if self.model_name else "requires_backend",
+                "status": ("feature_disabled" if disabled else
+                           "available" if self._encoder else "configured" if self.model_name else "requires_backend"),
+                "enabled": not disabled, "disabled_by": disabled,
                 "implementation": "Aligned CLIP text-to-image and image-to-image asset retrieval",
                 "evidence_level": "model_exercised_in_process" if self._exercised else "not_exercised_in_process",
                 "model": self.model_name or None, "model_loaded": self._encoder is not None,
                 "search_endpoint": "/assets/search", "image_search_endpoint": "/assets/search/image",
                 "original_images_stored": True, "audio_video": False,
+                "original_images_enabled": self.features.enabled("original_images"),
                 "max_image_bytes": MAX_IMAGE_BYTES, "max_image_pixels": MAX_IMAGE_PIXELS,
                 "text_token_limit": 77, "primary_language": "en"}
 
     def ingest(self, tenant: str, raw: bytes, *, filename: str = "image", title: str | None = None,
                description: str = "", asset_id: str | None = None, expected_revision: str | None = None,
                force: bool = False) -> dict:
+        self.features.require("ingestion", "multimodal", "embedding.fastembed")
+        if force:
+            self.features.require("reindex")
         identifier = _asset_id(asset_id or uuid.uuid4().hex)
         if not isinstance(filename, str):
             raise CapabilityError("invalid_asset_metadata", "Image filename must be a string", 422)
@@ -343,6 +411,7 @@ class MultimodalService:
             image.close()
 
     def reindex(self, tenant: str, asset_id: str) -> dict:
+        self.features.require("reindex", "ingestion", "multimodal", "embedding.fastembed")
         row = self.store.get(tenant, _asset_id(asset_id), original=True)
         if row is None:
             raise CapabilityError("asset_not_found", "Image asset not found", 404)
@@ -350,30 +419,53 @@ class MultimodalService:
                            description=row["description"], asset_id=asset_id,
                            expected_revision=row["revision"], force=True)
 
+    def get(self, tenant: str, asset_id: str, *, original: bool = False) -> dict | None:
+        self.features.require("documents", "multimodal")
+        if original:
+            self.features.require("original_images")
+        return self.store.get(tenant, _asset_id(asset_id), original=original)
+
+    def list(self, tenant: str, limit: int = 100, offset: int = 0) -> list[dict]:
+        self.features.require("documents", "multimodal")
+        if type(limit) is not int or type(offset) is not int or not 1 <= limit <= 100 or not 0 <= offset <= MAX_TENANT_ASSETS:
+            raise CapabilityError("invalid_asset_limit", "limit must be 1..100 and offset 0..10000", 422)
+        return self.store.list(tenant, limit, offset)
+
+    def delete(self, tenant: str, asset_id: str) -> bool:
+        self.features.require("deletion", "multimodal")
+        return self.store.delete(tenant, _asset_id(asset_id))
+
     def _search(self, tenant: str, vector, top_k: int, modality: str, encoder: AlignedEncoder) -> dict:
+        self.features.require("query", "multimodal", "strategy.multimodal_native", "embedding.fastembed")
         if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= 20:
             raise CapabilityError("invalid_top_k", "top_k must be in 1..20", 422)
         query = normalized_vector(vector, encoder.dimensions)
-        rows = self.store.vectors(tenant)
-        if any(row["encoder_id"] != encoder.id or row["dimensions"] != encoder.dimensions for row in rows):
-            raise CapabilityError("asset_reindex_required", "Image assets use another encoder; reindex them before searching", 409)
-        ranked = []
-        for row in rows:
-            try:
-                stored = normalized_vector(json.loads(row.pop("vector")), encoder.dimensions)
-            except (ValueError, CapabilityError) as exc:
-                raise CapabilityError("invalid_asset_index", "Stored image vector is invalid; reindex the asset", 409) from exc
-            score = max(-1.0, min(1.0, sum(a * b for a, b in zip(query, stored, strict=True))))
-            ranked.append((score, row))
-        ranked.sort(key=lambda item: (-item[0], item[1]["id"]))
+        if self.store.is_postgres:
+            rows, count = self.store.dense(tenant, query, top_k, encoder_id=encoder.id, dimensions=encoder.dimensions)
+            ranked = [(row.pop("score"), row) for row in rows]
+        else:
+            rows = self.store.vectors(tenant)
+            count = len(rows)
+            if any(row["encoder_id"] != encoder.id or row["dimensions"] != encoder.dimensions for row in rows):
+                raise CapabilityError("asset_reindex_required", "Image assets use another encoder; reindex them before searching", 409)
+            ranked = []
+            for row in rows:
+                try:
+                    stored = normalized_vector(json.loads(row.pop("vector")), encoder.dimensions)
+                except (ValueError, CapabilityError) as exc:
+                    raise CapabilityError("invalid_asset_index", "Stored image vector is invalid; reindex the asset", 409) from exc
+                score = max(-1.0, min(1.0, sum(a * b for a, b in zip(query, stored, strict=True))))
+                ranked.append((score, row))
+            ranked.sort(key=lambda item: (-item[0], item[1]["id"]))
         citations = [{**row, "asset_id": row["id"], "asset_uri": f"/assets/images/{row['id']}",
                       "score": round(score, 8), "score_kind": "cosine_similarity",
                       "evidence_kind": "original_image", "description_origin": "user"}
                      for score, row in ranked[:top_k]]
         return {"query_modality": modality, "representation": "native_image_vector", "encoder_id": encoder.id,
-                "encoder_profile": encoder.profile, "candidates": len(rows), "citations": citations}
+                "encoder_profile": encoder.profile, "candidates": count, "citations": citations}
 
     def search_text(self, tenant: str, query: str, top_k: int = 5) -> dict:
+        self.features.require("query", "multimodal", "strategy.multimodal_native", "embedding.fastembed")
         if not isinstance(query, str) or not query.strip() or len(query) > 2000:
             raise CapabilityError("invalid_query", "Text query must contain 1..2000 characters", 422)
         encoder = self.encoder()
@@ -382,6 +474,7 @@ class MultimodalService:
         return self._search(tenant, vector, top_k, "text", encoder)
 
     def search_image(self, tenant: str, raw: bytes, top_k: int = 5) -> dict:
+        self.features.require("query", "multimodal", "strategy.multimodal_native", "embedding.fastembed")
         image, _ = validated_image(raw)
         try:
             encoder = self.encoder()
@@ -399,8 +492,9 @@ class AssetSearch(BaseModel):
 
 
 def install_multimodal_routes(app: FastAPI, auth: Callable, *, db_path: str,
-                              model_name: str | None = None, encoder: AlignedEncoder | None = None) -> MultimodalService:
-    service = MultimodalService(db_path, model_name=model_name, encoder=encoder)
+                              model_name: str | None = None, encoder: AlignedEncoder | None = None,
+                              features: FeatureFlags | None = None) -> MultimodalService:
+    service = MultimodalService(db_path, model_name=model_name, encoder=encoder, features=features)
     app.state.multimodal = service
     if CapabilityError not in app.exception_handlers:
         async def capability_error(request, exc):
@@ -415,19 +509,18 @@ def install_multimodal_routes(app: FastAPI, auth: Callable, *, db_path: str,
     async def ingest_image(tenant: str = Depends(auth), file: UploadFile = File(...),
                            title: str | None = Form(default=None), description: str = Form(default=""),
                            asset_id: str | None = Form(default=None), expected_revision: str | None = Form(default=None)):
+        service.features.require("uploads", "ingestion", "multimodal", "embedding.fastembed")
         raw = await file.read(MAX_IMAGE_BYTES + 1)
         return await run_in_threadpool(service.ingest, tenant, raw, filename=file.filename or "image",
                                        title=title, description=description, asset_id=asset_id, expected_revision=expected_revision)
 
     @app.get("/assets/images", tags=["Image assets"])
     def list_images(tenant: str = Depends(auth), limit: int = 100, offset: int = 0):
-        if not 1 <= limit <= 100 or not 0 <= offset <= MAX_TENANT_ASSETS:
-            raise HTTPException(422, "limit must be 1..100 and offset 0..10000")
-        return service.store.list(tenant, limit, offset)
+        return service.list(tenant, limit, offset)
 
     @app.get("/assets/images/{asset_id}", tags=["Image assets"])
     def get_image(asset_id: str, tenant: str = Depends(auth)):
-        row = service.store.get(tenant, _asset_id(asset_id), original=True)
+        row = service.get(tenant, asset_id, original=True)
         if row is None:
             raise HTTPException(404, "Image asset not found")
         extension = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}[row["media_type"]]
@@ -437,7 +530,7 @@ def install_multimodal_routes(app: FastAPI, auth: Callable, *, db_path: str,
 
     @app.delete("/assets/images/{asset_id}", tags=["Image assets"])
     def delete_image(asset_id: str, tenant: str = Depends(auth)):
-        if not service.store.delete(tenant, _asset_id(asset_id)):
+        if not service.delete(tenant, asset_id):
             raise HTTPException(404, "Image asset not found")
         return {"deleted": True, "asset_id": asset_id}
 
@@ -452,6 +545,7 @@ def install_multimodal_routes(app: FastAPI, auth: Callable, *, db_path: str,
     @app.post("/assets/search/image", tags=["Image assets"])
     async def search_image(tenant: str = Depends(auth), file: UploadFile = File(...),
                            top_k: int = Form(default=5, ge=1, le=20)):
+        service.features.require("query", "multimodal", "strategy.multimodal_native", "embedding.fastembed")
         raw = await file.read(MAX_IMAGE_BYTES + 1)
         return await run_in_threadpool(service.search_image, tenant, raw, top_k)
 
