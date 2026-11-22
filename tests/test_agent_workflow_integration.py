@@ -277,3 +277,46 @@ def test_branch_idempotency_is_part_of_definition_fingerprint():
         Workflow("bad").branch("choice", lambda ctx: True,
                                if_true=lambda ctx: True,
                                if_false=lambda ctx: False, idempotent="true")
+
+
+def test_conversation_provenance_is_opt_in_and_restricted_to_assistant(state):
+    memory = ConversationStore(state)
+    memory.append("tenant-a", "session", "user", "Where is the policy?")
+    memory.append("tenant-a", "session", "assistant", "Policy [chunk_1] and [來源甲]",
+                  evidence_ids=["chunk_1", "來源甲"])
+    assert memory.last("tenant-a", "session") == [
+        {"role": "user", "content": "Where is the policy?"},
+        {"role": "assistant", "content": "Policy [chunk_1] and [來源甲]"},
+    ]
+    with_evidence = memory.last("tenant-a", "session", with_evidence=True)
+    assert with_evidence[1]["evidence_ids"] == ["chunk_1", "來源甲"]
+    assert memory.last("tenant-b", "session", with_evidence=True) == []
+    for invalid in (["same", "same"], [" "], [""], ["a\nb"], list(range(81))):
+        with pytest.raises(ValueError, match="provenance"):
+            memory.append("tenant-a", "session", "assistant", "Invalid", evidence_ids=invalid)
+    with pytest.raises(ValueError, match="provenance"):
+        memory.append("tenant-a", "session", "user", "Injected", evidence_ids=["chunk_1"])
+
+
+def test_existing_legacy_agent_messages_gain_empty_citation_metadata(tmp_path):
+    legacy = Store(str(tmp_path / "legacy-agent.db"))
+    with legacy.connect() as db:
+        db.execute(
+            "CREATE TABLE agent_messages (tenant TEXT NOT NULL, session_id TEXT NOT NULL, "
+            "sequence INTEGER NOT NULL, role TEXT NOT NULL, body TEXT NOT NULL, "
+            "created_at TEXT NOT NULL, PRIMARY KEY(tenant,session_id,sequence))"
+        )
+        db.execute("INSERT INTO agent_messages "
+                   "(tenant,session_id,sequence,role,body,created_at) "
+                   "VALUES(?,?,?,?,?,?)",
+                   ("tenant", "legacy", 1, "assistant", "An older answer", "2024-01-01"))
+    state = StateStore(Store(legacy.path))
+    assert ConversationStore(state).last("tenant", "legacy", with_evidence=True) == [
+        {"role": "assistant", "content": "An older answer", "evidence_ids": []}
+    ]
+    assert ConversationStore(state).append(
+        "tenant", "legacy", "assistant", "A new cited answer [chunk_1]",
+        evidence_ids=["chunk_1"],
+    ) == 2
+    assert ConversationStore(state).last("tenant", "legacy", with_evidence=True)[1][
+        "evidence_ids"] == ["chunk_1"]

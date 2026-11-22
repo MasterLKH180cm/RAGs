@@ -421,3 +421,96 @@ def test_side_effecting_tools_do_not_run_on_unmanaged_background_workers(compone
     updated = service._pending(checkpoint, principal(), deadline=time.monotonic() + 1.0)
     assert updated.status == "running" and updated.state["calls"] == 1
     assert thread_names == [threading.current_thread().name]
+
+
+def test_verified_citation_survives_next_turn_and_process_restart(components):
+    state, config = components
+    registry = ToolRegistry()
+    registry.register(ToolSpec(
+        "knowledge_search", Args,
+        lambda *_: {"citations": [{"chunk_id": "chunk_approved", "text": "source evidence"}]},
+        permission="rags:query", read_only=True,
+    ))
+    actor = principal("tenant-a", subject="reader-1")
+    first = engine(state, config, FakeRouter(
+        reply("", call("knowledge_search", {"amount": 1})),
+        reply("Document says yes [chunk_approved]"),
+    ), registry)
+    completed = first.start(actor, goal="Search for verified documentation",
+                            model="main", session_id="shared")
+    assert completed.status == "completed"
+    assert completed.state["answer"] == "Document says yes [chunk_approved]"
+
+    memory_id = scoped_session(actor.subject, "shared")
+    assert first.history.last("tenant-a", memory_id) == [
+        {"role": "user", "content": "Search for verified documentation"},
+        {"role": "assistant", "content": "Document says yes [chunk_approved]"},
+    ]
+    last = first.history.last("tenant-a", memory_id, with_evidence=True)
+    assert last[-1]["evidence_ids"] == ["chunk_approved"]
+
+    # A fresh application instance must recover trusted provenance from durable
+    # history, not from stale agent process memory or a prior request's variables.
+    restarted = engine(StateStore(Store(state.store.path)), config,
+                       FakeRouter(reply("Document says yes [chunk_approved]")), registry)
+    followup = restarted.start(actor, goal="Repeat your last answer exactly",
+                               model="main", session_id="shared")
+    assert followup.status == "completed"
+    assert followup.state["evidence_ids"] == []
+    assert followup.state["prior_evidence_ids"] == ["chunk_approved"]
+    assert restarted.history.last("tenant-a", memory_id, with_evidence=True)[-1][
+        "evidence_ids"] == ["chunk_approved"]
+
+
+def test_prior_verified_references_are_never_shared_across_subjects_or_tenants(components):
+    state, config = components
+    registry = ToolRegistry()
+    registry.register(ToolSpec(
+        "knowledge_search", Args,
+        lambda *_: {"citations": [{"chunk_id": "restricted_source", "text": "private text"}]},
+        permission="rags:query", read_only=True,
+    ))
+    owner = principal("tenant-a", subject="author-a")
+    result = engine(state, config, FakeRouter(
+        reply("", call("knowledge_search", {"amount": 1})),
+        reply("Authorized reference [restricted_source]"),
+    ), registry).start(owner, goal="Find source for the report",
+                      model="main", session_id="shared")
+    assert result.status == "completed"
+
+    unauthorized = [
+        principal("tenant-a", subject="other-user"),
+        principal("tenant-b", subject="author-a"),
+        principal("tenant-a", subject="author-a",
+                  permissions={"rags:agent", "rags:generate", "rags:query"}),
+    ]
+    for actor in unauthorized:
+        bot = FakeRouter(reply("Authorized reference [restricted_source]"))
+        denied = engine(state, config, bot, registry).start(
+            actor, goal="Repeat the last citation", model="main", session_id="shared")
+        assert denied.status == "failed"
+        assert denied.state["stop_reason"] == "invalid_citation"
+        assert denied.state.get("prior_evidence_ids") == []
+
+
+def test_citation_free_followup_after_sourced_answer_remains_valid(components):
+    state, config = components
+    registry = ToolRegistry()
+    registry.register(ToolSpec(
+        "knowledge_search", Args,
+        lambda *_: {"citations": [{"chunk_id": "source_10", "text": "factual passage"}]},
+        permission="rags:query", read_only=True,
+    ))
+    actor = principal()
+    first = engine(state, config, FakeRouter(
+        reply("", call("knowledge_search", {"amount": 1})),
+        reply("Verified conclusion [source_10]"),
+    ), registry).start(actor, goal="Find supporting facts",
+                       model="main", session_id="same")
+    assert first.status == "completed"
+    next_run = engine(state, config, FakeRouter(reply("The requested format is a short paragraph.")),
+                      registry).start(actor, goal="Change the formatting, without citing",
+                                      model="main", session_id="same")
+    assert next_run.status == "completed"
+    assert next_run.state["prior_evidence_ids"] == ["source_10"]
+    assert next_run.state["answer"] == "The requested format is a short paragraph."

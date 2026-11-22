@@ -108,3 +108,26 @@ def test_parallel_postgres_checkpoint_writers_only_one_wins(pg_database):
     winner = next(value for status, _, value in results if status == "success")
     assert checkpoint.state["approved_by"] == winner
     assert state.get("tenant-b", saved.run_id) is None
+
+
+def test_postgres_legacy_message_migration_preserves_existing_history(pg_database):
+    db = Store(pg_database)
+    with db.connect() as conn:
+        conn.execute(
+            "CREATE TABLE agent_messages (tenant TEXT NOT NULL, session_id TEXT NOT NULL, "
+            "sequence INTEGER NOT NULL, role TEXT NOT NULL, body TEXT NOT NULL, "
+            "created_at TEXT NOT NULL, PRIMARY KEY(tenant,session_id,sequence))"
+        )
+        conn.execute("INSERT INTO agent_messages "
+                     "(tenant,session_id,sequence,role,body,created_at) "
+                     "VALUES(?,?,?,?,?,?)",
+                     ("tenant", "s", 1, "assistant", "Previously verified", "2024-01-01"))
+    state = StateStore(db)
+    memory = ConversationStore(state)
+    assert memory.last("tenant", "s", with_evidence=True) == [
+        {"role": "assistant", "content": "Previously verified", "evidence_ids": []}
+    ]
+    memory.append("tenant", "s", "assistant", "Follow-up [source_v1]",
+                  evidence_ids=["source_v1"])
+    assert memory.last("tenant", "s", with_evidence=True)[-1][
+        "evidence_ids"] == ["source_v1"]
