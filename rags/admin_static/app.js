@@ -4,7 +4,8 @@
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
   const titles = {overview:'總覽',documents:'知識文件',explorer:'檢索探索',observability:'可觀測性',settings:'設定與權限'};
-  const state = {csrf:'',tenant:'',permissions:[],view:'overview',offset:0,search:'',limit:20,deleteTarget:null,loading:false,authenticated:false};
+  const state = {csrf:'',tenant:'',permissions:[],view:'overview',offset:0,search:'',limit:20,deleteTarget:null,loading:false,authenticated:false,epoch:0};
+  const pending=new Set();
   let searchTimer,toastTimer;
   function el(tag,klass,label){
     const item=document.createElement(tag); if(klass)item.className=klass;
@@ -16,34 +17,79 @@
     ?new Intl.DateTimeFormat('zh-TW',{dateStyle:'medium',timeStyle:'short'}).format(d):'—';}
   function ms(value){return Number.isFinite(value)?value.toFixed(1)+' ms':'—';}
   function notice(message,isError=false){
+    if(!message)return;
     const node=$('#global-notice');node.textContent=message;node.classList.toggle('error',isError);
     node.classList.add('visible');clearTimeout(toastTimer);
     toastTimer=setTimeout(()=>node.classList.remove('visible'),4200);
   }
+  function resetTenantUI(){
+    // Clear ALL tenant content before revealing a different identity. Abort
+    // requests in flight and ensure late responses cannot repopulate the DOM.
+    state.epoch+=1;
+    for(const controller of pending)controller.abort();
+    pending.clear();
+    state.csrf='';state.tenant='';state.permissions=[];state.offset=0;
+    state.search='';state.loading=false;state.deleteTarget=null;
+    clearTimeout(searchTimer);
+    for(const id of ['#query-output','#query-citations','#documents-body',
+        '#activity-list','#feature-list','#permission-list','#overview-chart','#monitor-chart']){
+      $(id).replaceChildren();
+    }
+    $('#query-output').hidden=true;$('#query-empty').hidden=false;
+    $('#query-form').reset();$('#add-form').reset();$('#delete-form').reset();
+    $('#document-search').value='';$('#delete-confirm').value='';
+    $('#delete-submit').disabled=true;
+    for(const id of ['#add-dialog','#delete-dialog'])if($(id).open)$(id).close();
+    for(const id of ['#query-answer','#citation-count','#query-status',
+        '#document-count','#document-range','#stat-documents','#stat-chunks',
+        '#stat-revisions','#stat-images','#setting-tenant','#setting-auth',
+        '#setting-storage','#setting-embedding','#setting-generation',
+        '#tenant-sidebar','#session-expiry','#monitor-requests',
+        '#monitor-errors','#monitor-p50','#monitor-p95','#exported-spans',
+        '#dropped-spans','#failed-exports','#collector-status'])txt(id,'—');
+    $('#global-notice').classList.remove('visible');
+  }
   function showLogin(){
-    state.authenticated=false;state.csrf='';$('#workspace').hidden=true;$('#auth-screen').hidden=false;
-    $('#admin-token').value='';
+    resetTenantUI();state.authenticated=false;
+    $('#workspace').hidden=true;$('#auth-screen').hidden=false;$('#admin-token').value='';
   }
   function showApp(info){
-    state.authenticated=true;state.csrf=info.csrf;state.tenant=info.tenant;
-    state.permissions=info.permissions||[];txt('#tenant-sidebar',info.tenant);
-    txt('#setting-tenant',info.tenant);txt('#session-expiry','有效至 '+date(info.expires_at));
+    resetTenantUI();state.authenticated=true;
+    state.csrf=info.csrf;state.tenant=info.tenant;state.permissions=info.permissions||[];
+    txt('#tenant-sidebar',info.tenant);txt('#setting-tenant',info.tenant);
+    txt('#session-expiry','有效至 '+date(info.expires_at));
     $('#auth-screen').hidden=true;$('#workspace').hidden=false;changeView('overview');
   }
   class APIError extends Error{constructor(status,code){super(code||'request_failed');this.status=status;}}
+  class StaleSession extends Error{constructor(){super('stale_session');}}
   async function api(path,{method='GET',body,headers={}}={}){
+    const epoch=state.epoch,controller=new AbortController();
+    pending.add(controller);
     const h={Accept:'application/json',...headers};if(method!=='GET')h['X-CSRF-Token']=state.csrf;
     if(body!==undefined){body=JSON.stringify(body);h['Content-Type']='application/json';}
-    let response;
-    try{response=await fetch('/admin/api/'+path,{method,headers:h,body,credentials:'same-origin',cache:'no-store'});}
-    catch(_){throw new Error('network_error');}
-    if(!response.ok){
-      let code='request_failed';try{code=(await response.json()).detail?.code||code;}catch(_){}
-      if(response.status===401)showLogin();throw new APIError(response.status,code);
-    }
-    return response.status===204?null:response.json();
+    try{
+      const response=await fetch('/admin/api/'+path,{method,headers:h,body,credentials:'same-origin',
+        cache:'no-store',signal:controller.signal});
+      if(epoch!==state.epoch)throw new StaleSession();
+      if(!response.ok){
+        let code='request_failed';
+        try{code=(await response.json()).detail?.code||code;}catch(_){}
+        if(epoch!==state.epoch)throw new StaleSession();
+        if(response.status===401)showLogin();
+        throw new APIError(response.status,code);
+      }
+      if(response.status===204)return null;
+      const data=await response.json();
+      if(epoch!==state.epoch)throw new StaleSession();
+      return data;
+    }catch(error){
+      if(epoch!==state.epoch||error.name==='AbortError')throw new StaleSession();
+      if(error instanceof APIError||error instanceof StaleSession)throw error;
+      throw new Error('network_error');
+    }finally{pending.delete(controller);}
   }
   function errorText(error){
+    if(error instanceof StaleSession)return '';
     if(!(error instanceof APIError))return '連線暫時中斷，請稍後再試。';
     if(error.status===401)return '工作階段已到期，請重新登入。';
     if(error.status===403)return '權限不足或操作驗證失敗。';
@@ -118,10 +164,11 @@
     chip.classList.toggle('online',!!otel.enabled&&!otel.export_failures);
   }
   async function refreshOverview(){
-    if(!state.authenticated||state.loading)return;state.loading=true;
-    try{renderOverview(await api('overview'));}
-    catch(e){notice(errorText(e),true);}
-    finally{state.loading=false;}
+    if(!state.authenticated||state.loading)return;
+    const epoch=state.epoch;state.loading=true;
+    try{const data=await api('overview');if(epoch===state.epoch)renderOverview(data);}
+    catch(e){if(epoch===state.epoch)notice(errorText(e),true);}
+    finally{if(epoch===state.epoch)state.loading=false;}
   }
   function renderDocuments(data){
     const root=$('#documents-body');root.replaceChildren();
@@ -147,19 +194,21 @@
     $('#page-next').disabled=state.offset+state.limit>=data.total;
   }
   async function loadDocuments(){
-    const root=$('#documents-body');root.replaceChildren();
+    const epoch=state.epoch,root=$('#documents-body');root.replaceChildren();
     const tr=el('tr'),td=el('td','empty-state','正在讀取文件…');td.colSpan=4;tr.append(td);root.append(tr);
     const qs=new URLSearchParams({search:state.search,offset:String(state.offset),limit:String(state.limit)});
-    try{renderDocuments(await api('documents?'+qs.toString()));}
-    catch(e){td.textContent=errorText(e);root.replaceChildren(tr);}
+    try{const data=await api('documents?'+qs.toString());if(epoch===state.epoch)renderDocuments(data);}
+    catch(e){if(epoch===state.epoch){td.textContent=errorText(e);root.replaceChildren(tr);}}
   }
   function openDelete(doc){
     state.deleteTarget=doc;txt('#delete-target',doc.id);$('#delete-confirm').value='';
     $('#delete-submit').disabled=true;$('#delete-dialog').showModal();$('#delete-confirm').focus();
   }
   async function loadOperations(){
+    const epoch=state.epoch;
     try{
       const d=await api('operations');
+      if(epoch!==state.epoch)return;
       txt('#setting-auth',d.auth_mode);txt('#setting-storage',d.storage);
       txt('#setting-embedding',d.embedding_provider);
       txt('#setting-generation',d.generation_provider);
@@ -171,7 +220,7 @@
         item.append(el('span','',pair[0]),el('span',pair[1]?'feature-state':'feature-state disabled',pair[1]?'已啟用':'停用'));
         flags.append(item);
       });
-    }catch(e){notice(errorText(e),true);}
+    }catch(e){if(epoch===state.epoch)notice(errorText(e),true);}
   }
   function renderQuery(result){
     $('#query-empty').hidden=true;$('#query-output').hidden=false;
@@ -215,36 +264,44 @@
     if(!title||!content){notice('請填寫文件名稱及內容。',true);return;}
     const body={title,text:content,source:$('#add-source').value.trim()||'dashboard'};
     if($('#add-id').value.trim())body.document_id=$('#add-id').value.trim();
-    const btn=$('#add-submit');busy(btn,true,'正在索引…');
+    const epoch=state.epoch,btn=$('#add-submit');busy(btn,true,'正在索引…');
     try{
-      await api('documents',{method:'POST',body});$('#add-dialog').close();$('#add-form').reset();
+      await api('documents',{method:'POST',body});
+      if(epoch!==state.epoch)return;$('#add-dialog').close();$('#add-form').reset();
       notice('文件與索引已建立。');state.offset=0;await Promise.all([loadDocuments(),refreshOverview()]);
-    }catch(e){notice(errorText(e),true);}
-    finally{busy(btn,false,'建立並索引');}
+    }catch(e){if(epoch===state.epoch)notice(errorText(e),true);}
+    finally{if(epoch===state.epoch)busy(btn,false,'建立並索引');}
   }
   async function removeSource(event){
     event.preventDefault();const doc=state.deleteTarget;
     if(!doc||$('#delete-confirm').value.trim()!==doc.id)return;
-    const btn=$('#delete-submit');busy(btn,true,'刪除中…');
+    const epoch=state.epoch,btn=$('#delete-submit');busy(btn,true,'刪除中…');
     try{
       await api('documents/'+encodeURIComponent(doc.id),{method:'DELETE',headers:{'If-Match':doc.revision}});
+      if(epoch!==state.epoch)return;
       state.deleteTarget=null;$('#delete-dialog').close();notice('文件已刪除。');
       await Promise.all([loadDocuments(),refreshOverview()]);
-    }catch(e){notice(errorText(e),true);}
-    finally{busy(btn,false,'確認刪除');}
+    }catch(e){if(epoch===state.epoch)notice(errorText(e),true);}
+    finally{if(epoch===state.epoch)busy(btn,false,'確認刪除');}
   }
   async function runQuery(event){
     event.preventDefault();const question=$('#query-question').value.trim();
     if(question.length<2){notice('問題至少需要兩個字元。',true);return;}
-    const btn=$('#query-submit');busy(btn,true,'正在檢索…');txt('#query-status','執行中');
+    const epoch=state.epoch,btn=$('#query-submit');busy(btn,true,'正在檢索…');txt('#query-status','執行中');
     try{
-      renderQuery(await api('query',{method:'POST',body:{question,mode:$('#query-mode').value,
-        top_k:Number($('#query-topk').value),generate:$('#query-generate').checked}}));
+      const result=await api('query',{method:'POST',body:{question,mode:$('#query-mode').value,
+        top_k:Number($('#query-topk').value),generate:$('#query-generate').checked}});
+      if(epoch!==state.epoch)return;
+      renderQuery(result);
       notice('檢索完成。');
-    }catch(e){txt('#query-status','執行失敗');notice(errorText(e),true);}
-    finally{busy(btn,false,'開始檢索 ↗');}
+    }catch(e){if(epoch===state.epoch){txt('#query-status','執行失敗');notice(errorText(e),true);}}
+    finally{if(epoch===state.epoch)busy(btn,false,'開始檢索 ↗');}
   }
-  async function bootstrap(){try{showApp(await api('session'));}catch(_){showLogin();}}
+  async function bootstrap(){
+    const epoch=state.epoch;
+    try{const info=await api('session');if(epoch===state.epoch)showApp(info);}
+    catch(_){if(epoch===state.epoch)showLogin();}
+  }
   function init(){
     try{const p=localStorage.getItem('rags-admin-theme');
       if(p==='dark'||p==='light')document.body.dataset.theme=p;}catch(_){}
