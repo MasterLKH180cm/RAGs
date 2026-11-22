@@ -174,7 +174,7 @@ def diagnose(*, check_db: bool = True) -> dict:
             _check("configuration", "error", "Settings validation failed; check RAGS_* environment values")
         ]}
     storage = "postgresql" if settings.db_path.startswith(("postgresql://", "postgres://")) else "sqlite"
-    checks.append(_check("configuration", "ok", "Validated settings and token-to-tenant mapping"))
+    checks.append(_check("configuration", "ok", "Validated " + settings.auth_mode + " configuration"))
     checks.append(_check("storage", "ok", storage))
     checks.append(_check("features", "ok",
                          str(len([x for x in settings.features.as_dict().values() if x])) +
@@ -230,7 +230,7 @@ def _run_serve(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="rags", description="RAGs platform tooling")
-    parser.add_argument("--version", action="version", version="rags-platform 0.5.0")
+    parser.add_argument("--version", action="version", version="rags-platform 0.6.0")
     sub = parser.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init", help="Create private credentials and a deployment profile")
     init.add_argument("--profile", choices=PROFILES, default="offline")

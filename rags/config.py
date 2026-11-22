@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 from urllib.parse import urlparse
 
+from rags.auth import OAuth2Config, ROLES, TENANT
 from rags.chunking import ChunkConfig
 from rags.features import FeatureFlags
 from rags.tokenization import TokenizerConfig
@@ -58,6 +59,9 @@ class Settings:
     embedding_api_key: str | None = None
     generation_base_url: str | None = None
     generation_api_key: str | None = None
+    auth_mode: str = "api_key"
+    key_roles: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    oauth2: OAuth2Config | None = None
 
     @property
     def embedding_endpoint(self) -> str:
@@ -81,20 +85,50 @@ class Settings:
     def from_env(cls) -> "Settings":
         env = os.getenv("RAGS_ENV", "production").lower()
         try:
-            keys = json.loads(os.getenv("RAGS_KEYS_JSON", "{}"))
+            keys = json.loads(os.getenv("RAGS_KEYS_JSON") or "{}")
         except json.JSONDecodeError as exc:
             raise ValueError("RAGS_KEYS_JSON must be a JSON token-to-tenant mapping") from exc
         if not isinstance(keys, dict) or any(
-            not isinstance(k, str) or not k or not isinstance(v, str) or not v
+            not isinstance(k, str) or not k or not isinstance(v, str) or not TENANT.fullmatch(v)
             for k, v in keys.items()
         ):
-            raise ValueError("RAGS_KEYS_JSON must map non-empty API keys to tenant names")
-        if env in {"development", "test"} and not keys:
-            keys = {os.getenv("RAGS_API_KEY", "local-development-key"): "local"}
-        if not keys:
-            raise ValueError("Configure RAGS_KEYS_JSON before starting in production")
-        if env == "production" and any(len(key) < 24 for key in keys):
-            raise ValueError("Production API keys must have at least 24 characters")
+            raise ValueError("RAGS_KEYS_JSON must map non-empty API keys to bounded tenant identifiers")
+        auth_mode = os.getenv("RAGS_AUTH_MODE", "api_key").lower()
+        if auth_mode not in {"api_key", "oauth2_introspection"}:
+            raise ValueError("RAGS_AUTH_MODE must be api_key or oauth2_introspection")
+        key_roles = {}
+        roles_json = os.getenv("RAGS_KEY_ROLES_JSON", "")
+        if roles_json:
+            try:
+                parsed_roles = json.loads(roles_json)
+            except json.JSONDecodeError as exc:
+                raise ValueError("RAGS_KEY_ROLES_JSON must be a JSON role mapping") from exc
+            if (not isinstance(parsed_roles, dict) or set(parsed_roles) != set(keys)
+                    or any(not isinstance(v, list) or not v or len(v) > len(ROLES)
+                           or any(not isinstance(role, str) or role not in ROLES for role in v)
+                           or len(set(v)) != len(v) for v in parsed_roles.values())):
+                raise ValueError("RAGS_KEY_ROLES_JSON must cover all configured keys with known roles")
+            key_roles = {key: tuple(roles) for key, roles in parsed_roles.items()}
+        oauth2 = None
+        if auth_mode == "api_key":
+            if env in {"development", "test"} and not keys:
+                keys = {os.getenv("RAGS_API_KEY", "local-development-key"): "local"}
+            if not keys:
+                raise ValueError("Configure RAGS_KEYS_JSON before starting in production")
+            if env == "production" and any(len(key) < 24 for key in keys):
+                raise ValueError("Production API keys must have at least 24 characters")
+        else:
+            if keys or roles_json:
+                raise ValueError("OAuth2 mode cannot use static API keys or key roles")
+            oauth2 = OAuth2Config(
+                introspection_url=os.getenv("RAGS_OAUTH2_INTROSPECTION_URL", ""),
+                issuer=os.getenv("RAGS_OAUTH2_ISSUER", ""),
+                audience=os.getenv("RAGS_OAUTH2_AUDIENCE", ""),
+                client_id=os.getenv("RAGS_OAUTH2_CLIENT_ID", ""),
+                client_secret=secret("RAGS_OAUTH2_CLIENT_SECRET"),
+                tenant_claim=os.getenv("RAGS_OAUTH2_TENANT_CLAIM", "tenant_id"),
+                timeout_seconds=float(os.getenv("RAGS_OAUTH2_TIMEOUT_SECONDS", "3")),
+            )
         embedding_provider = os.getenv("RAGS_EMBEDDING_PROVIDER", "local").lower()
         model_provider = os.getenv("RAGS_MODEL_PROVIDER", "extractive").lower()
         if embedding_provider not in {"local", "openai", "fastembed"}:
@@ -193,4 +227,7 @@ class Settings:
             embedding_api_key=secret("RAGS_EMBEDDING_API_KEY") or None,
             generation_base_url=generation_base,
             generation_api_key=secret("RAGS_GENERATION_API_KEY") or None,
+            auth_mode=auth_mode,
+            key_roles=key_roles,
+            oauth2=oauth2,
         )

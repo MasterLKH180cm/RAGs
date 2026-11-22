@@ -8,11 +8,12 @@
 
 RAGs provides an authenticated FastAPI knowledge service and a read-only MCP bridge. Use it directly or connect [agentic-system](https://github.com/MasterLKH180cm/agentic-system) for durable workflows. The default runs without paid model credentials, using clearly identified hashing embeddings and extractive evidence output.
 
-Version 0.5 adds the installable CLI, five operator profiles, read-only doctor, and measured revision-scoped PostgreSQL reads; see the [synthetic performance report](docs/PERFORMANCE_V05.md) and [v0.5 specification](docs/SPEC_V05.md). Version 0.4 adds operator feature permissions, dedicated model endpoint configuration, and a PostgreSQL/pgvector deployment; see the [v0.4 specification](docs/SPEC_V04.md). Version 0.3 adds typed evidence decisions, separately calibrated relevance and answerability profiles, and isolated services executing pinned RAPTOR and LightRAG code. It builds on v0.2's six chunking strategies, token budgets, parent/summary indexes, graph traversal, structured queries, temporal revisions, federation, and pretrained encoders. The [twenty-family coverage table](#twenty-family-coverage) distinguishes native mechanisms, tested upstream execution, and remaining external requirements. An unavailable capability returns an explicit error instead of silently running another strategy.
+Version 0.6 adds tenant-scoped roles and opt-in OAuth2 introspection with strict per-operation scope checks; review [SECURITY_V06](docs/SECURITY_V06.md). Version 0.5 adds the installable CLI, five operator profiles, read-only doctor, and measured revision-scoped PostgreSQL reads; see the [synthetic performance report](docs/PERFORMANCE_V05.md) and [v0.5 specification](docs/SPEC_V05.md). Version 0.4 adds operator feature permissions, dedicated model endpoint configuration, and a PostgreSQL/pgvector deployment; see the [v0.4 specification](docs/SPEC_V04.md). Version 0.3 adds typed evidence decisions, separately calibrated relevance and answerability profiles, and isolated services executing pinned RAPTOR and LightRAG code. It builds on v0.2's six chunking strategies, token budgets, parent/summary indexes, graph traversal, structured queries, temporal revisions, federation, and pretrained encoders. The [twenty-family coverage table](#twenty-family-coverage) distinguishes native mechanisms, tested upstream execution, and remaining external requirements. An unavailable capability returns an explicit error instead of silently running another strategy.
 
 ## Contents
 
 - [Quick start](#quick-start)
+- [Tenant authorization and OAuth2](#tenant-authorization-and-oauth2)
 - [Installable CLI](#installable-cli-no-clone-needed)
 - [uv environment workflow](#uv-environment-workflow)
 - [Ingest and query](#ingest-and-query)
@@ -29,6 +30,46 @@ Version 0.5 adds the installable CLI, five operator profiles, read-only doctor, 
 - [MCP and API reference](#mcp-and-api-reference)
 - [Validation and measured limits](#validation-and-measured-limits)
 - [Deployment and project map](#deployment-and-project-map)
+
+## Tenant authorization and OAuth2
+
+The original tenant API key model allowed all document operations within the tenant. V0.6 retains it for compatibility but supports explicit per-key roles and an independent, opt-in OAuth2 Resource Server. **Feature flags are not a substitute for identity permissions.**
+
+### API key roles
+
+```bash
+export RAGS_KEYS_JSON='{"REPLACE_WITH_READER_KEY":"tenant-a","REPLACE_WITH_EDITOR_KEY":"tenant-a"}'
+export RAGS_KEY_ROLES_JSON='{"REPLACE_WITH_READER_KEY":["reader"],"REPLACE_WITH_EDITOR_KEY":["editor"]}'
+```
+
+| Role | Scope grants |
+| --- | --- |
+| reader | `rags:read`, `rags:query` |
+| editor | reader + `rags:write`, `rags:reindex` |
+| admin | all, including `rags:delete`, `rags:generate`, `rags:original_image`, `rags:mcp` |
+
+If `RAGS_KEY_ROLES_JSON` is absent, **every legacy key has admin-equivalent permissions**. When set, it must cover all keys and use known roles. Use secret storage for the mapping.
+
+### OAuth2 access-token introspection (RFC 7662)
+
+```bash
+export RAGS_AUTH_MODE=oauth2_introspection
+export RAGS_KEYS_JSON='{}'
+export RAGS_OAUTH2_INTROSPECTION_URL=https://idp.example.com/oauth2/introspect
+export RAGS_OAUTH2_ISSUER=https://idp.example.com/
+export RAGS_OAUTH2_AUDIENCE=rags-api
+export RAGS_OAUTH2_CLIENT_ID=rags-service
+export RAGS_OAUTH2_CLIENT_SECRET_FILE=/secrets/rags-introspection-secret
+# Optional: RAGS_OAUTH2_TENANT_CLAIM=tenant_id
+# Optional: RAGS_OAUTH2_TIMEOUT_SECONDS=3
+rags doctor --no-db
+rags serve
+```
+
+The authorization server must return an **active** authenticated introspection response with exact `iss`, `aud`, nonempty `sub`, fixed `tenant_id`, future `exp` and a space-delimited `scope`, e.g. `rags:read rags:query`. Ignore unrelated scopes such as `openid`. Additional scopes: `rags:write`, `rags:reindex`, `rags:delete`, `rags:generate`, `rags:original_image` (also requires read), and `rags:mcp`.
+
+The endpoint uses HTTPS, Basic client authentication, rejects redirects/invalid claims, and does not cache introspection. Missing/invalid credentials yield 401; insufficient scope yields 403; unavailable IdP yields 503. **This is resource-server OAuth2, not an OIDC login, JWT signature validator or Authorization Code+PKCE client.** See [security audit](docs/SECURITY_V06.md) for remaining RLS, per-document ACL and production risks.
+
 
 ## Quick start
 
