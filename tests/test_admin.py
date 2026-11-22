@@ -224,3 +224,59 @@ def test_dashboard_requires_explicit_admin_scope_even_for_legacy_compatible_key(
     custom = replace(config, keys={"editor": "tenant-a"}, key_roles={"editor": ("editor",)})
     with TestClient(create_app(custom), base_url=ORIGIN) as client:
         assert sign_in(client, {"Authorization": "Bearer editor", "Origin": ORIGIN}).status_code == 403
+
+
+def test_disabling_document_reads_hides_admin_overview_and_inventory(config):
+    from rags.features import FeatureFlags
+
+    app = create_app(replace(config, features=FeatureFlags((("documents", False),))))
+    with TestClient(app, base_url=ORIGIN) as client:
+        assert sign_in(client).status_code == 200
+        for route in ("/admin/api/overview", "/admin/api/documents"):
+            response = client.get(route)
+            assert response.status_code == 403
+            assert response.json()["detail"]["code"] == "feature_disabled"
+        operations = client.get("/admin/api/operations")
+        assert operations.status_code == 200
+        assert operations.json()["features"]["documents"] is False
+
+
+def test_oauth2_admin_session_revalidates_revocation_on_every_request(config, monkeypatch):
+    """The BFF cannot turn an expired/revoked OAuth access token into a durable cookie."""
+    from rags import auth
+    import httpx
+    import time
+
+    live = {"active": True}
+    requests = []
+
+    def introspect(request):
+        requests.append(request)
+        assert request.method == "POST"
+        assert request.url == "https://idp.example/introspect"
+        assert request.headers["authorization"].startswith("Basic ")
+        return httpx.Response(200, json={
+            "active": live["active"], "iss": "https://idp.example/",
+            "aud": "rags-api", "sub": "operator-1", "tenant_id": "tenant-a",
+            "exp": time.time() + 120, "scope": "rags:admin rags:read rags:query",
+        })
+
+    actual_client = httpx.Client
+    monkeypatch.setattr(auth, "_client",
+                        lambda _cfg: actual_client(transport=httpx.MockTransport(introspect)))
+    oauth = auth.OAuth2Config("https://idp.example/introspect", "https://idp.example/",
+                              "rags-api", "rags-dashboard", "test-secret")
+    configured = replace(config, auth_mode="oauth2_introspection",
+                         keys={}, key_roles={}, oauth2=oauth)
+    with TestClient(create_app(configured), base_url=ORIGIN) as client:
+        login = sign_in(client, {"Authorization": "Bearer opaque-credential",
+                                 "Origin": ORIGIN})
+        assert login.status_code == 200, login.text
+        assert "opaque-credential" not in login.text
+        assert client.get("/admin/api/overview").status_code == 200
+        before = len(requests)
+        assert before >= 2
+        live["active"] = False
+        assert client.get("/admin/api/overview").status_code == 401
+        assert client.get("/admin/api/session").status_code == 401
+        assert len(requests) == before + 1  # Revoked session removed after first failure.
