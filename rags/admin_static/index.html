@@ -250,6 +250,52 @@
             </div>
           </article>
         </div>
+        <article class="panel workflow-studio" aria-labelledby="workflow-title">
+          <div class="panel-heading">
+            <div><span class="eyebrow">VISUAL WORKFLOW ENGINE</span><h2 id="workflow-title">圖形化工作流</h2>
+              <p>以明確的順序、條件與平行檢查執行；人工審核前不執行受保護步驟。</p></div>
+            <span class="mini-tag" id="workflow-availability">載入工作流…</span>
+          </div>
+          <div class="workflow-layout">
+            <form id="workflow-form">
+              <label for="workflow-template" class="form-label">執行範本</label>
+              <select id="workflow-template" required><option value="">載入中…</option></select>
+              <label for="workflow-question" class="form-label">要檢索的問題</label>
+              <textarea id="workflow-question" rows="3" minlength="2" maxlength="2000" required
+                placeholder="例如：我們的資料保留政策有哪些依據？"></textarea>
+              <div class="form-row">
+                <div><label for="workflow-mode" class="form-label">檢索模式</label>
+                  <select id="workflow-mode"><option value="sparse">全文檢索</option>
+                    <option value="hybrid">融合檢索</option><option value="dense">向量檢索</option></select>
+                </div>
+                <div><label for="workflow-topk" class="form-label">證據片段</label>
+                  <select id="workflow-topk"><option value="3">3 段</option><option value="5" selected>5 段</option></select>
+                </div>
+              </div>
+              <button id="workflow-start" type="submit" class="button button-primary button-full">執行工作流 →</button>
+              <p class="field-hint">此範本使用既有 RAG 來源，不需額外模型 Gateway；工作流執行記錄依租戶永久保存至資料庫。</p>
+            </form>
+            <div class="workflow-graph-pane">
+              <div class="panel-heading"><div><h3>執行圖譜</h3>
+                <p id="workflow-description">先選擇工作流範本。</p></div><span id="workflow-status" class="mini-tag">未執行</span></div>
+              <ol id="workflow-graph" class="workflow-graph" aria-label="已註冊工作流節點"></ol>
+              <div id="workflow-actions" class="workflow-actions" hidden>
+                <p id="workflow-run-id" class="field-hint"></p>
+                <div id="workflow-approval" class="approval-panel" hidden>
+                  <strong>等待人工審核</strong><p>審查過程與來源證據，再決定是否繼續。操作需要具體核准。</p>
+                  <div class="modal-actions">
+                    <button type="button" class="button button-outline" id="workflow-deny">拒絕</button>
+                    <button type="button" class="button button-primary" id="workflow-approve">核准並繼續</button>
+                  </div>
+                </div>
+                <button type="button" class="button button-outline" id="workflow-recover" hidden>從儲存的檢查點恢復</button>
+                <dl class="metric-list"><div><dt>目前步驟</dt><dd id="workflow-cursor">—</dd></div>
+                  <div><dt>證據來源數</dt><dd id="workflow-sources">—</dd></div>
+                  <div><dt>人工審核</dt><dd id="workflow-human-status">—</dd></div></dl>
+              </div>
+            </div>
+          </div>
+        </article>
       </section>
 
       <section id="view-observability" class="page-view" aria-labelledby="observability-title" hidden>
