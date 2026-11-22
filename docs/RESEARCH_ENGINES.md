@@ -128,7 +128,9 @@ bash scripts/install_research.sh lightrag .venv-lightrag
 
 The [installer](../scripts/install_research.sh) uses Python 3.12 by default
 (`RAGS_RESEARCH_BOOTSTRAP_PYTHON` can select its executable), installs the local
-RAGs checkout, and runs `pip check`. See the
+RAGs checkout with uv, and runs `uv pip check`. uv 0.13.9 is the tested installer.
+Its explicit CPU backend selects the PyTorch index only for PyTorch packages;
+the remaining pinned dependencies resolve from PyPI. See the
 [RAPTOR manifest](../requirements/research-raptor.txt) and
 [LightRAG manifest](../requirements/research-lightrag.txt) for the full recorded
 dependency versions. The LightRAG wheel SHA-256 is

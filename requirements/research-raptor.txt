@@ -1,7 +1,7 @@
 # Isolated CPU environment validated on CPython 3.12, Linux x86_64.
 # Install only in its own virtual environment; do not merge with core pins.
 # The repository itself is installed separately from its checked-out revision.
---extra-index-url https://download.pytorch.org/whl/cpu
+# The uv installer selects the CPU index only for PyTorch packages.
 annotated-doc==0.0.7
 annotated-types==0.8.0
 anyio==4.16.0

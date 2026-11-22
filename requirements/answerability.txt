@@ -1,6 +1,6 @@
 # Reproduced CPU/Python 3.12 answerability environment.
-# Install torch first from https://download.pytorch.org/whl/cpu, then this lock.
-# scripts/install-answerability.sh performs those two steps and installs the API.
+# scripts/install-answerability.sh uses uv with the explicit CPU PyTorch backend,
+# installs this pinned environment, then adds the API under these constraints.
 certifi==2026.11.20
 charset-normalizer==3.5.2
 filelock==4.2.4

@@ -13,6 +13,7 @@ Version 0.4 adds operator feature permissions, dedicated model endpoint configur
 ## Contents
 
 - [Quick start](#quick-start)
+- [uv environment workflow](#uv-environment-workflow)
 - [Ingest and query](#ingest-and-query)
 - [Architecture and flows](#architecture-and-flows)
 - [Chunking and token budgets](#chunking-and-token-budgets)
@@ -32,14 +33,15 @@ Version 0.4 adds operator feature permissions, dedicated model endpoint configur
 
 ### PostgreSQL and pgvector with Docker
 
-Requires Git, Python 3.11+ for the credential generator, and Docker Compose with
-`--wait` support. The database image is
+Requires Git, [uv](https://docs.astral.sh/uv/getting-started/installation/) and Docker Compose with
+`--wait` support. Examples use Bash on Linux, macOS or WSL. CI and images use uv
+0.13.9; uv supplies Python 3.12 for the credential generator when needed. The database image is
 [`pgvector/pgvector:0.8.7-pg17`](https://github.com/pgvector/pgvector#docker).
 
 ```bash
 git clone https://github.com/MasterLKH180cm/RAGs.git
 cd RAGs
-python scripts/bootstrap_compose.py
+uv run --no-project --python 3.12 python scripts/bootstrap_compose.py
 docker compose up -d --build --wait
 set -a
 source data/client.env
@@ -62,6 +64,40 @@ open [/docs](http://127.0.0.1:8000/docs) for the API. Authenticated health must
 report `storage.backend=postgresql` and `storage.vector_search=pgvector_exact`.
 The application connects as `rags_app`, not the database administrator.
 
+| Startup path | Storage actually selected | Configuration |
+| --- | --- | --- |
+| Supplied Docker Compose | PostgreSQL 17 + pgvector 0.8.7 | Bootstrap supplies the application DSN and installs the extension. |
+| Native uv startup with a valid `RAGS_DATABASE_URL` | PostgreSQL + native pgvector exact search | Supply a reachable PostgreSQL DSN and pre-create the extension. |
+| Native uv startup without `RAGS_DATABASE_URL` | SQLite + FTS5 and local exact vector ranking | `RAGS_DB_PATH` selects the local file. |
+
+The Compose `.env` is container configuration: its `postgres` hostname and
+`/app/config` paths are not host-native settings, and the database has no published
+host port. Use separately provisioned, host-reachable PostgreSQL for a native
+process. Selecting PostgreSQL never silently falls back to SQLite.
+
+For a read-only database confirmation, inspect the extension and actual column types:
+
+```bash
+docker compose exec -T postgres psql -U postgres -d rags -Atc \
+  "SELECT current_database(), extversion FROM pg_extension WHERE extname='vector';"
+docker compose exec -T postgres psql -U postgres -d rags -c \
+  "SELECT table_name, column_name, udt_name FROM information_schema.columns WHERE table_schema='public' AND udt_name='vector';"
+```
+
+The vector columns are `chunks.embedding` and `image_assets.vector`; dense ranking
+uses pgvector cosine-distance SQL (`<=>`). This is exact search, not an HNSW/IVFFlat
+index. The core service has no FAISS dependency. The isolated RAPTOR manifest
+includes `faiss-cpu` as an upstream dependency, but this adapter selects
+`TreeRetriever`, not `FaissRetriever`.
+
+For a deployment smoke test, run the existing verifier below. Unlike the health
+and catalog reads above, `--live` writes its own smoke records and restarts the
+service to test persistence; use it on a test deployment.
+
+```bash
+uv run --no-project --python 3.12 python scripts/check_compose.py --live
+```
+
 ```bash
 docker compose logs -f rags
 docker compose down  # Retains database and application volumes.
@@ -74,25 +110,51 @@ imported; read [migration and backups](#database-migration-and-backups) first.
 
 ### Explicit SQLite development
 
-Requires Python 3.11+ and SQLite FTS5. This separate path keeps offline development
+Requires uv and SQLite FTS5. The project pins Python 3.12 for development while
+retaining Python 3.11+ package support. This separate path keeps offline development
 and existing SQLite data available:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[dev,pdf,mcp,vision]'
+uv sync --locked --extra dev --extra pdf --extra mcp --extra vision
 export RAGS_ENV=development
 export RAGS_API_KEY=local-development-key
 export RAGS_DB_PATH="$PWD/data/rags.db"
 unset RAGS_DATABASE_URL RAGS_FEATURES_FILE
-uvicorn rags.api:app --host 127.0.0.1 --port 8000 --reload
+uv run --no-sync uvicorn rags.api:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 Python reads exported process variables; copying `.env` alone does not configure
-it. For operator-managed PostgreSQL install `.[postgres]`, pre-create the
+it. For operator-managed PostgreSQL include `--extra postgres` in `uv sync`, pre-create the
 `vector` extension as an administrator, grant the application role access to its
 database, and export `RAGS_DATABASE_URL`. A selected PostgreSQL backend fails
 explicitly if unavailable; it never switches to SQLite.
+
+## uv environment workflow
+
+Install uv from its [official installation instructions](https://docs.astral.sh/uv/getting-started/installation/)
+and check `uv --version`; CI and Docker pin **0.13.9**. For a standalone uv
+installation, `uv self update 0.13.9` selects that tested version. The committed
+`uv.lock` fixes dependency versions and hashes; `.python-version` selects Python
+3.12. uv manages `.venv` and reuses its package cache, so shell activation is optional.
+
+```bash
+# API, tooling, PDF, MCP, vision and PostgreSQL support; no model weights are downloaded.
+uv sync --locked --extra dev --extra pdf --extra mcp --extra vision --extra postgres
+uv run --no-sync python -m pytest -q -m unit --require-no-skips
+uv run --no-sync uvicorn rags.api:app --host 127.0.0.1 --port 8000
+```
+
+`uv sync` is exact: repeat **all** extras you want to retain whenever synchronizing.
+For example, add `--extra encoders` to the full command above when using local
+ONNX models. `uv run --no-sync` then uses that prepared environment without changing
+its selected extras. Do not use `--all-extras` for normal development: research and
+answerability runtimes remain isolated because their dependency pins differ.
+
+Use `uv lock` after changing dependency declarations, or `uv lock --upgrade-package
+PACKAGE` for a deliberate package update; inspect and commit the `pyproject.toml`
+and `uv.lock` changes together, then repeat the selected `uv sync --locked` command
+and tests. CI rejects a stale lock. `uv lock --check` verifies it without changing
+it. Installation/cache improvements do not accelerate SQL ranking or model inference.
 
 ## Ingest and query
 
@@ -347,7 +409,7 @@ Use timezone-qualified `valid_from` / `valid_to` during ingestion and `as_of` du
 These optional features load real local ONNX checkpoints:
 
 ```bash
-python -m pip install -e '.[encoders,vision]'
+uv sync --locked --extra dev --extra pdf --extra mcp --extra vision --extra postgres --extra encoders
 export RAGS_MODEL_CACHE=./data/models
 # Semantic single-vector embeddings:
 export RAGS_EMBEDDING_PROVIDER=fastembed
@@ -531,10 +593,10 @@ export RAGS_URL=http://127.0.0.1:8000
 set -a
 source data/client.env
 set +a
-python -m rags.mcp_server
+uv run --no-sync python -m rags.mcp_server
 ```
 
-For the explicit SQLite setup, use its development `RAGS_API_KEY` instead. Start the HTTP service first and use a Python environment with `.[mcp]` installed. The process waits for an MCP client over stdio. See [Codex configuration](docs/codex-mcp.toml) and [Claude Code configuration](docs/claude-mcp.json); use an absolute virtual-environment Python path when necessary.
+For the explicit SQLite setup, use its development `RAGS_API_KEY` instead. Start the HTTP service first and prepare `.venv` with `uv sync --locked --extra mcp` (include any other extras you need to retain). The process waits for an MCP client over stdio. See [Codex configuration](docs/codex-mcp.toml) and [Claude Code configuration](docs/claude-mcp.json); replace the sample absolute repository path so the client uses this prepared environment.
 
 | Routes | Purpose |
 | --- | --- |
@@ -599,13 +661,13 @@ fails the required gate.
 Ordinary CI runs actual Qwen acceptance/refusal on two preselected calibration cases and audits the immutable complete quality report. It checks all file/dataset/profile identities and recomputes the recorded gates, while clearly labelling those metrics as historical. The full 472-forward benchmark is a separate manual workflow option, `full_admission_benchmark`, using the unchanged `--enforce-quality` command and a bounded CPU budget. Any scoring/retrieval change or proposed profile promotion requires a new complete benchmark; a successful contract smoke or recorded-report audit cannot substitute for it. See [the CI resource specification](docs/SPEC_V03.md#9-ci-resource-and-evidence-amendment).
 
 ```bash
-python -m pip install -e ".[dev,pdf,mcp,vision,postgres]"
+uv sync --locked --extra dev --extra pdf --extra mcp --extra vision --extra postgres
 export ORT_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_TELEMETRY=1
-RAGS_ENV=test python -m pytest -q -m unit --require-no-skips \
+RAGS_ENV=test uv run --no-sync python -m pytest -q -m unit --require-no-skips \
   --test-inventory reports/testing/inventory-unit.json \
   --junitxml reports/testing/junit-unit.xml \
   --cov=rags --cov-branch --cov-config=pyproject.toml --cov-report=json:reports/testing/coverage-unit.json
-RAGS_ENV=test python -m pytest -q -m "integration and not external" --require-no-skips \
+RAGS_ENV=test uv run --no-sync python -m pytest -q -m "integration and not external" --require-no-skips \
   --test-inventory reports/testing/inventory-integration.json \
   --junitxml reports/testing/junit-integration.xml \
   --cov=rags --cov-branch --cov-config=pyproject.toml --cov-append \
@@ -614,25 +676,25 @@ RAGS_ENV=test python -m pytest -q -m "integration and not external" --require-no
   --cov-report=html:reports/testing/coverage-html
 # Provision a disposable PostgreSQL database and enable vector as an administrator first.
 # RAGS_TEST_POSTGRES_URL must select that database; missing/unreachable service fails.
-RAGS_ENV=test python -m pytest -q tests/test_postgres_storage.py -m postgres --require-no-skips \
+RAGS_ENV=test uv run --no-sync python -m pytest -q tests/test_postgres_storage.py -m postgres --require-no-skips \
   --test-inventory reports/testing/inventory-postgres.json \
   --junitxml reports/testing/junit-postgres.xml \
   --cov=rags --cov-branch --cov-config=pyproject.toml --cov-append \
   --cov-report=json:reports/testing/coverage-core.json \
   --cov-report=xml:reports/testing/coverage-core.xml \
   --cov-report=html:reports/testing/coverage-html
-python scripts/check_coverage.py
-ruff check rags tests scripts conftest.py --select E4,E7,E9,F
-ruff check rags --select B,RUF021
-RAGS_ENV=test python -m rags.evaluate --dataset examples/eval_v02.json --k 3 --generate
+uv run --no-sync python scripts/check_coverage.py
+uv run --no-sync ruff check rags tests scripts conftest.py --select E4,E7,E9,F
+uv run --no-sync ruff check rags --select B,RUF021
+RAGS_ENV=test uv run --no-sync python -m rags.evaluate --dataset examples/eval_v02.json --k 3 --generate
 ```
 
 Model downloads are opt-in for the integration tests:
 
 ```bash
-RAGS_TEST_COLBERT=1 RAGS_MODEL_CACHE=./data/models python -m pytest tests/test_backends.py -q -m encoders --require-no-skips
-RAGS_TEST_MULTIMODAL=1 RAGS_MODEL_CACHE=./data/models python -m pytest tests/test_multimodal.py -q -m encoders --require-no-skips
-RAGS_TEST_ENCODERS=1 RAGS_MODEL_CACHE=./data/models python -m pytest tests/test_semantic_encoder.py -q -m encoders --require-no-skips
+RAGS_TEST_COLBERT=1 RAGS_MODEL_CACHE=./data/models uv run --no-sync python -m pytest tests/test_backends.py -q -m encoders --require-no-skips
+RAGS_TEST_MULTIMODAL=1 RAGS_MODEL_CACHE=./data/models uv run --no-sync python -m pytest tests/test_multimodal.py -q -m encoders --require-no-skips
+RAGS_TEST_ENCODERS=1 RAGS_MODEL_CACHE=./data/models uv run --no-sync python -m pytest tests/test_semantic_encoder.py -q -m encoders --require-no-skips
 ```
 
 The [36-question synthetic dataset](examples/eval_v02.json) covers retrieval, structured rows, temporal versions, and no-answer cases. The [recorded local report](docs/evaluation-v02-summary.json) includes applicable recall/MRR/nDCG, exact structured/time checks, answer metrics, refusal behavior, citation-record validity, and latency. Unmeasured provider usage, cost, and semantic citation entailment remain `null` with reasons.
@@ -670,8 +732,8 @@ IDs, revisions, provenance, original image bytes and vectors without model calls
 
 ```bash
 # In an installed Python environment; export the application PostgreSQL DSN first.
-python -m pip install -e '.[postgres]'
-python -m rags.migrate --sqlite /absolute/path/to/source-rags.db
+uv sync --locked --extra dev --extra pdf --extra mcp --extra vision --extra postgres
+uv run --no-sync python -m rags.migrate --sqlite /absolute/path/to/source-rags.db
 ```
 
 For the supplied stack the legacy `rag-data` volume remains mounted at
@@ -745,14 +807,14 @@ repository without printing credentials or overwriting existing files.
 | `AGENT_RAG_KEYS_JSON` | `tenant-a` → the same RAG token | Agent API and worker |
 | `AGENT_KEYS_JSON`, `AGENT_APPROVER_KEYS_JSON` | Separate requester/approver tokens → `tenant-a` | Agent configuration |
 
-After generating those files, open a fresh Bash terminal in `RAGs`, activate its
-installed Python environment, and run:
+After generating those files, open a fresh Bash terminal in `RAGs`, prepare its
+uv environment as described above, and run:
 
 ```bash
 set -a
 source data/production.env
 set +a
-uvicorn rags.api:app --host 127.0.0.1 --port 8000
+uv run --no-sync uvicorn rags.api:app --host 127.0.0.1 --port 8000
 ```
 
 The companion instructions start the Agent API and worker with their own shared

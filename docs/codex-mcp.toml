@@ -1,8 +1,10 @@
 # Copy into your LOCAL ~/.codex/config.toml, or a trusted project's
 # .codex/config.toml. No credentials are stored in this file.
+# Prepare the repository .venv with uv sync --locked --extra mcp first.
+# Replace /ABSOLUTE/PATH/TO/RAGs with the actual checkout path.
 # Export RAGS_URL and RAGS_API_KEY in your Codex host environment.
 [mcp_servers.rags]
-command = "python"
-args = ["-m", "rags.mcp_server"]
+command = "uv"
+args = ["run", "--directory", "/ABSOLUTE/PATH/TO/RAGs", "--no-sync", "python", "-m", "rags.mcp_server"]
 env_vars = ["RAGS_URL", "RAGS_API_KEY"]
 startup_timeout_sec = 20

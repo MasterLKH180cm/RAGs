@@ -17,7 +17,7 @@ def validate_image(raw: bytes) -> str:
     try:
         from PIL import Image, UnidentifiedImageError
     except ImportError as exc:
-        raise ValueError("Install vision support: pip install -e '.[vision]'") from exc
+        raise ValueError("Install vision support: uv sync --locked --extra vision (include other selected extras)") from exc
     Image.MAX_IMAGE_PIXELS = 25_000_000
     try:
         with warnings.catch_warnings():
