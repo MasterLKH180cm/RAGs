@@ -54,6 +54,7 @@ def load_env_file(path: str | Path | None) -> None:
     except (OSError, UnicodeError) as exc:
         raise ValueError("Cannot read environment file") from exc
     seen = set()
+    parsed = {}
     for number, line in enumerate(raw.splitlines(), start=1):
         if not line.strip() or line.lstrip().startswith("#"):
             continue
@@ -67,7 +68,9 @@ def load_env_file(path: str | Path | None) -> None:
             raise ValueError(f"Malformed shell quoting on line {number}") from exc
         if len(tokens) > 1:
             raise ValueError(f"Environment line {number} must contain one value")
-        os.environ.setdefault(name, tokens[0] if tokens else "")
+        parsed[name] = tokens[0] if tokens else ""
+    for name, value in parsed.items():
+        os.environ.setdefault(name, value)
 
 
 def init_config(directory: Path, profile: str) -> tuple[Path, Path]:

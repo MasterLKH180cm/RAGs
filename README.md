@@ -34,11 +34,11 @@ Version 0.4 adds operator feature permissions, dedicated model endpoint configur
 
 ### Installable CLI (no clone needed)
 
-The Hatch wheel publishes the \`rags\` console command. The package has **not**
+The Hatch wheel publishes the `rags` console command. The package has **not**
 been published on PyPI; install directly from the repository until a release
 artifact is published.
 
-\`\`\`bash
+```bash
 # One-off, cached execution of the command from GitHub:
 uvx --from git+https://github.com/MasterLKH180cm/RAGs.git rags --help
 
@@ -54,36 +54,36 @@ rags init --profile offline
 rags doctor --env-file .env --no-db
 rags serve --env-file .env
 # Open http://127.0.0.1:8000/docs after serving.
-\`\`\`
+```
 
-The CLI also runs as \`python -m rags\` from an installed package. \`rags init\`
-generates a private 0600 \`.env\` with a distinct random token-to-tenant mapping
-and a nonsecret \`rags.features.json\`; it never overwrites either file. The
+The CLI also runs as `python -m rags` from an installed package. `rags init`
+generates a private 0600 `.env` with a distinct random token-to-tenant mapping
+and a nonsecret `rags.features.json`; it never overwrites either file. The
 service uses the same FastAPI application and typed configuration validation.
-Use the generated \`RAGS_API_KEY\` from your private \`.env\` in bearer requests,
-but do not put \`.env\` in version control. Keep native \`rags serve\` behind a
+Use the generated `RAGS_API_KEY` from your private `.env` in bearer requests,
+but do not put `.env` in version control. Keep native `rags serve` behind a
 trusted reverse proxy and an auth gateway before permitting non-loopback binding:
-\`--allow-public\` is explicit.
+`--allow-public` is explicit.
 
 | Profile | Storage | Embeddings | Answer mode | Operator action |
 | --- | --- | --- | --- | --- |
-| \`offline\` | SQLite | Deterministic local hash | Extractive | No model credentials |
-| \`postgres\` | PostgreSQL/pgvector | Deterministic local hash | Extractive | Pre-install \`vector\`, replace the DSN placeholder, install \`postgres\` extra |
-| \`openai\` | SQLite | OpenAI API | OpenAI-compatible chat | Set \`RAGS_EMBEDDING_API_KEY\` and \`RAGS_GENERATION_API_KEY\` in a secret environment |
-| \`ollama\` | SQLite | Ollama OpenAI-compatible API | Ollama local chat | Run Ollama and fetch matching embedding/chat models separately |
-| \`anthropic\` | SQLite | Deterministic local hash | Anthropic chat | Set \`ANTHROPIC_API_KEY\` in a secret environment |
+| `offline` | SQLite | Deterministic local hash | Extractive | No model credentials |
+| `postgres` | PostgreSQL/pgvector | Deterministic local hash | Extractive | Pre-install `vector`, replace the DSN placeholder, install `postgres` extra |
+| `openai` | SQLite | OpenAI API | OpenAI-compatible chat | Set `RAGS_EMBEDDING_API_KEY` and `RAGS_GENERATION_API_KEY` in a secret environment |
+| `ollama` | SQLite | Ollama OpenAI-compatible API | Ollama local chat | Run Ollama and fetch matching embedding/chat models separately |
+| `anthropic` | SQLite | Deterministic local hash | Anthropic chat | Set `ANTHROPIC_API_KEY` in a secret environment |
 
-Choose with \`rags init --profile postgres --directory /path/to/existing/dir\`.
+Choose with `rags init --profile postgres --directory /path/to/existing/dir`.
 For optional PostgreSQL support, install with:
 
-\`\`\`bash
+```bash
 uv tool install "rags-platform[postgres] @ git+https://github.com/MasterLKH180cm/RAGs.git"
 # Or from a clone: uv sync --locked --extra postgres
 rags doctor --env-file .env --json  # Read-only SELECTs, no schema mutations.
 rags doctor --env-file .env --no-db  # Offline configuration-only check.
-\`\`\`
+```
 
-External environment variables override settings from \`--env-file\`. The
+External environment variables override settings from `--env-file`. The
 parser reads shell-quoted assignments without executing shell commands.
 Doctor reports provider choices, model identifiers, hostnames, feature flag
 counts, storage backend, extension and vector type; it never prints secret
@@ -91,16 +91,16 @@ values or contacts model endpoints. An uninitialized SQLite/PostgreSQL schema
 is reported as a warning, not initialized by the diagnostic.
 
 For repeatable, **synthetic** PostgreSQL comparisons, run the opt-in benchmark
-on a disposable database or one with \`TEMP\` privileges. It creates and drops
+on a disposable database or one with `TEMP` privileges. It creates and drops
 temporary tables only, and reports p50/p95 plus EXPLAIN buffer observations.
-The \`unfiltered_tenant_scan\` baseline includes client-side filtering; the new
-\`scoped_revision_join\` pushes authorized revision keys into PostgreSQL,
+The `unfiltered_tenant_scan` baseline includes client-side filtering; the new
+`scoped_revision_join` pushes authorized revision keys into PostgreSQL,
 retaining exact pgvector ranking and tenant boundaries.
 
-\`\`\`bash
+```bash
 # Requires a valid host-reachable RAGS_DATABASE_URL from the selected env profile.
 rags benchmark --env-file .env --documents 200 --chunks-per-document 8 --iterations 20 --json
-\`\`\`
+```
 
 These timings characterize the selected synthetic data and single connection;
 they cannot establish production capacity, p99, or a connection-pooling gain.

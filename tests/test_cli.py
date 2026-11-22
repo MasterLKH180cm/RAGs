@@ -15,10 +15,19 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture(autouse=True)
-def clean_rag_env(monkeypatch):
-    for name in tuple(os.environ):
-        if name.startswith(("RAGS_", "OPENAI_", "ANTHROPIC_")):
-            monkeypatch.delenv(name)
+def clean_rag_env():
+    """The CLI writes process env without monkeypatch, so restore it explicitly."""
+    prefixes = ("RAGS_", "OPENAI_", "ANTHROPIC_")
+    original = {key: val for key, val in os.environ.items() if key.startswith(prefixes)}
+    for key in original:
+        os.environ.pop(key)
+    try:
+        yield
+    finally:
+        for key in tuple(os.environ):
+            if key.startswith(prefixes):
+                os.environ.pop(key)
+        os.environ.update(original)
 
 
 def test_cli_parser_exposes_installable_commands():
@@ -161,3 +170,10 @@ def test_all_nonpostgres_profiles_have_consistent_model_settings(tmp_path, profi
     assert config.model_provider == ("extractive" if profile == "offline" else
                                      "anthropic" if profile == "anthropic" else "openai")
     assert config.features.enabled("query")
+
+def test_malformed_environment_file_does_not_partially_modify_process(tmp_path):
+    source = tmp_path / "partial.env"
+    source.write_text("RAGS_ENV=development\nDUP=ok\nDUP=again\n")
+    with pytest.raises(ValueError):
+        cli.load_env_file(source)
+    assert "RAGS_ENV" not in os.environ and "DUP" not in os.environ
