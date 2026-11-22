@@ -17,6 +17,19 @@ def _fact(value: str, maximum: int) -> str:
     return value.strip()
 
 
+def scoped_session(subject: str, session_id: str) -> str:
+    """Isolate each verified subject's agent memory within a tenant.
+
+    Same-tenant users with identical public session IDs cannot read another
+    person's history or observations. Raw subject values are not used as keys.
+    """
+    _id(session_id, "session")
+    if not isinstance(subject, str) or not 1 <= len(subject) <= 256:
+        raise ValueError("A verified subject is required for memory")
+    digest = hashlib.sha256(subject.encode("utf-8") + b"\0" + session_id.encode("utf-8")).hexdigest()
+    return "subject_" + digest
+
+
 class ConversationStore:
     def __init__(self, state: StateStore):
         self.state = state

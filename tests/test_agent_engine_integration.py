@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from rags.agents.config import AgentPlatformConfig
 from rags.agents.engine import AgentEngine, ToolRegistry, ToolSpec
+from rags.agents.memory import scoped_session
 from rags.agents.router import ModelReply, ToolCall
 from rags.agents.state import StateStore
 from rags.auth import Principal, PERMISSIONS
@@ -73,11 +74,11 @@ def test_agent_completes_without_tool_and_persists_conversation(components):
                        model="main", session_id="conversation1")
     assert cp.status == "completed" and cp.state["answer"] == "The final answer"
     assert len(bot.calls) == 1
-    assert service.history.last("tenant-a", "conversation1") == [
+    assert service.history.last("tenant-a", scoped_session(principal().subject, "conversation1")) == [
         {"role": "user", "content": "What is the retention policy?"},
         {"role": "assistant", "content": "The final answer"},
     ]
-    assert service.history.last("tenant-b", "conversation1") == []
+    assert service.history.last("tenant-b", scoped_session(principal().subject, "conversation1")) == []
     with pytest.raises(CapabilityError) as foreign:
         service.get(principal("tenant-b"), cp.run_id)
     assert foreign.value.status_code == 404
@@ -105,7 +106,7 @@ def test_agent_approval_gate_happens_before_tool_and_resumes_exactly_once(compon
     resumed = service.resume(principal(), waiting.run_id,
                              expected_revision=waiting.revision, approved=True)
     assert resumed.status == "completed"
-    assert invoked == [("tenant-a", "conversation", 3)]
+    assert invoked == [("tenant-a", scoped_session(principal().subject, "conversation"), 3)]
     assert bot.calls[-1][1][-1]["role"] == "tool"
     assert bot.calls[-1][1][-1]["tool_call_id"] == "call_1"
     with pytest.raises(CapabilityError):
@@ -191,7 +192,7 @@ def test_agent_memory_flag_prevents_persistent_conversation(components):
     bot = FakeRouter(reply("Output without memory"))
     service = engine(state, replace(config, memory_enabled=False), bot)
     service.start(principal(), goal="Summarize this", model="main", session_id="session")
-    assert service.history.last("tenant-a", "session") == []
+    assert service.history.last("tenant-a", scoped_session(principal().subject, "session")) == []
 
 
 def test_agent_tool_registry_enforces_pydantic_extra_forbid():
@@ -205,7 +206,7 @@ def test_memory_scope_required_to_read_or_store_agent_history(components):
     state, config = components
     from rags.agents.memory import ConversationStore
     memory = ConversationStore(state)
-    memory.append("tenant-a", "shared", "user", "Private prior question")
+    memory.append("tenant-a", scoped_session(principal().subject, "shared"), "user", "Private prior question")
     fake = FakeRouter(reply("Generic answer"))
     service = engine(state, config, fake)
     permissions = {"rags:agent", "rags:generate", "rags:query"}
@@ -213,7 +214,7 @@ def test_memory_scope_required_to_read_or_store_agent_history(components):
                            model="main", session_id="shared")
     assert result.status == "completed"
     assert "Private prior question" not in repr(fake.calls)
-    assert len(memory.last("tenant-a", "shared")) == 1
+    assert len(memory.last("tenant-a", scoped_session(principal().subject, "shared"))) == 1
 
 
 def test_gateway_hallucinated_citation_does_not_complete_agent(components):
@@ -227,3 +228,17 @@ def test_gateway_hallucinated_citation_does_not_complete_agent(components):
     result = engine(state, config, fake, registry).start(
         principal(), goal="Cite the authorized evidence", model="main", session_id="evidence")
     assert result.status == "failed" and result.state["stop_reason"] == "invalid_citation"
+
+
+def test_same_tenant_different_subjects_cannot_share_conversation_or_observations(components):
+    from rags.agents.memory import ConversationStore, ObservationStore
+    state, _config = components
+    alice = scoped_session("alice", "shared")
+    bob = scoped_session("bob", "shared")
+    assert alice != bob and "alice" not in alice and "shared" not in alice
+    history = ConversationStore(state)
+    history.append("tenant-a", alice, "user", "Alice only")
+    assert history.last("tenant-a", bob) == []
+    observations = ObservationStore(state)
+    observations.observe("tenant-a", alice, fact="Alice preference", source_id="consent")
+    assert observations.recent("tenant-a", bob) == []

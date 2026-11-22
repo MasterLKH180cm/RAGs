@@ -147,3 +147,12 @@ def test_default_off_prevents_mounting_any_unconfigured_agent_routes(tmp_path, m
         assert response.status_code == 404
     finally:
         client.close()
+
+
+def test_same_tenant_users_cannot_read_each_others_observation_memory(settings):
+    with TestClient(create_app(settings)) as client:
+        saved = client.post("/agents/sessions/shared/observations", headers=AGENT,
+                            json={"fact": "Operator-private preference", "source_id": "consent"})
+        assert saved.status_code == 201, saved.text
+        assert len(client.get("/agents/sessions/shared/observations", headers=AGENT).json()["observations"]) == 1
+        assert client.get("/agents/sessions/shared/observations", headers=ADMIN).json()["observations"] == []

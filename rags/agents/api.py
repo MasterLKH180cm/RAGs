@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from rags.agents.config import AgentPlatformConfig
 from rags.agents.engine import AgentEngine
+from rags.agents.memory import scoped_session
 from rags.agents.router import ModelRouter
 from rags.agents.state import StateStore
 from rags.agents.templates import catalog as workflow_catalog, get_template, make_evidence_review
@@ -113,7 +114,7 @@ def mount_agent_api(app, *, store, rag, config: AgentPlatformConfig, auth,
         principal = require(request, "rags:agent", "rags:memory")
         if not config.memory_enabled:
             raise CapabilityError("feature_disabled", "Memory is disabled", 403)
-        return {"messages": engine.history.last(principal.tenant, session_id,
+        return {"messages": engine.history.last(principal.tenant, scoped_session(principal.subject, session_id),
                                                  limit=config.max_history_turns)}
 
     @api.get("/sessions/{session_id}/observations")
@@ -122,7 +123,7 @@ def mount_agent_api(app, *, store, rag, config: AgentPlatformConfig, auth,
         principal = require(request, "rags:agent", "rags:memory")
         if not config.memory_enabled:
             raise CapabilityError("feature_disabled", "Memory is disabled", 403)
-        return {"observations": engine.observations.recent(principal.tenant, session_id)}
+        return {"observations": engine.observations.recent(principal.tenant, scoped_session(principal.subject, session_id))}
 
     @api.post("/sessions/{session_id}/observations", status_code=201)
     def save_observation(request: Request, session_id: str, data: ObserveIn,
@@ -130,7 +131,7 @@ def mount_agent_api(app, *, store, rag, config: AgentPlatformConfig, auth,
         principal = require(request, "rags:agent", "rags:memory")
         if not config.memory_enabled:
             raise CapabilityError("feature_disabled", "Memory is disabled", 403)
-        digest = engine.observations.observe(principal.tenant, session_id,
+        digest = engine.observations.observe(principal.tenant, scoped_session(principal.subject, session_id),
                                              fact=data.fact, source_id=data.source_id,
                                              confidence=data.confidence)
         return {"observation_id": digest}

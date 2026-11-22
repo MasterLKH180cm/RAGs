@@ -9,7 +9,7 @@ from typing import Callable
 from pydantic import BaseModel, ConfigDict, Field
 
 from rags.agents.config import AgentPlatformConfig
-from rags.agents.memory import ConversationStore, ObservationStore, context_messages
+from rags.agents.memory import ConversationStore, ObservationStore, context_messages, scoped_session
 from rags.agents.router import ModelRouter, ToolCall, TOOL_NAME
 from rags.agents.state import Checkpoint, StateStore, _id
 from rags.auth import Principal
@@ -128,11 +128,12 @@ class AgentEngine:
         _id(session_id, "session")
         if model not in self.config.models:
             raise CapabilityError("model_not_allowed", "Unknown model alias", 403)
-        history = (self.history.last(principal.tenant, session_id,
+        memory_id = scoped_session(principal.subject, session_id)
+        history = (self.history.last(principal.tenant, memory_id,
                                      limit=self.config.max_history_turns)
                    if (self.config.memory_enabled and
                        "rags:memory" in principal.permissions) else [])
-        observations = (self.observations.recent(principal.tenant, session_id)
+        observations = (self.observations.recent(principal.tenant, memory_id)
                         if self.config.memory_enabled and "rags:memory" in principal.permissions else [])
         messages = [{"role": "system", "content":
                      "You are a bounded tool-using RAG assistant. Use ONLY the declared tools. "
@@ -208,7 +209,7 @@ class AgentEngine:
             else:
                 try:
                     args = spec.schema.model_validate(call.arguments)
-                    result = spec.handler(cp.tenant, cp.state["session_id"], args)
+                    result = spec.handler(cp.tenant, scoped_session(principal.subject, cp.state["session_id"]), args)
                     data = json.dumps(result, ensure_ascii=False, allow_nan=False)
                     if len(data.encode("utf-8")) > 8192:
                         raise ValueError("Tool response too long")
@@ -302,7 +303,8 @@ class AgentEngine:
                 return self._step(cp, status="failed", steps=steps, stop_reason="invalid_citation")
             cp = self._step(cp, status="completed", steps=steps, answer=answer)
             if self.config.memory_enabled and "rags:memory" in principal.permissions:
-                self.history.append(cp.tenant, cp.state["session_id"], "user", cp.state["goal"])
-                self.history.append(cp.tenant, cp.state["session_id"], "assistant", answer[:4000])
+                memory_id = scoped_session(principal.subject, cp.state["session_id"])
+                self.history.append(cp.tenant, memory_id, "user", cp.state["goal"])
+                self.history.append(cp.tenant, memory_id, "assistant", answer[:4000])
             return cp
         return cp
