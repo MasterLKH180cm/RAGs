@@ -1,5 +1,4 @@
 """FastAPI service with tenant-scoped key authentication and bounded inputs."""
-import hmac
 import io
 import json
 import math
@@ -12,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from rags.auth import Authenticator, authorization_for_path, Principal
 from rags.chunking import ChunkConfig
 from rags.config import Settings
 from rags.limits import BodyLimitMiddleware
@@ -19,6 +19,7 @@ from rags.multimodal import install_multimodal_routes
 from rags.providers import Providers
 from rags.registry import CapabilityError
 from rags.retrieval import MODES, RAGService, now
+from rags.features import strategy_features
 from rags.storage import Store, timestamp
 from rags.tokenization import TokenizerConfig
 
@@ -180,6 +181,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     store = Store(config.db_path)
     service = RAGService(store, Providers(config))
     app.state.service = service
+    authenticator = Authenticator(mode=config.auth_mode, keys=config.keys,
+                                  key_roles=config.key_roles, oauth2=config.oauth2)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, exc):
@@ -194,34 +197,57 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(status_code=502, content={"detail": {"code": "provider_failed", "reason": "Configured provider request failed"}})
 
     def auth(request: Request, authorization: Annotated[str | None, Header()] = None) -> str:
-        if not authorization or not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Bearer token required")
-        supplied = authorization[7:]
-        for key, tenant in config.keys.items():
-            if hmac.compare_digest(supplied.encode("utf-8"), key.encode("utf-8")):
-                if request.headers.get("X-RAGS-Interface") == "mcp":
-                    config.features.require("mcp")
-                path = request.url.path
-                if path == "/query":
-                    config.features.require("query")
-                elif path == "/images":
-                    config.features.require("uploads", "ingestion", "image_captioning", "model_generation",
-                                            "embedding." + config.embedding_provider)
+        principal = authenticator.authenticate(authorization)
+        authorization_for_path(principal, path=request.url.path, method=request.method,
+                               is_mcp=request.headers.get("X-RAGS-Interface") == "mcp")
+        request.state.principal = principal
+        path = request.url.path
+        # Operator flags and identity privileges are independent restrictions.
+        if path == "/query":
+            config.features.require("query")
+        elif path == "/images":
+            config.features.require("uploads", "ingestion", "image_captioning", "model_generation",
+                                    "embedding." + config.embedding_provider)
+            service.preflight_ingestion()
+        elif path == "/documents" or path.startswith("/documents/"):
+            if request.method == "GET":
+                config.features.require("documents")
+            elif request.method == "DELETE":
+                config.features.require("deletion")
+            else:
+                config.features.require("ingestion")
+                if path == "/documents/upload":
+                    config.features.require("uploads")
                     service.preflight_ingestion()
-                elif path == "/documents" or path.startswith("/documents/"):
-                    if request.method == "GET":
-                        config.features.require("documents")
-                    elif request.method == "DELETE":
-                        config.features.require("deletion")
-                    else:
-                        config.features.require("ingestion")
-                        if path == "/documents/upload":
-                            config.features.require("uploads")
-                            service.preflight_ingestion()
-                        elif path.endswith("/reindex"):
-                            config.features.require("reindex")
-                return tenant
-        raise HTTPException(status_code=401, detail="Invalid API key")
+                elif path.endswith("/reindex"):
+                    config.features.require("reindex")
+        return principal.tenant
+
+    def effective_features(principal: Principal) -> dict[str, bool]:
+        """Advertise only features the authenticated caller is allowed to use."""
+        effective = config.features.as_dict()
+        permissions = {
+            "documents": "rags:read", "query": "rags:query",
+            "ingestion": "rags:write", "deletion": "rags:delete",
+            "reindex": "rags:reindex", "model_generation": "rags:generate",
+            "original_images": "rags:original_image", "mcp": "rags:mcp",
+        }
+        for name, required in permissions.items():
+            effective[name] = effective[name] and required in principal.permissions
+        return effective
+
+    def effective_catalog(tenant: str, principal: Principal) -> list[dict]:
+        items = service.catalog(tenant)
+        for item in items:
+            requirements = strategy_features(item["id"])
+            denied = set()
+            if "rags:query" not in principal.permissions:
+                denied.add("rags:query")
+            if "model_generation" in requirements and "rags:generate" not in principal.permissions:
+                denied.add("rags:generate")
+            if denied:
+                item.update(status="insufficient_scope", enabled=False, disabled_by=sorted(denied))
+        return items
 
     multimodal = install_multimodal_routes(app, auth, db_path=config.db_path, features=config.features)
 
@@ -236,18 +262,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "storage": {"backend": store.storage_backend, "vector_search": store.vector_search}}
 
     @app.get("/capabilities")
-    def capabilities(tenant: Annotated[str, Depends(auth)]) -> dict:
-        return {"features": config.features.as_dict(),
+    def capabilities(request: Request, tenant: Annotated[str, Depends(auth)]) -> dict:
+        principal = request.state.principal
+        return {"features": effective_features(principal),
                 "storage": {"backend": store.storage_backend, "vector_search": store.vector_search},
                 "generation": {"provider": config.model_provider, "model": service.provider.model_identity},
-                "capabilities": service.catalog(tenant),
+                "permissions": sorted(principal.permissions),
+                "capabilities": effective_catalog(tenant, principal),
                 "image_assets": multimodal.capability()}
 
     @app.get("/strategies")
-    def strategies(tenant: Annotated[str, Depends(auth)]) -> dict:
-        catalog = service.catalog(tenant)
+    def strategies(request: Request, tenant: Annotated[str, Depends(auth)]) -> dict:
+        principal = request.state.principal
+        catalog = effective_catalog(tenant, principal)
         return {"strategies": [item["id"] for item in catalog if item["enabled"]], "tenant": tenant,
-                "features": config.features.as_dict(), "capabilities": [*catalog, multimodal.capability()]}
+                "features": effective_features(principal),
+                "permissions": sorted(principal.permissions),
+                "capabilities": [*catalog, multimodal.capability()]}
 
     def ingest_source(tenant: str, **document) -> dict:
         try:
@@ -258,7 +289,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/documents", status_code=201)
-    def ingest(data: DocumentIn, tenant: Annotated[str, Depends(auth)]) -> dict:
+    def ingest(data: DocumentIn, request: Request, tenant: Annotated[str, Depends(auth)]) -> dict:
+        processing = data.chunking or config.chunking_config
+        if config.model_provider != "extractive" and (
+                processing.get("strategy") == "contextual"
+                or "graph" in data.index_features or "hierarchy" in data.index_features):
+            request.state.principal.require("rags:generate")
         if len(json.dumps(data.metadata)) > 16_000:
             raise HTTPException(status_code=413, detail="metadata too large")
         return ingest_source(
@@ -359,7 +395,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return store.revisions(tenant, document_id)
 
     @app.post("/documents/{document_id}/reindex")
-    def reindex(document_id: str, data: ReindexIn, tenant: Annotated[str, Depends(auth)]) -> dict:
+    def reindex(document_id: str, data: ReindexIn, request: Request,
+                tenant: Annotated[str, Depends(auth)]) -> dict:
+        if config.model_provider != "extractive":
+            request.state.principal.require("rags:generate")
         try:
             return service.reindex(tenant, document_id, **data.model_dump())
         except CapabilityError:
@@ -368,7 +407,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/query")
-    def query(data: QueryIn, tenant: Annotated[str, Depends(auth)]) -> dict:
+    def query(data: QueryIn, request: Request, tenant: Annotated[str, Depends(auth)]) -> dict:
+        if (data.generate and config.model_provider != "extractive"
+                or "model_generation" in strategy_features(data.mode)):
+            request.state.principal.require("rags:generate")
         try:
             return service.query(tenant, **data.model_dump(exclude_none=True))
         except CapabilityError:
