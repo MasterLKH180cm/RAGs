@@ -40,6 +40,10 @@
     $('#query-form').reset();$('#add-form').reset();$('#delete-form').reset();
     $('#document-search').value='';$('#delete-confirm').value='';
     $('#delete-submit').disabled=true;
+    // Async request finalizers skip a changed identity by design; restore all
+    // tenant-specific controls here instead of leaving them busy for the next login.
+    $('#query-submit').disabled=false;$('#query-submit').textContent='開始檢索 ↗';
+    $('#add-submit').disabled=false;$('#add-submit').textContent='建立並索引';
     for(const id of ['#add-dialog','#delete-dialog'])if($(id).open)$(id).close();
     for(const id of ['#query-answer','#citation-count','#query-status',
         '#document-count','#document-range','#stat-documents','#stat-chunks',
