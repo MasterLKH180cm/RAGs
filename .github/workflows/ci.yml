@@ -134,7 +134,7 @@ jobs:
               assert len(root.joinpath(name).read_bytes()) > 1000
           print("Installed wheel contains the standalone self-hosted dashboard")
           PYTHON
-          "$RUNNER_TEMP/rags-wheel/bin/rags" --version | grep -F '0.7.0'
+          "$RUNNER_TEMP/rags-wheel/bin/rags" --version | grep -F '0.8.0'
           mkdir -p "$RUNNER_TEMP/rags-wheel-profile"
           "$RUNNER_TEMP/rags-wheel/bin/rags" init --profile offline \
             --directory "$RUNNER_TEMP/rags-wheel-profile"

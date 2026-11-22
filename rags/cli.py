@@ -230,7 +230,7 @@ def _run_serve(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="rags", description="RAGs platform tooling")
-    parser.add_argument("--version", action="version", version="rags-platform 0.7.0")
+    parser.add_argument("--version", action="version", version="rags-platform 0.8.0")
     sub = parser.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init", help="Create private credentials and a deployment profile")
     init.add_argument("--profile", choices=PROFILES, default="offline")
@@ -244,6 +244,25 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
     serve.add_argument("--allow-public", action="store_true", help="Explicitly allow non-loopback bind")
+    agents = sub.add_parser("agent", help="Inspect and run the opt-in Agent Platform")
+    agent_actions = agents.add_subparsers(dest="agent_command", required=True)
+    agent_doctor = agent_actions.add_parser("doctor", help="Offline router/agent readiness report")
+    agent_doctor.add_argument("--env-file", type=Path)
+    agent_doctor.add_argument("--json", action="store_true")
+    agent_run = agent_actions.add_parser("run", help="Start a tenant-scoped run through local RAG API")
+    agent_run.add_argument("--env-file", type=Path)
+    agent_run.add_argument("--goal-file", type=Path, required=True)
+    agent_run.add_argument("--model", required=True)
+    agent_run.add_argument("--session", required=True)
+    agent_run.add_argument("--port", type=int, default=8000)
+    agent_review = agent_actions.add_parser("review", help="Approve or deny a pending tool call")
+    agent_review.add_argument("--env-file", type=Path)
+    agent_review.add_argument("--run-id", required=True)
+    agent_review.add_argument("--revision", type=int, required=True)
+    verdict = agent_review.add_mutually_exclusive_group(required=True)
+    verdict.add_argument("--approve", action="store_true")
+    verdict.add_argument("--deny", action="store_true")
+    agent_review.add_argument("--port", type=int, default=8000)
     bench = sub.add_parser("benchmark", help="Synthetic read-path PostgreSQL comparison (temporary tables)")
     bench.add_argument("--env-file", type=Path)
     bench.add_argument("--documents", type=int, default=200)
@@ -264,6 +283,48 @@ def main(argv: list[str] | None = None) -> int:
             print("Start with: rags serve --env-file " + str(paths[0]))
             return 0
         load_env_file(args.env_file)
+        if args.command == "agent":
+            from rags.agents.config import AgentPlatformConfig
+            import httpx
+
+            settings = AgentPlatformConfig.from_env()
+            if args.agent_command == "doctor":
+                report = {"router_enabled": settings.router_enabled,
+                          "agent_enabled": settings.agent_enabled,
+                          "memory_enabled": settings.memory_enabled,
+                          "model_aliases": sorted(settings.models),
+                          "gateway_configured": bool(settings.gateway_url and settings.gateway_key)}
+                if args.json:
+                    print(json.dumps(report, sort_keys=True))
+                else:
+                    print("Agent Platform: " + ("ready" if settings.agent_enabled else "disabled"))
+                    print("Model aliases: " + ", ".join(sorted(settings.models)))
+                return 0 if settings.agent_enabled else 1
+            if not 1 <= args.port <= 65535:
+                raise ValueError("Agent API port must be 1..65535")
+            token = os.getenv("RAGS_API_KEY", "")
+            if not token or len(token) > 4096:
+                raise ValueError("Set RAGS_API_KEY to a scoped local API token")
+            if args.agent_command == "run":
+                path = args.goal_file
+                if path.is_symlink() or not path.is_file() or path.stat().st_size > 8192:
+                    raise ValueError("Provide a regular small goal file")
+                goal = path.read_text(encoding="utf-8").strip()
+                payload = {"goal": goal, "model": args.model, "session_id": args.session}
+                endpoint = "/agents/runs"
+            else:
+                payload = {"expected_revision": args.revision, "approved": args.approve}
+                endpoint = "/agents/runs/" + args.run_id + "/resume"
+            with httpx.Client(timeout=90, follow_redirects=False, trust_env=False) as client:
+                response = client.post(
+                    f"http://127.0.0.1:{args.port}" + endpoint,
+                    headers={"Authorization": "Bearer " + token}, json=payload)
+                response.raise_for_status()
+                result = response.json()
+            print(json.dumps({key: result.get(key) for key in (
+                "run_id", "status", "revision", "answer", "pending_approval", "stop_reason")},
+                ensure_ascii=False))
+            return 0
         if args.command == "doctor":
             result = diagnose(check_db=not args.no_db)
             if args.json:
