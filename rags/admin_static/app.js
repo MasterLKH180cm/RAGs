@@ -4,7 +4,7 @@
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
   const titles = {overview:'總覽',documents:'知識文件',explorer:'檢索探索',agents:'自主代理',observability:'可觀測性',settings:'設定與權限'};
-  const state = {csrf:'',tenant:'',permissions:[],view:'overview',offset:0,search:'',limit:20,deleteTarget:null,agentRun:null,loading:false,authenticated:false,epoch:0};
+  const state = {csrf:'',tenant:'',permissions:[],view:'overview',offset:0,search:'',limit:20,deleteTarget:null,agentRun:null,workflowRun:null,workflowTemplates:[],loading:false,authenticated:false,epoch:0};
   const pending=new Set();
   let searchTimer,toastTimer;
   function el(tag,klass,label){
@@ -30,6 +30,7 @@
     pending.clear();
     state.csrf='';state.tenant='';state.permissions=[];state.offset=0;
     state.search='';state.loading=false;state.deleteTarget=null;state.agentRun=null;
+    state.workflowRun=null;state.workflowTemplates=[];
     clearTimeout(searchTimer);
     for(const id of ['#query-citations','#documents-body',
         '#activity-list','#feature-list','#permission-list','#overview-chart','#monitor-chart']){
@@ -38,8 +39,10 @@
     $('#query-output').hidden=true;$('#query-empty').hidden=false;
     $('#agent-output').hidden=true;$('#agent-empty').hidden=false;
     $('#agent-approval').hidden=true;
+    $('#workflow-actions').hidden=true;$('#workflow-approval').hidden=true;
+    $('#workflow-recover').hidden=true;$('#workflow-graph').replaceChildren();
     $('#login-error').hidden=true;$('#login-error').textContent='';
-    $('#query-form').reset();$('#add-form').reset();$('#delete-form').reset();$('#agent-form').reset();
+    $('#query-form').reset();$('#add-form').reset();$('#delete-form').reset();$('#agent-form').reset();$('#workflow-form').reset();
     $('#document-search').value='';$('#delete-confirm').value='';
     $('#delete-submit').disabled=true;
     // Async request finalizers skip a changed identity by design; restore all
@@ -48,6 +51,8 @@
     $('#add-submit').disabled=false;$('#add-submit').textContent='建立並索引';
     $('#agent-submit').disabled=false;$('#agent-submit').textContent='執行代理任務 ↗';
     $('#agent-approve').disabled=false;$('#agent-deny').disabled=false;
+    $('#workflow-start').disabled=false;$('#workflow-start').textContent='執行工作流 →';
+    $('#workflow-approve').disabled=false;$('#workflow-deny').disabled=false;
     for(const id of ['#add-dialog','#delete-dialog'])if($(id).open)$(id).close();
     for(const id of ['#query-answer','#citation-count','#query-status',
         '#document-count','#document-range','#stat-documents','#stat-chunks',
@@ -55,7 +60,9 @@
         '#setting-storage','#setting-embedding','#setting-generation',
         '#tenant-sidebar','#session-expiry','#agent-answer','#agent-run-id',
         '#agent-steps','#agent-tool-count','#agent-stop-reason','#agent-pending-tool',
-        '#agent-pending-args','#agent-status','#agent-availability','#monitor-requests',
+        '#agent-pending-args','#agent-status','#agent-availability',
+        '#workflow-status','#workflow-availability','#workflow-cursor','#workflow-run-id',
+        '#workflow-human-status','#workflow-sources','#workflow-description','#monitor-requests',
         '#monitor-errors','#monitor-p50','#monitor-p95','#exported-spans',
         '#dropped-spans','#failed-exports','#collector-status'])txt(id,'—');
     $('#global-notice').classList.remove('visible');
@@ -129,7 +136,7 @@
     if(view==='overview'||view==='observability')refreshOverview();
     if(view==='documents')loadDocuments();
     if(view==='settings')loadOperations();
-    if(view==='agents')loadAgentCapabilities();
+    if(view==='agents'){loadAgentCapabilities();loadWorkflowCatalog();}
   }
   function drawChart(target,series){
     const root=$(target);root.replaceChildren();
