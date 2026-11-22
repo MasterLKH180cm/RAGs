@@ -372,6 +372,78 @@ def install_admin(app: FastAPI, *, settings: Settings, authenticator: Authentica
                             approved=data.approved, feedback=data.feedback)
         return runtime.summary(cp)
 
+    @app.get("/admin/api/agents/workflows", include_in_schema=False)
+    def admin_workflow_catalog(request: Request):
+        require(request, "rags:agent", "rags:query")
+        _agent_engine()
+        from rags.agents.templates import catalog
+
+        return {"templates": catalog()}
+
+    def _workflow_owner(principal, run_id):
+        runtime = _agent_engine()
+        cp = runtime.state.get(principal.tenant, run_id)
+        if cp is None or cp.kind != "workflow" or cp.state["input"].get("owner_subject") != principal.subject:
+            raise HTTPException(404, detail={"code": "not_found"})
+        return cp
+
+    @app.post("/admin/api/agents/workflows/{workflow_name}/runs",
+              status_code=201, include_in_schema=False)
+    def admin_workflow_start(request: Request, workflow_name: str, payload: dict):
+        from pydantic import ValidationError
+        from rags.agents.api import WorkflowRunIn
+        from rags.agents.templates import get_template, make_evidence_review
+
+        principal, _ = require(request, "rags:agent", "rags:query", mutation=True)
+        runtime = _agent_engine()
+        settings.features.require("query")
+        get_template(workflow_name)
+        try:
+            data = WorkflowRunIn.model_validate(payload)
+        except ValidationError as exc:
+            raise HTTPException(422, detail={"code": "invalid_workflow"}) from exc
+        graph = make_evidence_review(service, principal, settings.features)
+        return graph.start(runtime.state, principal.tenant,
+                           {"owner_subject": principal.subject, **data.model_dump()}).public()
+
+    @app.get("/admin/api/agents/workflows/runs/{run_id}", include_in_schema=False)
+    def admin_workflow_status(request: Request, run_id: str):
+        principal, _ = require(request, "rags:agent", "rags:query")
+        return _workflow_owner(principal, run_id).public()
+
+    @app.post("/admin/api/agents/workflows/runs/{run_id}/resume", include_in_schema=False)
+    def admin_workflow_approval(request: Request, run_id: str, payload: dict):
+        from pydantic import ValidationError
+        from rags.agents.api import ResumeIn
+        from rags.agents.templates import make_evidence_review
+
+        principal, _ = require(request, "rags:agent", "rags:query", mutation=True)
+        cp = _workflow_owner(principal, run_id)
+        try:
+            data = ResumeIn.model_validate(payload)
+        except ValidationError as exc:
+            raise HTTPException(422, detail={"code": "invalid_workflow_approval"}) from exc
+        graph = make_evidence_review(service, principal, settings.features)
+        return graph.resume(_agent_engine().state, principal.tenant, cp.run_id,
+                            expected_revision=data.expected_revision,
+                            approved=data.approved).public()
+
+    @app.post("/admin/api/agents/workflows/runs/{run_id}/recover", include_in_schema=False)
+    def admin_workflow_recovery(request: Request, run_id: str, payload: dict):
+        from pydantic import ValidationError
+        from rags.agents.api import WorkflowRecoverIn
+        from rags.agents.templates import make_evidence_review
+
+        principal, _ = require(request, "rags:agent", "rags:query", mutation=True)
+        cp = _workflow_owner(principal, run_id)
+        try:
+            data = WorkflowRecoverIn.model_validate(payload)
+        except ValidationError as exc:
+            raise HTTPException(422, detail={"code": "invalid_workflow_recovery"}) from exc
+        graph = make_evidence_review(service, principal, settings.features)
+        return graph.recover(_agent_engine().state, principal.tenant, cp.run_id,
+                             expected_revision=data.expected_revision).public()
+
     @app.get("/admin/api/operations", include_in_schema=False)
     def operations(request: Request):
         principal, _ = require(request, "rags:read")
