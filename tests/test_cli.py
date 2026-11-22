@@ -50,6 +50,12 @@ def test_init_profile_creates_private_credentials_and_feature_flags(tmp_path, pr
     assert len(token) >= 40 and config.keys == {token: "local"}
     assert config.features == FeatureFlags.from_env()
     assert config.features.enabled("query")
+    assert config.features.enabled("agents")
+    assert config.features.enabled("model_generation")
+    from rags.agents.config import AgentPlatformConfig
+    agent = AgentPlatformConfig.from_env()
+    assert agent.router_enabled and agent.agent_enabled and agent.memory_enabled
+    assert not agent.router_ready
     assert config.db_path.startswith(("postgresql://", "postgres://")) == (profile == "postgres")
     assert ("REPLACE_ME" in config.db_path) == (profile == "postgres")
     assert config.embedding_provider == ("openai" if profile in {"openai", "ollama"} else "local")

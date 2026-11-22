@@ -23,9 +23,9 @@ PROFILES = ("offline", "postgres", "openai", "ollama", "anthropic")
 ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 MAX_ENV_SIZE = 65_536
 PROFILE_DISABLED = {
-    "offline": ("embedding.openai", "embedding.fastembed", "model_generation", "research",
+    "offline": ("embedding.openai", "embedding.fastembed", "research",
                 "federation", "multimodal", "image_captioning", "original_images"),
-    "postgres": ("embedding.openai", "embedding.fastembed", "model_generation", "research",
+    "postgres": ("embedding.openai", "embedding.fastembed", "research",
                  "federation", "multimodal", "image_captioning", "original_images"),
     "openai": ("embedding.local", "embedding.fastembed", "research", "federation",
                "multimodal", "original_images"),
