@@ -173,7 +173,7 @@ def mount_agent_api(app, *, store, rag, config: AgentPlatformConfig, auth,
     def approve_workflow(request: Request, run_id: str, data: ResumeIn,
                          tenant: Annotated[str, Depends(auth)]):
         principal = require(request, "rags:agent", "rags:query")
-        cp = workflow_identity(principal, run_id)
+        workflow_identity(principal, run_id)
         graph = make_evidence_review(rag, principal, features)
         return graph.resume(state, principal.tenant, run_id,
                             expected_revision=data.expected_revision,
@@ -183,7 +183,7 @@ def mount_agent_api(app, *, store, rag, config: AgentPlatformConfig, auth,
     def recover_workflow(request: Request, run_id: str, data: WorkflowRecoverIn,
                          tenant: Annotated[str, Depends(auth)]):
         principal = require(request, "rags:agent", "rags:query")
-        cp = workflow_identity(principal, run_id)
+        workflow_identity(principal, run_id)
         graph = make_evidence_review(rag, principal, features)
         return graph.recover(state, principal.tenant, run_id,
                              expected_revision=data.expected_revision).public()
