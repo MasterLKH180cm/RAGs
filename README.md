@@ -13,6 +13,7 @@ Version 0.6 adds tenant-scoped roles and opt-in OAuth2 introspection with strict
 ## Contents
 
 - [Quick start](#quick-start)
+- [Agent Platform: model routing, workflows and memory (v0.8)](#agent-platform-model-routing-workflows-and-memory-v08)
 - [Admin Dashboard and OpenTelemetry (v0.7)](#admin-dashboard-and-opentelemetry-v07)
 - [Tenant authorization and OAuth2](#tenant-authorization-and-oauth2)
 - [Installable CLI](#installable-cli-no-clone-needed)
@@ -136,6 +137,99 @@ Default `RAGS_OTEL_ENABLED=false` retains existing offline operation and does no
 
 See [v0.7 design contract](docs/SPEC_V07.md) and [security/operations review](docs/REVIEW_V07.md) for security boundaries, accessibility notes and known limitations.
 
+
+## Agent Platform: model routing, workflows and memory (v0.8)
+
+The **opt-in** Agent Platform provides one typed router interface, bounded tool-calling agents, a programmable workflow graph, durable human-in-the-loop checkpoints, and tenant-scoped conversation/observation memory. It uses the existing `rags-platform` wheel and PostgreSQL/pgvector or SQLite database, with no new mandatory dependency.
+
+### One model interface across 40+ upstream providers
+
+The adapter uses an **operator-controlled LiteLLM Gateway**, which implements an OpenAI-compatible `/v1/chat/completions` interface and publishes support for 100+ upstream model providers. This includes OpenAI, Anthropic, Google Gemini and xAI. **This project does not implement or live-test 40 provider-specific APIs.** It validates the one Gateway transport and normalizes text, structured function calls and token usage. Each alias maps to an explicitly approved provider/model route; the client cannot pick its own server URL or upload provider credentials. Select an upstream model with the syntax appropriate to your actual LiteLLM Gateway configuration.
+
+```bash
+# Configure an existing TLS-protected LiteLLM Gateway and its upstream credentials.
+# Keep the gateway key in an access-restricted file, separate from client bearer keys:
+export RAGS_ROUTER_ENABLED=true
+export RAGS_ROUTER_GATEWAY_URL=https://litellm.example.com/v1
+export RAGS_ROUTER_API_KEY_FILE=/secrets/rags-gateway-key
+export RAGS_ROUTER_MODELS_JSON='{"main":"openai/gpt-luna-latest","analyst":"anthropic/claude-sonnet-latest","google":"gemini/gemini-2.5-pro","xai":"xai/grok-latest"}'
+export RAGS_AGENT_ENABLED=true
+export RAGS_MEMORY_ENABLED=true
+
+# Show configured model aliases; this does not contact the provider.
+rags agent doctor --json
+rags serve
+```
+
+The Gateway deployment is independent: see [LiteLLM supported providers](https://docs.litellm.ai/docs/providers) and [Gateway documentation](https://docs.litellm.ai/docs/). Models, API keys and supported tool-call features vary by provider and account. Gateway credentials and cost/rate-limit policies are operator responsibilities. No automatic model fallback, provider-wide feature parity, hidden remote endpoint or unverified output cost claim is made.
+
+### Bounded agents, scopes and APIs
+
+Default deployment has `RAGS_AGENT_ENABLED=false`, `RAGS_ROUTER_ENABLED=false`, `RAGS_MEMORY_ENABLED=false`; there is **zero model router networking until explicitly enabled**.
+
+The HTTP API uses existing Bearer authentication and tenant identity:
+
+```bash
+# Requests require an access token scoped to rags:agent + rags:generate.
+# The optional agent_runner API key role grants rags:read, rags:query,
+# rags:generate, rags:agent and rags:memory.
+curl -X POST http://127.0.0.1:8000/agents/runs \
+  -H "Authorization: Bearer $RAGS_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"goal":"What is the policy?","model":"main","session_id":"example"}'
+
+# Safe, local CLI mode: read goal from file instead of process command line.
+rags agent run --goal-file ./goal.txt --model main --session example
+```
+
+The returned run object includes a random `run_id`, `revision`, `status`, final `answer`, and a pending tool request only when a human decision is needed. To approve or reject a gated operation, call `POST /agents/runs/{run_id}/resume` with `{"expected_revision":2,"approved":true}` (substitute the actual checkpoint revision), or run `rags agent review --run-id ID --revision N --approve` with the user-scoped local CLI. Never approve an unknown tool blindly.
+
+The built-in tools are `knowledge_search` (existing evidence-grounded RAG, `rags:query` scope) and, when memory is enabled, `remember_observation` (`rags:memory`, **mandatory human approval** before writing). Operators can register additional Pydantic-validated Python tools through `ToolRegistry`; end users cannot submit tool code or unrestricted URLs to the server. The engine stops on completion, maximum steps, tool calls, wall-time, repeated tool loops or invalid provider output. The settings `RAGS_AGENT_MAX_STEPS` (default 6; max 8), `RAGS_AGENT_MAX_TOOL_CALLS` (default 12; max 16), and `RAGS_AGENT_MAX_RUNTIME_SECONDS` (default 60; max 90) are hard limits.
+
+### Code-first graph workflows and human checkpoints
+
+`Workflow` provides `.then()`, `.branch()`, and `.parallel()` with **operator-registered** Python functions. Branches choose one of two actions; parallel branches have deterministic output collection, bounded concurrency (max four) and require explicit idempotency. An approval-gated `.then(approval=True,idempotent=True)` checkpoint waits for a human and does not call the action before approval. The graph is defined in code, not generated as executable instructions from a user prompt.
+
+```python
+from rags.storage import Store
+from rags.agents.state import StateStore
+from rags.agents.workflow import Workflow
+
+state = StateStore(Store("data/rags.db"))
+flow = (
+    Workflow("review", version="v1")
+    .then("retrieve", lambda ctx: {"retrieved": True})
+    .branch("quality", lambda ctx: ctx.outputs["retrieve"]["retrieved"],
+            if_true=lambda ctx: {"approved": True},
+            if_false=lambda ctx: {"approved": False})
+    .parallel("checks", {"metadata": lambda ctx: "ok", "license": lambda ctx: "ok"},
+              idempotent=True)
+    .then("publish", lambda ctx: {"published": True}, approval=True, idempotent=True)
+)
+waiting = flow.start(state, "tenant-a", {"document_id": "example"})
+assert waiting.status == "waiting_for_approval"
+finished = flow.resume(state, "tenant-a", waiting.run_id,
+                       expected_revision=waiting.revision, approved=True)
+assert finished.status == "completed"
+```
+
+The durable state, revision CAS, and immutable graph version fingerprint live in the same tenant-scoped database. **For an external side-effecting step, idempotent retries must be implemented by the operator**; a process crash between a side effect and a checkpoint is not an exactly-once guarantee. Workflows are Python DSL graphs, not a drag-and-drop editor in this release.
+
+### History and observation memory
+
+Each conversation is stored under `(tenant, session_id)`, with bounded retrieval of at most 20 recent turns. `ObservationStore` records short, explicitly supplied/approved facts with provenance, confidence, deterministic deduplication and TTL (default 30 days, configurable via `RAGS_MEMORY_TTL_DAYS`). Expired facts are excluded from prompt context. Memory, RAG citations and model outputs are **untrusted context**, not executable commands or authorization data. Memory is never written when `RAGS_MEMORY_ENABLED=false`.
+
+```bash
+# Authorize rags:agent + rags:memory to read/write tenant session facts.
+curl -X POST http://127.0.0.1:8000/agents/sessions/example/observations \
+  -H "Authorization: Bearer $RAGS_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"fact":"User explicitly prefers concise answers","source_id":"consent-record"}'
+```
+
+Conversation and observation records are persisted as plaintext in the selected DB; use encryption at rest, retention policy, sensitive-data minimization, app-level tenant scopes, restricted database access and appropriate legal basis before storing confidential records. A future feature should add configurable privacy filters, encryption, moderation and user deletion lifecycle, especially for healthcare data. RLS, dynamic source ACL and autonomous personal-profile inference remain outside scope.
+
+See [v0.8 spec](docs/SPEC_V08.md) and [implementation review](docs/REVIEW_V08.md) for exact contracts, limitations, and test coverage.
 
 ## Quick start
 
