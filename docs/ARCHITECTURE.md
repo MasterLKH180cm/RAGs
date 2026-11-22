@@ -1,12 +1,50 @@
-# RAGs v0.3 architecture
+# RAGs v0.4 architecture
 
-This document describes the implemented service. The [v0.3 specification](SPEC_V03.md) extends the [v0.2 requirements](SPEC_V02.md); the [v0.3 review](IMPLEMENTATION_REVIEW_V03.md) and historical [v0.2 review](IMPLEMENTATION_REVIEW.md) distinguish actual execution, measured quality and remaining integrations. The [README](../README.md#architecture-and-flows) contains the service, ingestion and retrieval flowcharts.
+This document describes the implemented service. The [v0.4 specification](SPEC_V04.md) adds explicit feature configuration and PostgreSQL/pgvector, extending the [v0.3 specification](SPEC_V03.md) and [v0.2 requirements](SPEC_V02.md); the [v0.3 review](IMPLEMENTATION_REVIEW_V03.md) and historical [v0.2 review](IMPLEMENTATION_REVIEW.md) distinguish actual execution, measured quality and remaining integrations. The [README](../README.md#architecture-and-flows) contains the service, ingestion and retrieval flowcharts.
 
 ## Service boundaries
 
-FastAPI authenticates a bearer credential and derives one tenant before calling the document service or original-image service. The read-only stdio MCP bridge calls that HTTP API. The companion [agentic-system](https://github.com/MasterLKH180cm/agentic-system) has its own API, durable workflow store, and worker; its PostgreSQL support does not change RAGs' SQLite storage.
+FastAPI authenticates a bearer credential and derives one tenant before calling the document service or original-image service. The read-only stdio MCP bridge calls that HTTP API. The companion [agentic-system](https://github.com/MasterLKH180cm/agentic-system) has its own API, durable workflow store, and worker; the default full stack gives each service a separate PostgreSQL database and non-superuser application role. RAGs owns the native pgvector knowledge index; the workflow store does not contain that index.
 
 Document ingestion and retrieval live in `RAGService`. `Providers` supplies hashing or trained single-vector embeddings and optional text generation. `BackendManager` supplies actual token-matrix late interaction or an explicitly configured external research protocol. Original image assets have a separate service and paired CLIP encoder; they do not masquerade as text chunks.
+
+## Configuration and feature enforcement
+
+`Settings` resolves operational environment configuration once per process. A
+selected `RAGS_FEATURES_FILE` supplies a JSON boolean map; `RAGS_FEATURES_JSON`
+overrides individual entries. The manifest in `rags/features.py` includes
+interfaces, document and original-image operations, provider families, indexes,
+chunkers, tokenizers and every retrieval strategy. Unknown keys, non-booleans
+and invalid selected files fail startup. An enabled permission still requires
+its provider, installed dependencies and compatible index profile.
+
+```mermaid
+flowchart TD
+    File["Feature file"] --> Resolve["Resolve settings and boolean overrides"]
+    Env["Process environment"] --> Resolve
+    Request["HTTP or MCP request"] --> Auth["Authenticate and select tenant"]
+    Resolve --> Guard["Check operation and required features"]
+    Auth --> Guard
+    Guard -->|Disabled| Deny["403 feature_disabled"]
+    Guard -->|Allowed| Service["Validate profile and bounded operation"]
+    Service --> Store["Tenant-scoped storage and providers"]
+```
+
+Guards run before optional provider calls or mutations, including caption upload
+processing and internal tokenizer use. Original-image download is independently
+controlled by `original_images`; internal authorized reindexing still has access
+to its source bytes. The shipped MCP bridge uses authenticated capabilities for
+its tool listing and rechecks permissions on calls; HTTP remains authoritative.
+`/health` and `/capabilities` expose resolved backend metadata and permissions,
+without database credentials or provider keys. Feature changes require process
+recreation; API capability responses do not constitute model-quality evidence.
+
+The default Compose service uses PostgreSQL 17 and pgvector 0.8.7. Its bootstrap
+role creates the database, application role and extension; the runtime role
+does not install extensions. Database ports remain private, and provider/feature
+settings are explicitly forwarded to the application. `RAGS_DATABASE_URL`
+selects PostgreSQL without fallback. With that selector unset, `RAGS_DB_PATH`
+retains the explicit SQLite development and legacy-data path.
 
 ## Source records and derived indexes
 
@@ -14,13 +52,31 @@ Document ingestion and retrieval live in `RAGService`. `Providers` supplies hash
 | --- | --- |
 | `documents` | Current document identity, source content, and index profile |
 | `document_revisions` | Source snapshots, recording time, validity interval, and processing profile |
-| `chunks` | Original leaf/parent spans, generated summaries, vectors, tokenizer metadata, and lineage |
-| `chunks_fts` | FTS5 source/context sparse index |
+| `chunks` | Original leaf/parent spans, generated summaries, native PostgreSQL `vector` values, tokenizer metadata, and lineage |
+| Sparse index | PostgreSQL GIN full-text index with `ts_rank_cd`; SQLite compatibility uses `chunks_fts` / FTS5 |
 | `graph_relations` | Entity relations with original source-chunk evidence IDs |
-| `audit` | Lifecycle events in the same local database |
-| `image_assets` | Tenant-scoped original image bytes, vectors, revisions, and encoder identity |
+| `audit` | Lifecycle events committed in the same application database |
+| `image_assets` | Tenant-scoped original image bytes, native PostgreSQL `vector` values, revisions, and encoder identity |
 
-SQLite uses WAL, foreign keys, and bounded busy waits. Document changes and their FTS, hierarchy, graph, and audit changes commit together. The audit table is an operational record, not a separate tamper-evident audit system.
+PostgreSQL stores text and original-image embeddings as native `vector` values.
+Dense ranking executes exact cosine distance with `<=>` in SQL after tenant,
+version and metadata scoping. There is no fixed global vector dimension: the
+profile preflight rejects incompatible model/dimension selections before a
+query, while explicit reindexing can replace a model profile. No ANN index or
+HNSW performance claim is implied. PostgreSQL sparse ranking uses `ts_rank_cd`,
+which is not the same ranking formula as SQLite FTS5/BM25.
+
+Document changes and their sparse, hierarchy, graph and audit records commit
+atomically. Application SQL uses bound parameters. The SQLite compatibility
+backend retains WAL, foreign keys and bounded busy waits. The audit table is an
+operational record, not a separate tamper-evident audit system.
+
+The explicit `python -m rags.migrate --sqlite SOURCE` importer reads a source
+SQLite database without modifying it, requires an empty PostgreSQL target, and
+copies current/historical text, derived records and original images in one
+transaction without model calls. It is an operator-run migration, not an
+implicit startup operation; backups and the rollback boundary are documented
+in the [README](../README.md#database-migration-and-backups).
 
 ### Atomic ingestion and reindexing
 
@@ -48,7 +104,7 @@ Before generation, the service packs the rendered instructions, question, citati
 
 | Mechanism | Execution and dependency boundary |
 | --- | --- |
-| Sparse, dense, naive, hybrid | FTS5 ranking, cosine search, direct evidence assembly, and independent rank fusion |
+| Sparse, dense, naive, hybrid | PostgreSQL full-text or SQLite FTS5 ranking, exact cosine search, direct evidence assembly, and independent rank fusion |
 | Parent-child, hierarchy | Persisted parent expansion or recursive vector clusters/summaries with original-leaf lineage |
 | Graph | Explicit or validated model-extracted relations; two-hop traversal and label-propagation communities |
 | Structured | Typed row/metadata predicates and bounded numeric aggregations; no submitted SQL |
@@ -95,7 +151,7 @@ may still contribute evidence.
 
 ## Request-local research execution
 
-The authenticated research sidecar hosts one fixed RAPTOR or LightRAG engine.
+The authenticated research sidecar hosts one fixed RAPTOR or LightRAG engine. Both supplied upstream adapters require the `tokenizer.tiktoken` permission because their provider bridge enforces actual encoder token windows.
 The RAG service sends the original passages already selected for tenant,
 metadata and time. The sidecar verifies its credential's tenant and the fixed
 engine before starting the worker. A finite semaphore bounds active requests;
@@ -136,4 +192,4 @@ The historical [36-question synthetic report](evaluation-v02-summary.json) recor
 
 Actual BGE, ColBERT, and paired CLIP checkpoints were exercised separately. These small fixtures verify encoder/adapter execution and selected invariants; they are not domain-quality benchmarks. Ordinary tests also distinguish deterministic control-flow fixtures from real-model inference.
 
-SQLite, full vector scans, on-demand late-interaction encoding, and local federation threads target small deployments. The service does not currently implement a distributed vector index, automatic streaming refresh, production identity gateway, quotas, or semantic answer-verification guarantees. Scaling and public deployment require those concerns to be addressed explicitly; they are not implied by passing local integration tests.
+Exact pgvector scans, the serialized application transaction paths, on-demand late-interaction encoding and local federation threads retain workload-dependent scaling limits. SQLite remains a development and legacy-storage option. The service does not currently implement a distributed vector index, automatic streaming refresh, production identity gateway, quotas, or semantic answer-verification guarantees. Scaling and public deployment require those concerns to be addressed explicitly; they are not implied by passing local integration tests.

@@ -102,8 +102,9 @@ class Providers:
     @property
     def has_generation(self) -> bool:
         return bool(
-            (self.settings.model_provider == "openai" and self.settings.openai_key)
-            or (self.settings.model_provider == "anthropic" and self.settings.anthropic_key)
+            self.settings.features.enabled("model_generation")
+            and self.settings.model_provider in {"openai", "anthropic"}
+            and self.settings.generation_credential
         )
 
     def begin_usage(self) -> None:
@@ -127,6 +128,7 @@ class Providers:
             calls.append({"kind": kind, "model": model, "usage": sanitized or None})
 
     def require_generation(self) -> None:
+        self.settings.features.require("model_generation")
         if not self.has_generation:
             raise CapabilityError("requires_provider", "This mechanism requires a configured generation model and credential")
 
@@ -149,6 +151,10 @@ class Providers:
 
     def contextualize(self, document: str, chunk: str, title: str, *, max_units: int = 96, tokenizer=None) -> str:
         from rags.tokenization import resolve_tokenizer
+        self.require_generation()
+        source_config = tokenizer.profile if tokenizer is not None else self.settings.tokenizer_config
+        self.settings.features.require("tokenizer." + source_config.get("backend", "unicode"),
+                                       "tokenizer." + self.settings.generation_tokenizer_config.get("backend", "unicode"))
         tok = tokenizer or resolve_tokenizer(self.settings.tokenizer_config)
         generation_tok = resolve_tokenizer(self.settings.generation_tokenizer_config)
         # Document context may be larger than a provider window. Preserve the
@@ -176,15 +182,16 @@ class Providers:
         )
 
     def embedding(self, text: str) -> list[float]:
+        self.settings.features.require("embedding." + self.settings.embedding_provider)
         if self.settings.embedding_provider == "local":
             return local_embedding(text)
         if self.settings.embedding_provider == "fastembed":
             return next(_semantic_encoder(self.settings.fastembed_model, os.getenv("RAGS_MODEL_CACHE") or None).embed([text])).tolist()
-        if not self.settings.openai_key:
-            raise ValueError("OPENAI_API_KEY required for OpenAI embeddings")
+        if not self.settings.embedding_credential:
+            raise ValueError("RAGS_EMBEDDING_API_KEY or OPENAI_API_KEY required for OpenAI embeddings")
         response = httpx.post(
-            self.settings.openai_base_url + "/embeddings",
-            headers={"Authorization": "Bearer " + self.settings.openai_key},
+            self.settings.embedding_endpoint + "/embeddings",
+            headers={"Authorization": "Bearer " + self.settings.embedding_credential},
             json={"model": self.settings.embedding_model, "input": text},
             timeout=30,
         )
@@ -199,6 +206,7 @@ class Providers:
         return vector
 
     def query_embedding(self, text: str) -> list[float]:
+        self.settings.features.require("embedding." + self.settings.embedding_provider)
         if self.settings.embedding_provider == "fastembed":
             return next(_semantic_encoder(self.settings.fastembed_model, os.getenv("RAGS_MODEL_CACHE") or None).query_embed(text)).tolist()
         return self.embedding(text)
@@ -208,15 +216,14 @@ class Providers:
             return None
         self.require_generation()
         from rags.tokenization import resolve_tokenizer
+        self.settings.features.require("tokenizer." + self.settings.generation_tokenizer_config.get("backend", "unicode"))
         tokenizer = resolve_tokenizer(self.settings.generation_tokenizer_config)
         if tokenizer.count(system + user) > self.settings.context_budget - self.settings.output_budget - self.settings.envelope_budget:
             raise CapabilityError("context_budget_exceeded", "Rendered model input exceeds the configured budget", 422)
         if self.settings.model_provider == "openai":
-            if not self.settings.openai_key:
-                raise ValueError("OPENAI_API_KEY required for OpenAI generation")
             response = httpx.post(
-                self.settings.openai_base_url + "/chat/completions",
-                headers={"Authorization": "Bearer " + self.settings.openai_key},
+                self.settings.generation_endpoint + "/chat/completions",
+                headers={"Authorization": "Bearer " + self.settings.generation_credential},
                 json={
                     "model": self.settings.chat_model,
                     "messages": [
@@ -231,12 +238,10 @@ class Providers:
             payload = response_object(response, "invalid_model_output", "Generation provider returned an invalid response")
             self.record("generation", self.model_identity, payload)
             return response_text(payload, self.settings.model_provider)
-        if not self.settings.anthropic_key:
-            raise ValueError("ANTHROPIC_API_KEY required for Anthropic generation")
         response = httpx.post(
-            "https://api.anthropic.com/v1/messages",
+            self.settings.generation_endpoint + "/messages",
             headers={
-                "x-api-key": self.settings.anthropic_key,
+                "x-api-key": self.settings.generation_credential,
                 "anthropic-version": "2023-06-01",
             },
             json={

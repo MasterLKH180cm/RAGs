@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from datetime import datetime
+from functools import cached_property
 import hashlib
 import json
 import math
@@ -14,7 +15,8 @@ import httpx
 
 from rags.admission import EvidenceAdmission, finite, metadata as admission_metadata, validate_remote_decision
 from rags.chunking import ALGORITHM_VERSION, ChunkConfig, chunk_document, index_fingerprint
-from rags.native import aggregate_rows, cluster_vectors, cosine, graph_search, row_matches, rrf
+from rags.features import strategy_features
+from rags.native import aggregate_rows, cluster_vectors, graph_search, row_matches, rrf
 from rags.providers import Providers
 from rags.registry import CapabilityError, MODEL_MODES, MODES, NATIVE, UPSTREAM_IDS, strategy
 from rags.storage import Store, timestamp
@@ -90,10 +92,43 @@ class RAGService:
         self.store = store
         self.provider = provider
         self.settings = provider.settings
-        self.tokenizer = resolve_tokenizer(self.settings.generation_tokenizer_config)
-        self.admission = EvidenceAdmission(self.settings.admission_policy, self.settings.admission_profile)
+        if self.settings.admission_policy == "calibrated_required" and not self.settings.features.enabled("admission_scoring"):
+            raise ValueError("Required evidence policy needs admission_scoring")
+        profile = self.settings.admission_profile if self.settings.features.enabled("admission_scoring") else None
+        self.admission = EvidenceAdmission(self.settings.admission_policy, profile)
         self._backend_manager = None
         self._backend_lock = Lock()
+
+    @cached_property
+    def tokenizer(self):
+        self.settings.features.require("tokenizer." + self.settings.generation_tokenizer_config.get("backend", "unicode"))
+        return resolve_tokenizer(self.settings.generation_tokenizer_config)
+
+    def _requirements(self, mode: str) -> tuple[str, ...]:
+        required = strategy_features(mode)
+        if "strategy.dense" in required:
+            required += ("embedding." + self.settings.embedding_provider,)
+        if mode in MODEL_MODES:
+            required += ("tokenizer." + self.settings.generation_tokenizer_config.get("backend", "unicode"),)
+        return required
+
+    def preflight_ingestion(self, *, chunking=None, tokenizer=None, index_features=None):
+        """Check every processing prerequisite before parsing, vision or encoding."""
+        self.settings.features.require("ingestion", "embedding." + self.settings.embedding_provider)
+        features = sorted(set(index_features or []))
+        if not set(features) <= {"hierarchy", "graph"}:
+            raise ValueError("Unknown native index feature")
+        config = ChunkConfig(**(chunking or self.settings.chunking_config))
+        tokenizer_config = tokenizer or self.settings.tokenizer_config
+        self.settings.features.require("chunking." + config.strategy,
+                                       "tokenizer." + tokenizer_config.get("backend", "unicode"),
+                                       *("index." + name for name in features))
+        if config.strategy == "contextual" or (features and self.settings.model_provider != "extractive"):
+            self.provider.require_generation()
+            self.settings.features.require("tokenizer." + self.settings.generation_tokenizer_config.get("backend", "unicode"))
+        if config.strategy == "semantic" and self.settings.embedding_provider == "local":
+            raise CapabilityError("requires_provider", "Semantic chunking requires a trained embedding provider")
+        return config, tokenizer_config, features
 
     def _backend(self):
         if self._backend_manager is None:
@@ -107,7 +142,7 @@ class RAGService:
         return self._backend_manager
 
     def catalog(self, tenant: str) -> list[dict]:
-        chunks = self.store.scope(tenant)
+        chunks = self.store.scope(tenant, include_embeddings=False)
         roles = {c["role"] for c in chunks}
         flags = {
             "generation": self.provider.has_generation,
@@ -131,6 +166,14 @@ class RAGService:
         except CapabilityError:
             result.extend({"id": name, "status": "requires_backend", "reason": "Backend manager unavailable",
                            "implementation": "external engine required", "evidence_level": "unavailable"} for name in UPSTREAM_IDS)
+        for item in result:
+            disabled = sorted(set(item.get("disabled_by", [])) | {
+                name for name in self._requirements(item["id"]) if not self.settings.features.enabled(name)})
+            item.update(enabled=not disabled, disabled_by=disabled)
+            if disabled:
+                item.update(status="feature_disabled", reason="Disabled features: " + ", ".join(disabled))
+            if item["id"] == "sparse":
+                item["implementation"] = "PostgreSQL full-text ts_rank_cd" if self.store.is_postgres else "SQLite FTS5 BM25"
         return result
 
     def ingest(self, tenant: str, title: str, text: str, source: str, metadata: dict | None = None,
@@ -138,6 +181,8 @@ class RAGService:
                index_features: list[str] | None = None, rows: list[dict] | None = None,
                valid_from: str | None = None, valid_to: str | None = None,
                expected_revision: str | None = None, force: bool = False) -> dict:
+        config, tokenizer_config, features = self.preflight_ingestion(
+            chunking=chunking, tokenizer=tokenizer, index_features=index_features)
         metadata = dict(metadata or {})
         if any(k.startswith("_rags_") for k in metadata):
             raise ValueError("Metadata keys starting _rags_ are reserved")
@@ -151,19 +196,11 @@ class RAGService:
             metadata["_rags_rows"] = rows
         if not isinstance(text, str) or not text.strip() or len(text) > 200_000:
             raise ValueError("Source text must contain 1..200000 characters")
-        features = sorted(set(index_features or []))
-        if not set(features) <= {"hierarchy", "graph"}:
-            raise ValueError("Unknown native index feature")
-        config = ChunkConfig(**(chunking or self.settings.chunking_config))
-        tok = resolve_tokenizer(tokenizer or self.settings.tokenizer_config)
-        if config.strategy == "semantic" and self.settings.embedding_provider == "local":
-            raise CapabilityError("requires_provider", "Semantic chunking requires a trained embedding provider")
-        if config.strategy == "contextual":
-            self.provider.require_generation()
+        tok = resolve_tokenizer(tokenizer_config)
         doc_id = document_id or str(uuid.uuid4())
         existing = self.store.get_document(tenant, doc_id)
-        embedding_endpoint = self.settings.openai_base_url if self.settings.embedding_provider == "openai" else "local"
-        context_endpoint = self.settings.openai_base_url if self.settings.model_provider == "openai" else self.settings.model_provider
+        embedding_endpoint = self.settings.embedding_endpoint
+        context_endpoint = self.settings.generation_endpoint if self.settings.model_provider != "extractive" else "extractive"
         old_profile = existing["index_profile"] if existing else {}
         previous_dimensions = old_profile.get("embedding_dimensions") if (
             old_profile.get("embedding_model") == self.provider.embedding_model
@@ -235,7 +272,7 @@ class RAGService:
             type(value) not in (int, float) or not math.isfinite(value) for value in c["embedding"]
         ) for c in chunks):
             raise CapabilityError("invalid_embedding", "Derived index contains inconsistent or invalid vectors", 502)
-        relations = self._relations(leaves, "graph" in features)
+        relations = self._relations(leaves, "graph" in features) if self.settings.features.enabled("index.graph") else []
         recorded_at = now()
         if start is None:
             # Reindexing changes a processing profile, not source validity.
@@ -316,6 +353,7 @@ class RAGService:
         return relations
 
     def reindex(self, tenant: str, doc_id: str, expected_revision: str, **changes) -> dict:
+        self.settings.features.require("reindex", "ingestion")
         doc = self.store.get_document(tenant, doc_id)
         if doc is None:
             raise CapabilityError("not_found", "Document not found", 404)
@@ -333,26 +371,26 @@ class RAGService:
         )
 
     def _sparse(self, tenant: str, question: str, candidates: list[dict], limit: int) -> list[str]:
+        self.settings.features.require("strategy.sparse")
         tokens = list(dict.fromkeys(terms(question)))[:12]
         match = " OR ".join('"' + token + '"' for token in tokens)
         return self.store.sparse(tenant, match, limit, {c["id"] for c in candidates})
 
-    def _dense(self, question: str, candidates: list[dict], limit: int, vector: list[float] | None = None) -> list[str]:
+    def _dense(self, tenant: str, question: str, candidates: list[dict], limit: int, vector: list[float] | None = None) -> list[str]:
+        self.settings.features.require("strategy.dense", "embedding." + self.settings.embedding_provider)
         if not candidates:
             return []
-        expected_endpoint = self.settings.openai_base_url if self.settings.embedding_provider == "openai" else "local"
+        expected_endpoint = self.settings.embedding_endpoint
         if any(c["embedding_model"] != self.provider.embedding_model
                or c["index_profile"].get("embedding_endpoint") != expected_endpoint for c in candidates):
             raise CapabilityError("requires_reindex", "Visible documents use an incompatible or legacy embedding profile; reindex them", 409)
         vector = vector if vector is not None else self.provider.query_embedding(question)
-        try:
-            scores = [(cosine(vector, json.loads(c["embedding"]) if isinstance(c["embedding"], str) else c["embedding"]), c["id"]) for c in candidates]
-        except ValueError as exc:
-            raise CapabilityError("requires_reindex", "Visible vector dimensions are incompatible; reindex the source", 409) from exc
-        return [identifier for _, identifier in sorted(scores, key=lambda pair: (-pair[0], pair[1]))[:limit]]
+        return self.store.dense(tenant, vector, limit, {c["id"] for c in candidates},
+                                embedding_model=self.provider.embedding_model, embedding_endpoint=expected_endpoint)
 
     def _hybrid(self, tenant: str, question: str, candidates: list[dict], limit: int) -> list[tuple[str, float]]:
-        return rrf([self._sparse(tenant, question, candidates, limit), self._dense(question, candidates, limit)], limit)
+        self.settings.features.require("strategy.hybrid")
+        return rrf([self._sparse(tenant, question, candidates, limit), self._dense(tenant, question, candidates, limit)], limit)
 
     def _selected(self, scored: list[tuple[str, float]], lookup: dict, top_k: int) -> list[dict]:
         return [dict(lookup[key], score=round(score, 8)) for key, score in scored[:top_k] if key in lookup]
@@ -365,9 +403,10 @@ class RAGService:
     def _retrieve(self, tenant: str, question: str, mode: str, top_k: int, options: dict) -> dict:
         if mode not in MODES:
             raise CapabilityError("unknown_strategy", "Unknown retrieval strategy", 422)
+        self.settings.features.require(*self._requirements(mode))
         if mode in MODEL_MODES:
             self.provider.require_generation()
-        scope = self.store.scope(tenant, as_of=options.get("as_of"), filters=options.get("filters"))
+        scope = self.store.scope(tenant, as_of=options.get("as_of"), filters=options.get("filters"), include_embeddings=False)
         leaves = [c for c in scope if c["role"] == "leaf"]
         lookup = {c["id"]: c for c in scope}
         limit = min(100, max(20, top_k * 6))
@@ -400,7 +439,7 @@ class RAGService:
         elif mode == "sparse":
             scored = [(key, 1 / (i + 1)) for i, key in enumerate(self._sparse(tenant, question, leaves, limit))]
         elif mode in {"dense", "naive"}:
-            scored = [(key, 1 / (i + 1)) for i, key in enumerate(self._dense(question, leaves, limit))]
+            scored = [(key, 1 / (i + 1)) for i, key in enumerate(self._dense(tenant, question, leaves, limit))]
         elif mode == "hybrid":
             scored = self._hybrid(tenant, question, leaves, limit)
         elif mode == "fusion":
@@ -416,7 +455,7 @@ class RAGService:
             if len({len(v) for v in vectors}) != 1:
                 raise CapabilityError("invalid_embedding", "Hypothetical embeddings have different dimensions", 502)
             vector = [sum(values) / len(vectors) for values in zip(*vectors, strict=True)]
-            scored = [(key, 1 / (i + 1)) for i, key in enumerate(self._dense(question, leaves, limit, vector))]
+            scored = [(key, 1 / (i + 1)) for i, key in enumerate(self._dense(tenant, question, leaves, limit, vector))]
             trace.append({"action": "hypothetical_embedding", "hypotheses": len(hypothetical), "used_as_evidence": False})
         elif mode == "contextual":
             indexed = [c for c in leaves if c["context"] and c["index_profile"].get("chunking", {}).get("strategy") == "contextual"]
@@ -437,7 +476,7 @@ class RAGService:
             summaries = [c for c in scope if c["role"] == "summary"]
             if not summaries:
                 raise CapabilityError("requires_index", "Ingest with the hierarchy index feature first", 409)
-            nodes = self._dense(question, [*leaves, *summaries], limit)
+            nodes = self._dense(tenant, question, [*leaves, *summaries], limit)
             source_scores = {}
             summary_ids = []
             for rank, key in enumerate(nodes):
@@ -513,7 +552,8 @@ class RAGService:
         else:
             raise CapabilityError("unknown_strategy", "Strategy has no implementation", 422)
         trace.insert(0, {"action": "retrieve", "mode": mode, "candidates": len(leaves), "encoder": self.provider.embedding_model})
-        score_kind = {"sparse": "reciprocal_bm25_rank", "dense": "reciprocal_cosine_rank", "naive": "reciprocal_cosine_rank",
+        sparse_kind = "reciprocal_ts_rank_cd_rank" if self.store.is_postgres else "reciprocal_bm25_rank"
+        score_kind = {"sparse": sparse_kind, "dense": "reciprocal_cosine_rank", "naive": "reciprocal_cosine_rank",
                       "graph": "inverse_hop_distance", "hierarchical": "sum_inverse_node_rank", "temporal": "rrf_plus_recency"}.get(mode, "backend_score" if mode in UPSTREAM_IDS else "rrf")
         return {"chunks": self._selected(scored, lookup, top_k), "mode_used": mode, "engine": engine,
                 "score_kind": score_kind, "trace": trace, **extra}
@@ -661,6 +701,11 @@ class RAGService:
                 "trace": [{"action": "federated_search", "sources": [{"id": source, "hits": len(hits)} for source, hits, _ in responses]}]}
 
     def query(self, tenant: str, question: str, mode: str = "hybrid", top_k: int = 5, generate: bool = True, **options) -> dict:
+        self.settings.features.require("query")
+        if generate:
+            self.settings.features.require("tokenizer." + self.settings.generation_tokenizer_config.get("backend", "unicode"))
+        if generate and self.settings.model_provider != "extractive":
+            self.settings.features.require("model_generation")
         self.provider.begin_usage()
         result = self._retrieve(tenant, question, mode, top_k, options)
         chunks = result.pop("chunks")

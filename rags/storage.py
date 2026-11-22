@@ -1,12 +1,14 @@
 """Tenant-scoped, versioned source records and transactional derived indexes."""
 import json
+import re
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
-from rags.native import equal_value
+from rags.native import cosine, equal_value
+from rags import postgres
 from rags.registry import CapabilityError
 
 SCHEMA = """
@@ -54,6 +56,9 @@ CHUNK_COLUMNS = {
     "evidence_ids": "TEXT NOT NULL DEFAULT '[]'", "level": "INTEGER NOT NULL DEFAULT 0",
     "processing_metadata": "TEXT NOT NULL DEFAULT '{}'",
 }
+CHUNK_FIELDS = ("id", "tenant", "document_id", "ordinal", "section", "content", "embedding", "embedding_model", *CHUNK_COLUMNS)
+REVISION_FIELDS = ("tenant", "id", "revision", "title", "source", "body", "metadata", "checksum",
+                   "recorded_at", "valid_from", "valid_to", "profile_id", "index_profile")
 
 
 def timestamp(value: str | None = None) -> str:
@@ -73,11 +78,18 @@ def timestamp(value: str | None = None) -> str:
 class Store:
     def __init__(self, path: str):
         self.path = path
+        self.is_postgres = postgres.is_postgres(path)
+        self.storage_backend = "postgresql" if self.is_postgres else "sqlite"
+        self.vector_search = "pgvector_exact" if self.is_postgres else "python_exact"
         if path == ":memory:":
             raise ValueError("Use a temporary file: independent SQLite connections cannot share :memory:")
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        if not self.is_postgres:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as conn:
-            conn.executescript(SCHEMA)
+            if self.is_postgres:
+                postgres.initialize(conn, SCHEMA)
+            else:
+                conn.executescript(SCHEMA)
             conn.execute("BEGIN IMMEDIATE")
             for table, additions in (("documents", DOC_COLUMNS), ("chunks", CHUNK_COLUMNS)):
                 present = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
@@ -85,16 +97,27 @@ class Store:
                     if name not in present:
                         conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
             conn.execute("CREATE INDEX IF NOT EXISTS chunks_revision ON chunks(tenant,document_id,revision,role)")
+            if self.is_postgres:
+                revisions = {row["name"] for row in conn.execute("PRAGMA table_info(document_revisions)")}
+                if "revision_order" not in revisions:
+                    conn.execute("ALTER TABLE document_revisions ADD COLUMN revision_order BIGSERIAL")
+                postgres.migrate_vector_column(conn, "chunks", "embedding")
+                conn.execute("CREATE INDEX IF NOT EXISTS chunks_vector_profile ON chunks(tenant,embedding_model,profile_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS chunks_fts_search ON chunks_fts USING GIN(search)")
             # Migration never calls models or invents offsets/token counts.
             conn.execute("UPDATE documents SET valid_from=updated_at WHERE valid_from IS NULL")
             conn.execute(
-                "INSERT OR IGNORE INTO document_revisions "
+                "INSERT OR IGNORE INTO document_revisions(" + ",".join(REVISION_FIELDS) + ") "
                 "SELECT tenant,id,revision,title,source,body,metadata,checksum,updated_at,valid_from,"
                 "valid_to,profile_id,index_profile FROM documents"
             )
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
+        if self.is_postgres:
+            with postgres.connect(self.path) as connection:
+                yield connection
+            return
         conn = sqlite3.connect(self.path, timeout=20)
         try:
             conn.row_factory = sqlite3.Row
@@ -131,10 +154,11 @@ class Store:
         return [self.decode_document(row) for row in rows]
 
     def revisions(self, tenant: str, doc_id: str) -> list[dict]:
+        order_column = "revision_order" if self.is_postgres else "rowid"
         with self.connect() as conn:
             rows = conn.execute(
                 "SELECT id,revision,title,source,metadata,recorded_at,valid_from,valid_to,profile_id,index_profile "
-                "FROM document_revisions WHERE tenant=? AND id=? ORDER BY recorded_at DESC", (tenant, doc_id)
+                f"FROM document_revisions WHERE tenant=? AND id=? ORDER BY recorded_at DESC,{order_column} DESC", (tenant, doc_id)
             ).fetchall()
         return [self.decode_document(row) for row in rows]
 
@@ -149,8 +173,17 @@ class Store:
 
     def commit_revision(self, tenant: str, document: dict, chunks: list[dict], relations: list[dict], expected_revision: str | None) -> None:
         """Provider work finishes before this short compare-and-swap transaction."""
+        vectors = {}
+        if self.is_postgres:
+            for item in chunks:
+                vectors[item["id"]] = postgres.vector_literal(item["embedding"])
+                if (len(item["embedding"]) != document["index_profile"].get("embedding_dimensions")
+                        or item["embedding_model"] != document["index_profile"].get("embedding_model")):
+                    raise CapabilityError("invalid_embedding", "Vector does not match its document index profile", 502)
         with self.connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
+            if self.is_postgres:
+                postgres.lock_mutation(conn, "document", tenant, document["id"])
             current = conn.execute("SELECT revision,valid_from,valid_to FROM documents WHERE tenant=? AND id=?", (tenant, document["id"])).fetchone()
             if (current["revision"] if current else None) != expected_revision:
                 raise CapabilityError("revision_conflict", "Document changed during indexing; retry against its current revision", 409)
@@ -165,7 +198,7 @@ class Store:
                 json.dumps(document["metadata"]), document["checksum"], document["recorded_at"],
                 document["valid_from"], document.get("valid_to"), document["profile_id"], json.dumps(document["index_profile"]),
             )
-            conn.execute("INSERT INTO document_revisions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", values)
+            conn.execute("INSERT INTO document_revisions(" + ",".join(REVISION_FIELDS) + ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", values)
             conn.execute(
                 "INSERT INTO documents(tenant,id,revision,title,source,body,metadata,checksum,updated_at,valid_from,valid_to,profile_id,index_profile) "
                 "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(tenant,id) DO UPDATE SET "
@@ -175,13 +208,16 @@ class Store:
                 values,
             )
             for item in chunks:
-                fields = ["id", "tenant", "document_id", "ordinal", "section", "content", "embedding", "embedding_model", *CHUNK_COLUMNS]
+                fields = CHUNK_FIELDS
                 encoded = dict(item, tenant=tenant, document_id=document["id"], revision=document["revision"], profile_id=document["profile_id"])
                 for key in ("embedding", "section_path", "evidence_ids", "processing_metadata"):
                     encoded[key] = json.dumps(encoded.get(key, {} if key == "processing_metadata" else []))
+                if self.is_postgres:
+                    encoded["embedding"] = vectors[item["id"]]
                 defaults = {"role": "leaf", "context": "", "level": 0}
+                placeholders = ["?::vector" if self.is_postgres and field == "embedding" else "?" for field in fields]
                 conn.execute(
-                    "INSERT INTO chunks(" + ",".join(fields) + ") VALUES(" + ",".join("?" for _ in fields) + ")",
+                    "INSERT INTO chunks(" + ",".join(fields) + ") VALUES(" + ",".join(placeholders) + ")",
                     [encoded.get(key, defaults.get(key)) for key in fields],
                 )
                 conn.execute("INSERT INTO chunks_fts(chunk_id,content) VALUES(?,?)", (
@@ -206,6 +242,8 @@ class Store:
     def delete(self, tenant: str, doc_id: str, now: str) -> bool:
         with self.connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
+            if self.is_postgres:
+                postgres.lock_mutation(conn, "document", tenant, doc_id)
             row = conn.execute("SELECT id FROM documents WHERE tenant=? AND id=?", (tenant, doc_id)).fetchone()
             if not row:
                 return False
@@ -215,14 +253,16 @@ class Store:
             conn.execute("INSERT INTO audit(timestamp,tenant,action,document_id,detail) VALUES(?,?,?,?,?)", (now, tenant, "delete", doc_id, "{}"))
         return True
 
-    def scope(self, tenant: str, *, as_of: str | None = None, filters: dict | None = None) -> list[dict]:
+    def scope(self, tenant: str, *, as_of: str | None = None, filters: dict | None = None,
+              include_embeddings: bool = True) -> list[dict]:
         """Choose one valid revision per document before retrieval or expansion."""
         at = timestamp(as_of)
         filters = filters or {}
+        order_column = "revision_order" if self.is_postgres else "rowid"
         with self.connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM document_revisions WHERE tenant=? AND valid_from<=? "
-                "AND (valid_to IS NULL OR valid_to>?) ORDER BY recorded_at DESC,rowid DESC", (tenant, at, at)
+                f"AND (valid_to IS NULL OR valid_to>?) ORDER BY recorded_at DESC,{order_column} DESC", (tenant, at, at)
             ).fetchall()
         docs = {}
         for row in rows:
@@ -241,7 +281,8 @@ class Store:
                 continue
             selected[(doc_id, doc["revision"])] = doc
         with self.connect() as conn:
-            chunk_rows = conn.execute("SELECT * FROM chunks WHERE tenant=?", (tenant,)).fetchall()
+            fields = "*" if include_embeddings else ",".join(field for field in CHUNK_FIELDS if field != "embedding")
+            chunk_rows = conn.execute(f"SELECT {fields} FROM chunks WHERE tenant=?", (tenant,)).fetchall()
         result = []
         for row in chunk_rows:
             chunk = dict(row)
@@ -263,11 +304,78 @@ class Store:
         allowed = set(ids)
         return [c for c in self.scope(tenant) if c["id"] in allowed]
 
+    def dense(self, tenant: str, vector: list[float], limit: int, allowed_ids: set[str], *,
+              embedding_model: str, embedding_endpoint: str) -> list[str]:
+        """Rank precisely the server-authorized revision/filter snapshot."""
+        if not allowed_ids:
+            return []
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("Dense candidate limit must be 1..100")
+        literal = postgres.vector_literal(vector) if self.is_postgres else None
+        with self.connect() as connection:
+            if self.is_postgres:
+                connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+            dimensions = "vector_dims(c.embedding) AS dimensions," if self.is_postgres else "c.embedding,"
+            predicate = " AND c.id=ANY(?)" if self.is_postgres else ""
+            parameters = (tenant, sorted(allowed_ids)) if self.is_postgres else (tenant,)
+            rows = connection.execute(
+                "SELECT c.id,c.embedding_model,c.profile_id," + dimensions +
+                "r.profile_id AS revision_profile_id,r.index_profile FROM chunks c JOIN document_revisions r "
+                "ON r.tenant=c.tenant AND r.id=c.document_id AND r.revision=c.revision "
+                "WHERE c.tenant=?" + predicate, parameters,
+            ).fetchall()
+            candidates = [row for row in rows if row["id"] in allowed_ids]
+            try:
+                for row in candidates:
+                    profile = json.loads(row["index_profile"])
+                    actual_dimensions = row["dimensions"] if self.is_postgres else len(json.loads(row["embedding"]))
+                    if (row["embedding_model"] != embedding_model or profile.get("embedding_model") != embedding_model
+                            or profile.get("embedding_endpoint") != embedding_endpoint
+                            or type(profile.get("embedding_dimensions")) is not int
+                            or profile["embedding_dimensions"] != len(vector) or actual_dimensions != len(vector)
+                            or row["profile_id"] != row["revision_profile_id"]):
+                        raise ValueError("Incompatible embedding profile")
+            except (ValueError, TypeError, AttributeError) as exc:
+                raise CapabilityError("requires_reindex", "Visible vectors have incompatible index profiles or dimensions; reindex them", 409) from exc
+            if self.is_postgres:
+                distance = postgres.cosine_distance("c.embedding")
+                result = connection.execute(
+                    "WITH query AS (SELECT ?::vector AS embedding) "
+                    f"SELECT c.id,{distance} AS distance FROM chunks c CROSS JOIN query q "
+                    "WHERE c.tenant=? AND c.id=ANY(?) ORDER BY distance,c.id LIMIT ?",
+                    (literal, tenant, [row["id"] for row in candidates], limit),
+                ).fetchall()
+                return [row["id"] for row in result]
+        try:
+            scores = [(cosine(vector, json.loads(row["embedding"])), row["id"]) for row in candidates]
+        except (ValueError, TypeError) as exc:
+            raise CapabilityError("requires_reindex", "Visible vectors have incompatible dimensions; reindex them", 409) from exc
+        return [identifier for _, identifier in sorted(scores, key=lambda item: (-item[0], item[1]))[:limit]]
+
     def sparse(self, tenant: str, match_query: str, limit: int, allowed_ids: set[str] | None = None) -> list[str]:
         if not match_query:
             return []
         if allowed_ids is None:
             allowed_ids = {c["id"] for c in self.scope(tenant) if c["role"] == "leaf"}
+        if not allowed_ids:
+            return []
+        if self.is_postgres:
+            # The caller constructs an OR of quoted literal tokens. Each token
+            # stays a bound value in PostgreSQL's plain-query parser.
+            tokens = re.findall(r'"([^"]+)"', match_query) or re.findall(r"\w+", match_query)
+            tokens = [token for token in tokens if token.upper() != "OR"][:12]
+            if not tokens:
+                return []
+            query = " || ".join("plainto_tsquery('simple',?)" for _ in tokens)
+            with self.connect() as connection:
+                rows = connection.execute(
+                    f"WITH query AS (SELECT {query} AS terms) SELECT c.id FROM chunks_fts f "
+                    "JOIN chunks c ON c.id=f.chunk_id CROSS JOIN query q "
+                    "WHERE c.tenant=? AND c.id=ANY(?) AND f.search @@ q.terms "
+                    "ORDER BY ts_rank_cd(f.search,q.terms) DESC,c.id LIMIT ?",
+                    (*tokens, tenant, sorted(allowed_ids), limit),
+                ).fetchall()
+            return [row["id"] for row in rows]
         with self.connect() as conn:
             rows = conn.execute(
                 "SELECT c.id FROM chunks_fts f JOIN chunks c ON c.id=f.chunk_id "

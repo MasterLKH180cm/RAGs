@@ -1,6 +1,6 @@
 """Authenticated research sidecar; one fixed worker process and index per request."""
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hmac
 import json
 import math
@@ -15,6 +15,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from rags.limits import BodyLimitMiddleware
+from rags.features import FeatureFlags, strategy_features
+from rags.registry import CapabilityError
 from rags.research_protocol import MAX_BODY_BYTES, MAX_RESPONSE_BYTES, ResearchRequest, validate_result
 
 
@@ -26,6 +28,7 @@ class ResearchSettings:
     concurrency: int = 1
     work_dir: str | None = None
     raptor_source: str | None = None
+    features: FeatureFlags = field(default_factory=FeatureFlags)
 
     def __post_init__(self):
         if self.engine not in {"raptor", "lightrag"}:
@@ -53,6 +56,7 @@ class ResearchSettings:
             concurrency=int(os.getenv("RAGS_RESEARCH_CONCURRENCY", "1")),
             work_dir=os.getenv("RAGS_RESEARCH_WORK_DIR") or None,
             raptor_source=os.getenv("RAGS_RAPTOR_SOURCE") or None,
+            features=FeatureFlags.from_env(),
         )
 
 
@@ -73,12 +77,19 @@ def worker_environment(config: ResearchSettings) -> dict:
         "RAGS_GENERATION_TOKENIZER_JSON", "RAGS_CONTEXT_BUDGET", "RAGS_OUTPUT_BUDGET", "RAGS_ENVELOPE_BUDGET",
         "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_CHAT_MODEL", "OPENAI_EMBEDDING_MODEL",
         "ANTHROPIC_API_KEY", "ANTHROPIC_CHAT_MODEL",
+        "ANTHROPIC_BASE_URL", "OPENAI_API_KEY_FILE", "ANTHROPIC_API_KEY_FILE",
+        "RAGS_EMBEDDING_BASE_URL", "RAGS_EMBEDDING_API_KEY", "RAGS_EMBEDDING_API_KEY_FILE", "RAGS_EMBEDDING_MODEL",
+        "RAGS_GENERATION_BASE_URL", "RAGS_GENERATION_API_KEY", "RAGS_GENERATION_API_KEY_FILE", "RAGS_GENERATION_MODEL",
     }
     environment = {key: value for key, value in os.environ.items() if key in allowed}
     environment.update(OMP_NUM_THREADS="2", OPENBLAS_NUM_THREADS="2", NUMBA_NUM_THREADS="2",
                        TOKENIZERS_PARALLELISM="false", PYTHONUNBUFFERED="1", PYTHONDONTWRITEBYTECODE="1",
                        ORT_DISABLE_TELEMETRY="1", HF_HUB_DISABLE_TELEMETRY="1",
                        RAGS_RESEARCH_ENGINE=config.engine, RAGS_ADMISSION_POLICY="compatibility")
+    environment["RAGS_FEATURES_JSON"] = json.dumps(config.features.as_dict())
+    for name in ("OPENAI_API_KEY_FILE", "ANTHROPIC_API_KEY_FILE", "RAGS_EMBEDDING_API_KEY_FILE", "RAGS_GENERATION_API_KEY_FILE"):
+        if environment.get(name):
+            environment[name] = str(Path(environment[name]).resolve())
     if config.raptor_source:
         environment["RAGS_RAPTOR_SOURCE"] = config.raptor_source
         environment["PYTHONPATH"] = os.pathsep.join(filter(None, [config.raptor_source, environment.get("PYTHONPATH")]))
@@ -95,6 +106,7 @@ class ProcessRunner:
             Path(config.work_dir).mkdir(parents=True, exist_ok=True)
 
     async def run(self, request: ResearchRequest) -> dict:
+        self.config.features.require(*strategy_features(request.engine))
         encoded = request.model_dump_json().encode()
         with tempfile.TemporaryDirectory(prefix="rags-research-", dir=self.config.work_dir) as directory:
             child = None
@@ -110,6 +122,8 @@ class ProcessRunner:
                 if child.returncode != 0:
                     # Never return arbitrary subprocess/provider error text.
                     code = payload.get("error") if isinstance(payload, dict) else None
+                    if code == "feature_disabled":
+                        raise ResearchFailure(code, 403)
                     if code in {"requires_provider", "requires_dependency", "requires_source"}:
                         raise ResearchFailure(code, 503)
                     raise ResearchFailure("upstream_failed", 502)
@@ -170,6 +184,10 @@ def create_app(config: ResearchSettings | None = None, *, runner=None) -> FastAP
     async def failed_request(request, error):
         return JSONResponse(status_code=error.status, content={"detail": {"code": error.code}})
 
+    @app.exception_handler(CapabilityError)
+    async def disabled_request(request, error):
+        return JSONResponse(status_code=error.status_code, content={"detail": {"code": error.code, "reason": error.reason}})
+
     def tenant(authorization: str | None = Header(default=None)) -> str:
         credential = authorization[7:] if authorization and authorization.startswith("Bearer ") else ""
         for key, name in settings.keys.items():
@@ -185,6 +203,7 @@ def create_app(config: ResearchSettings | None = None, *, runner=None) -> FastAP
     def health(namespace: str = Depends(tenant)):
         return {"status": "configured", "engine": settings.engine, "execution": "request_local_process",
                 "timeout_seconds": settings.timeout_seconds, "max_passages": 64,
+                "features": settings.features.as_dict(),
                 "verification": "upstream_not_exercised_by_health_probe"}
 
     @app.post("/retrieve")
@@ -193,6 +212,7 @@ def create_app(config: ResearchSettings | None = None, *, runner=None) -> FastAP
             raise HTTPException(403, detail={"code": "tenant_mismatch"})
         if body.engine != settings.engine:
             raise HTTPException(422, detail={"code": "engine_mismatch"})
+        settings.features.require(*strategy_features(body.engine))
         if slots.locked():
             raise HTTPException(429, detail={"code": "research_capacity"}, headers={"Retry-After": "1"})
         async with slots:

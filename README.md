@@ -8,7 +8,7 @@
 
 RAGs provides an authenticated FastAPI knowledge service and a read-only MCP bridge. Use it directly or connect [agentic-system](https://github.com/MasterLKH180cm/agentic-system) for durable workflows. The default runs without paid model credentials, using clearly identified hashing embeddings and extractive evidence output.
 
-Version 0.3 adds typed evidence decisions, separately calibrated relevance and answerability profiles, and isolated services executing pinned RAPTOR and LightRAG code. It builds on v0.2's six chunking strategies, token budgets, parent/summary indexes, graph traversal, structured queries, temporal revisions, federation, and pretrained encoders. The [twenty-family coverage table](#twenty-family-coverage) distinguishes native mechanisms, tested upstream execution, and remaining external requirements. An unavailable capability returns an explicit error instead of silently running another strategy.
+Version 0.4 adds operator feature permissions, dedicated model endpoint configuration, and a PostgreSQL/pgvector deployment; see the [v0.4 specification](docs/SPEC_V04.md). Version 0.3 adds typed evidence decisions, separately calibrated relevance and answerability profiles, and isolated services executing pinned RAPTOR and LightRAG code. It builds on v0.2's six chunking strategies, token budgets, parent/summary indexes, graph traversal, structured queries, temporal revisions, federation, and pretrained encoders. The [twenty-family coverage table](#twenty-family-coverage) distinguishes native mechanisms, tested upstream execution, and remaining external requirements. An unavailable capability returns an explicit error instead of silently running another strategy.
 
 ## Contents
 
@@ -22,35 +22,60 @@ Version 0.3 adds typed evidence decisions, separately calibrated relevance and a
 - [Structured and temporal queries](#structured-and-temporal-queries)
 - [Pretrained encoders and image assets](#pretrained-encoders-and-image-assets)
 - [Model providers and federation](#model-providers-and-federation)
+- [Feature and operational configuration](#feature-and-operational-configuration)
+- [Database migration and backups](#database-migration-and-backups)
 - [MCP and API reference](#mcp-and-api-reference)
 - [Validation and measured limits](#validation-and-measured-limits)
 - [Deployment and project map](#deployment-and-project-map)
 
 ## Quick start
 
-### Docker
+### PostgreSQL and pgvector with Docker
 
-Requires Git and Docker Compose with `--wait` support.
+Requires Git, Python 3.11+ for the credential generator, and Docker Compose with
+`--wait` support. The database image is
+[`pgvector/pgvector:0.8.7-pg17`](https://github.com/pgvector/pgvector#docker).
 
 ```bash
 git clone https://github.com/MasterLKH180cm/RAGs.git
 cd RAGs
-cp .env.example .env
+python scripts/bootstrap_compose.py
 docker compose up -d --build --wait
+set -a
+source data/client.env
+set +a
+curl --fail-with-body http://127.0.0.1:8000/health \
+  -H "Authorization: Bearer $RAGS_API_KEY"
 ```
 
-Open [API documentation](http://127.0.0.1:8000/docs). The supplied Compose file binds to localhost, stores data in a named volume, and uses development token `local-development-key`.
+Bootstrap creates private `.env` and `data/client.env` files with distinct random
+database-administrator, application-database and RAG API credentials. It refuses
+to overwrite existing files. Nonsecret feature files under `data/config` are
+readable by container UID 10001 and mounted read-only. New config directories/files
+use `0755`/`0644` even under a restrictive shell umask; private credentials remain
+`0600`. Existing private config directories are preserved and require explicit
+operator adjustment. The application uses production authentication; offline hashing embeddings and extractive generation
+need no model-provider credentials.
+
+PostgreSQL has no published host port. Only <http://127.0.0.1:8000> is exposed;
+open [/docs](http://127.0.0.1:8000/docs) for the API. Authenticated health must
+report `storage.backend=postgresql` and `storage.vector_search=pgvector_exact`.
+The application connects as `rags_app`, not the database administrator.
 
 ```bash
-curl --fail-with-body http://127.0.0.1:8000/health \
-  -H 'Authorization: Bearer local-development-key'
+docker compose logs -f rags
+docker compose down  # Retains database and application volumes.
 ```
 
-`docker compose down` stops services while retaining the volume. To run both APIs and the workflow worker, follow the [companion full-stack setup](https://github.com/MasterLKH180cm/agentic-system#quick-start).
+Use the [Agent full stack](https://github.com/MasterLKH180cm/agentic-system#quick-start)
+to run both APIs and the independent worker together. Start one stack at a time
+on the default ports. Existing SQLite volumes are retained, not automatically
+imported; read [migration and backups](#database-migration-and-backups) first.
 
-### Python
+### Explicit SQLite development
 
-Requires Python 3.11+ and SQLite FTS5. From the cloned repository in a Bash-compatible shell:
+Requires Python 3.11+ and SQLite FTS5. This separate path keeps offline development
+and existing SQLite data available:
 
 ```bash
 python -m venv .venv
@@ -58,10 +83,16 @@ source .venv/bin/activate
 python -m pip install -e '.[dev,pdf,mcp,vision]'
 export RAGS_ENV=development
 export RAGS_API_KEY=local-development-key
+export RAGS_DB_PATH="$PWD/data/rags.db"
+unset RAGS_DATABASE_URL RAGS_FEATURES_FILE
 uvicorn rags.api:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Python reads exported process variables. Copying `.env` alone does not configure this command; standalone Compose loads it through `env_file`. Run API examples in another terminal.
+Python reads exported process variables; copying `.env` alone does not configure
+it. For operator-managed PostgreSQL install `.[postgres]`, pre-create the
+`vector` extension as an administrator, grant the application role access to its
+database, and export `RAGS_DATABASE_URL`. A selected PostgreSQL backend fails
+explicitly if unavailable; it never switches to SQLite.
 
 ## Ingest and query
 
@@ -69,7 +100,7 @@ Python reads exported process variables. Copying `.env` alone does not configure
 
 ```bash
 curl --fail-with-body http://127.0.0.1:8000/documents \
-  -H 'Authorization: Bearer local-development-key' \
+  -H "Authorization: Bearer $RAGS_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{"document_id":"session-v1","title":"Session policy","source":"manual","text":"# Sessions\nSessions expire after 30 minutes of inactivity. Refresh tokens rotate on login."}'
 ```
@@ -80,7 +111,7 @@ The response includes the document ID, source revision, index profile, and chunk
 
 ```bash
 curl --fail-with-body http://127.0.0.1:8000/query \
-  -H 'Authorization: Bearer local-development-key' \
+  -H "Authorization: Bearer $RAGS_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{"question":"When do sessions expire?","mode":"hybrid","top_k":3}'
 ```
@@ -95,7 +126,7 @@ The complete HTTP request body is capped at 2,100,000 bytes before JSON parsing 
 
 ```bash
 curl --fail-with-body http://127.0.0.1:8000/documents/session-v1/reindex \
-  -H 'Authorization: Bearer local-development-key' \
+  -H "Authorization: Bearer $RAGS_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{"expected_revision":"replace-with-current-revision","chunking":{"strategy":"recursive","max_tokens":256,"overlap_tokens":32},"tokenizer":{"backend":"tiktoken","encoding":"cl100k_base"}}'
 ```
@@ -113,7 +144,7 @@ flowchart TD
     MCP --> API
     API --> Docs["Document ingestion and retrieval"]
     API --> Assets["Original image asset retrieval"]
-    Docs <--> DB[("SQLite sources, revisions, and indexes")]
+    Docs <--> DB[("PostgreSQL sources and pgvector indexes")]
     Assets <--> DB
     Docs --> Local["Hashing or optional trained text encoders"]
     Assets --> CLIP["Optional paired CLIP encoders"]
@@ -126,7 +157,10 @@ The workflow runtime remains a separate service. Named research HTTP adapters re
 
 ```mermaid
 flowchart TD
-    Request["Source and processing configuration"] --> Scope["Authenticate and read current revision"]
+    Request["Source and processing configuration"] --> Auth["Authenticate and select tenant"]
+    Auth --> Flags{"Operation and processing permitted?"}
+    Flags -->|No| Disabled["403 feature_disabled"]
+    Flags -->|Yes| Scope["Read current authorized revision"]
     Scope --> Same{"Source and index profile unchanged?"}
     Same -->|Yes| Unchanged["Return unchanged"]
     Same -->|No| Chunk["Tokenize and preserve source spans"]
@@ -136,16 +170,17 @@ flowchart TD
     Check -->|Yes| Commit["Atomically commit revision, indexes, and audit"]
 ```
 
-`index_features:["hierarchy"]` builds recursive vector clusters and source-linked summaries; at least two leaf chunks are needed. Summaries are extractive by default and model-generated when a generator is configured. Explicit `Entity A -> Entity B` lines are indexed as relations. `index_features:["graph"]` additionally enables bounded model extraction when a generator is configured.
+`index_features:["hierarchy"]` builds recursive vector clusters and source-linked summaries; at least two leaf chunks are needed. Summaries are extractive by default and model-generated when a generator is configured. When the `index.graph` permission is enabled, explicit `Entity A -> Entity B` lines are indexed as relations. `index_features:["graph"]` additionally requests bounded model extraction when a generator is configured; disabling `index.graph` blocks an explicit graph-index request and skips implicit relation extraction.
 
 ### Retrieval and answer production
 
 ```mermaid
 flowchart TD
-    Query["Question, mode, filters, and time"] --> Scope["Resolve authorized source revisions"]
-    Scope --> Ready{"Required capability available?"}
-    Ready -->|No| Error["Return an explicit requirement error"]
-    Ready -->|Yes| Retrieve["Execute the declared retrieval mechanism"]
+    Query["Question, mode, filters, and time"] --> Auth["Authenticate and select tenant"]
+    Auth --> Ready{"Required features and providers available?"}
+    Ready -->|No| Error["Return permission or requirement error"]
+    Ready -->|Yes| Scope["Resolve authorized source revisions"]
+    Scope --> Retrieve["Execute the declared retrieval mechanism"]
     Retrieve --> Review{"Model-driven refinement requested?"}
     Review -->|Within bounded loop| Retrieve
     Review -->|Ready or limit reached| Evidence["Resolve original source evidence"]
@@ -173,7 +208,7 @@ Pass `chunking` and `tokenizer` on ingestion/reindexing, or set `RAGS_CHUNKING_J
 | `structure` | Markdown heading paths and code/list/table block boundaries | Text structure; no PDF layout claim |
 | `parent_child` | Separate parent and child source records; deduplicated parent expansion | Parent budget greater than child budget |
 | `semantic` | Sentence-vector discontinuities plus hard chunk limits | Trained OpenAI or FastEmbed embedding adapter |
-| `contextual` | Generated document context indexed with source text in BM25 and vectors | Configured generator; over-budget context fails explicitly |
+| `contextual` | Generated document context indexed with source text in full-text and vector indexes | Configured generator; over-budget context fails explicitly |
 
 Default source processing uses `structure`, 850 Unicode code points per chunk, and 120 units of overlap. Unicode units are **not model tokens**. For exact encoding counts, select `{"backend":"tiktoken","model":"known-model"}` or an explicit, correct encoding. Unknown model mappings fail. Processing metadata records tokenizer identity, counts, source spans, block types, and generated context separately.
 
@@ -188,8 +223,8 @@ The index fingerprint includes chunking/tokenizer settings, model identities, em
 | Original family | Entry point | Implementation and boundary |
 | --- | --- | --- |
 | Naive RAG | `naive` | Native single dense retrieval followed by evidence assembly |
-| Sparse RAG | `sparse` | Native FTS5 BM25 ranking |
-| Dense RAG | `dense` | Native cosine retrieval; hashing, OpenAI, or trained FastEmbed vectors are identified explicitly |
+| Sparse RAG | `sparse` | PostgreSQL full-text ranking with `ts_rank_cd`; SQLite compatibility uses FTS5 BM25 |
+| Dense RAG | `dense` | Exact pgvector cosine SQL in PostgreSQL; hashing, OpenAI, or trained FastEmbed vectors are identified explicitly |
 | Hybrid RAG | `hybrid` | Native sparse/dense RRF; no hidden lexical reranker |
 | RAG-Fusion | `fusion` | Provider-generated distinct queries, independent retrieval, and RRF |
 | HyDE | `hyde` | Provider-generated hypothetical documents and embedding centroid; hypotheses never become citations |
@@ -248,7 +283,7 @@ The [actual Qwen HTTP-to-Agent report](reports/agent_admission_http_v03.json) ve
 
 ## RAPTOR and LightRAG services
 
-Each service hosts one operator-selected engine in its own dependency environment. RAPTOR uses official source commit `7da1d48a7e1d7dec61a63c9d9aae84e2dfaa5767`; LightRAG uses release 1.5.7 at commit `28ff1b05f2ac3f3e6fa14dd2cd33656579bd0c9c`. The installer pins dependencies and verifies the official source/wheel; it does not install the unrelated PyPI package named `raptor`.
+Each service hosts one operator-selected engine in its own dependency environment. Both supplied upstream adapters require the `research`, selected `strategy.*`, and `tokenizer.tiktoken` permissions; disabling their token counter fails before provider execution. RAPTOR uses official source commit `7da1d48a7e1d7dec61a63c9d9aae84e2dfaa5767`; LightRAG uses release 1.5.7 at commit `28ff1b05f2ac3f3e6fa14dd2cd33656579bd0c9c`. The installer pins dependencies and verifies the official source/wheel; it does not install the unrelated PyPI package named `raptor`.
 
 ```bash
 # Python 3.12, separate from the main service environment:
@@ -325,17 +360,17 @@ export RAGS_MULTIMODAL_MODEL=clip-vit-b-32
 
 Restart the service after changing configuration. Reindex text documents when changing their embedding profile. Initial downloads require network access and disk space; paired CLIP files total roughly 0.6 GB. The `encoders` dependency is constrained to the tested FastEmbed minor version because CLIP artifact inspection uses version-specific implementation details.
 
-The default Docker image includes PDF, MCP, and vision support. To include local encoders, build with `docker compose build --build-arg RAGS_EXTRAS=pdf,mcp,vision,encoders`, then run `docker compose up -d --wait` with the corresponding variables in `.env`.
+The default Docker image includes PostgreSQL, PDF, MCP and vision support. To include local encoders set `RAGS_EXTRAS=postgres,pdf,mcp,vision,encoders` in `.env`, rebuild with `docker compose build rags`, and recreate the RAG service. Configure the model and feature permissions explicitly; enabling a flag does not install a model.
 
 Image assets retain the original bytes and vector, unlike the `/images` caption endpoint:
 
 ```bash
 curl --fail-with-body http://127.0.0.1:8000/assets/images \
-  -H 'Authorization: Bearer local-development-key' \
+  -H "Authorization: Bearer $RAGS_API_KEY" \
   -F 'file=@diagram.png' -F 'title=Architecture diagram'
 
 curl --fail-with-body http://127.0.0.1:8000/assets/search \
-  -H 'Authorization: Bearer local-development-key' \
+  -H "Authorization: Bearer $RAGS_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{"query":"an architecture diagram","top_k":5}'
 ```
@@ -359,21 +394,151 @@ Set credentials locally, outside Git. OpenAI embeddings and generation are indep
 
 `RAGS_RESEARCH_BACKENDS_JSON` separately configures research adapters using `url`, optional `model` label, `tenant_tokens`, and bounded `timeout_seconds`. Set `require_pinned_upstream:true` for the supplied RAPTOR/LightRAG services. The `authorized-evidence-v1` protocol sends only scoped original passages and accepts IDs from that set. HippoRAG, Microsoft GraphRAG, trained Self-RAG and paper-specific CRAG still require separate upstream integrations; their generic adapter is not an implementation of those engines.
 
+## Feature and operational configuration
+
+The [v0.4 specification](docs/SPEC_V04.md) defines the feature and storage contract.
+All feature permissions default to `true` to preserve existing availability;
+an enabled permission still needs its provider, model, index or sidecar.
+Authentication, tenant scope, revision checks and evidence policies are mandatory.
+
+`RAGS_FEATURES_FILE` loads a UTF-8 JSON boolean map;
+`RAGS_FEATURES_JSON` overrides individual file entries. Unknown keys,
+non-booleans, duplicate keys, malformed JSON or unreadable selected files fail
+startup. The authoritative list is [`rags/features.py`](rags/features.py);
+authenticated `GET /capabilities` returns the effective map and redacted storage
+identity. Disabling documentation unregisters its routes; other disabled
+operations return HTTP 403 with `detail.code=feature_disabled`. Service and
+provider methods apply the same guards, including internal strategy dependencies.
+
+| Feature names | Controls |
+| --- | --- |
+| `ingestion`, `documents`, `uploads`, `reindex`, `deletion`, `query` | Source mutations/reads, uploads, processing and retrieval |
+| `api_docs`, `mcp` | OpenAPI/docs exposure and shipped MCP entry points |
+| `model_generation`, `federation`, `research`, `admission_scoring` | Optional model calls, configured remote sources/engines and selected evidence scorer |
+| `image_captioning`, `multimodal`, `original_images` | Caption ingestion, original-image indexing/search and independent original-byte download permission |
+| `embedding.local`, `embedding.openai`, `embedding.fastembed` | Embedding providers; FastEmbed permission also covers local ColBERT/CLIP encoders |
+| `index.hierarchy`, `index.graph` | Optional derived-index builders |
+| `tokenizer.unicode`, `tokenizer.tiktoken` | Source and generation counters |
+| `chunking.fixed`, `chunking.recursive`, `chunking.structure`, `chunking.parent_child`, `chunking.semantic`, `chunking.contextual` | Each source chunker |
+| `strategy.<name>` | Each exact strategy ID returned by `GET /strategies`; complete IDs below |
+
+The strategy keys use the `strategy.` prefix with these exact IDs: `naive`, `sparse`, `dense`, `hybrid`, `fusion`, `hyde`, `contextual`, `parent_child`, `hierarchical`, `graph`, `corrective`, `adaptive`, `agentic`, `self_reflective`, `structured`, `federated`, `temporal`, `caption`, `multivector`, `colbert`, `raptor`, `full_graphrag`, `lightrag`, `hipporag`, `self_rag`, `crag`, `multimodal_native`.
+
+For example, edit `data/config/rags.features.json`:
+
+```json
+{"strategy.hyde": false, "strategy.fusion": false, "original_images": false}
+```
+
+Set `RAGS_FEATURES_JSON='{"strategy.hyde":true}'` in `.env` to override that one
+entry while retaining the other file restrictions. Apply changed environment
+or feature files to the already running stack with:
+
+```bash
+docker compose up -d --no-deps --force-recreate --wait rags
+```
+
+A disabled dense/sparse dependency also blocks hybrid-dependent strategies.
+Disabling original bytes leaves internal image reindexing available if its
+other permissions allow it. Required calibrated admission cannot be configured
+with its scorer disabled. A feature flag cannot make an unimplemented research
+paper available.
+
+### Complete runtime environment
+
+The [.env.example](.env.example) is the commented configuration template; the
+bootstrap fills credentials. All variables below are explicitly forwarded by
+both the standalone and companion Compose deployments. Empty optional JSON
+settings use their built-in defaults. Restart the relevant process after any
+setting change; model/endpoint/tokenizer changes can require explicit reindexing.
+
+| Variable | Default / bootstrap value | Purpose |
+| --- | --- | --- |
+| `RAGS_ENV` | `production` | Process mode; generated credentials are required in production. |
+| `RAGS_API_KEY` | Generated by bootstrap | Client token generated by bootstrap; production authentication uses the map. |
+| `RAGS_KEYS_JSON` | `{}` | Token-to-tenant map. Bootstrap generates a distinct RAG token. |
+| `RAGS_DATABASE_URL` | Generated by bootstrap | PostgreSQL DSN generated for the non-superuser rags_app role. |
+| `RAGS_DB_PATH` | `/app/data/rags.db` | Explicit SQLite compatibility path for standalone Python; Compose requires the PostgreSQL DSN. |
+| `RAGS_FEATURES_FILE` | `/app/config/rags.features.json` | JSON boolean overrides; mounted from data/config. |
+| `RAGS_FEATURES_JSON` | `{}` | Per-key overrides take precedence over the feature file. |
+| `RAGS_EMBEDDING_PROVIDER` | `local` | local, openai, fastembed. local is deterministic hashing, not a trained semantic encoder. |
+| `RAGS_MODEL_PROVIDER` | `extractive` | extractive, openai, anthropic. Flags do not install or configure providers. |
+| `RAGS_EMBEDDING_BASE_URL` | Unset | Optional dedicated OpenAI-compatible embedding endpoint; otherwise legacy OPENAI_BASE_URL. |
+| `RAGS_EMBEDDING_API_KEY` | Unset | Dedicated embedding credential; choose this or its _FILE, never both. |
+| `RAGS_EMBEDDING_API_KEY_FILE` | Unset | Container-readable secret path, e.g. /app/config/embedding.key. |
+| `RAGS_EMBEDDING_MODEL` | Unset | Dedicated embedding model; otherwise OPENAI_EMBEDDING_MODEL. |
+| `RAGS_GENERATION_BASE_URL` | Unset | Dedicated generation endpoint; otherwise the selected provider's legacy endpoint. |
+| `RAGS_GENERATION_API_KEY` | Unset | Dedicated generation credential; choose this or its _FILE, never both. |
+| `RAGS_GENERATION_API_KEY_FILE` | Unset | Container-readable generation secret path. |
+| `RAGS_GENERATION_MODEL` | Unset | Dedicated generation model; otherwise selected provider's legacy model. |
+| `RAGS_TOKENIZER_JSON` | Unset | Empty uses the built-in unicode counter; exact option: {"backend":"tiktoken","encoding":"cl100k_base"}. |
+| `RAGS_GENERATION_TOKENIZER_JSON` | Unset | Empty preserves provider-specific defaults; OpenAI generation uses its model tokenizer. |
+| `RAGS_CHUNKING_JSON` | Unset | Empty uses structure/max_tokens=850/overlap_tokens=120; JSON overrides are validated. |
+| `RAGS_CONTEXT_BUDGET` | `16000` | Total generation context units. |
+| `RAGS_OUTPUT_BUDGET` | `1024` | Output reserve inside context budget. |
+| `RAGS_ENVELOPE_BUDGET` | `256` | Message envelope reserve inside context budget. |
+| `RAGS_MAX_ITERATIONS` | `3` | Bounded retrieval iterations, 1..3. |
+| `RAGS_SOURCES_JSON` | `{}` | Named federation sources with operator URLs and tenant_keys maps. |
+| `RAGS_FASTEMBED_MODEL` | `BAAI/bge-small-en-v1.5` | Requires the encoders extra and the selected trained model. |
+| `RAGS_MODEL_CACHE` | `/app/data/models` | Persistent local model cache. |
+| `RAGS_LATE_INTERACTION_MODEL` | `answerdotai/answerai-colbert-small-v1` | Requires encoders and its actual model. |
+| `RAGS_MULTIMODAL_MODEL` | `clip-vit-b-32` | Requires encoders and aligned image/text model artifacts. |
+| `RAGS_ADMISSION_POLICY` | `compatibility` | calibrated_required needs a reviewed matching profile and runtime. |
+| `RAGS_ADMISSION_PROFILE` | Unset | Container path to an operator-selected profile; no profile enabled by default. |
+| `RAGS_RESEARCH_BACKENDS_JSON` | `{}` | Named real upstream sidecars with tenant_tokens and timeouts; see README. |
+
+### Provider compatibility variables
+
+Dedicated `RAGS_EMBEDDING_*` and `RAGS_GENERATION_*` values override the selected
+provider's legacy settings below. Embeddings and generation can use different
+endpoints, credentials and models. Matching `*_API_KEY_FILE` paths must be
+readable inside the container; use a value or its file, never both. A file path
+in `.env` refers to the container filesystem, not an arbitrary host path.
+
+| Variable | Default / bootstrap value | Purpose |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | Unset | Legacy shared provider key; dedicated RAG keys take precedence. |
+| `OPENAI_API_KEY_FILE` | Unset | Legacy shared key file; choose a value or file. |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Legacy OpenAI-compatible base URL. |
+| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | Legacy embedding model. |
+| `OPENAI_CHAT_MODEL` | `gpt-4.1-mini` | Legacy OpenAI chat model. |
+| `ANTHROPIC_API_KEY` | Unset | Legacy Anthropic key. |
+| `ANTHROPIC_API_KEY_FILE` | Unset | Legacy Anthropic key file. |
+| `ANTHROPIC_BASE_URL` | `https://api.anthropic.com/v1` | Legacy Anthropic endpoint. |
+| `ANTHROPIC_CHAT_MODEL` | `claude-sonnet-4-5` | Legacy Anthropic model. |
+
+`POSTGRES_PASSWORD` and `RAGS_DB_PASSWORD` belong to database bootstrap and are
+generated separately. `RAGS_EXTRAS` selects build dependencies (default
+`postgres,pdf,mcp,vision`); add `encoders` when selecting actual local models.
+The model cache persists in `rag-data`. Put reviewed profiles under
+`data/config` and use their `/app/config/...` paths.
+
+Research sidecars run in their separately installed environment. Their settings
+are `RAGS_RESEARCH_ENGINE`, `RAGS_RESEARCH_KEYS_JSON`,
+`RAGS_RESEARCH_TIMEOUT_SECONDS` (120), `RAGS_RESEARCH_CONCURRENCY` (1),
+`RAGS_RESEARCH_WORK_DIR` and `RAGS_RAPTOR_SOURCE`; the main API receives the
+sidecar through `RAGS_RESEARCH_BACKENDS_JSON`. Model/backend configuration alone
+does not establish the paper's correctness or promote a quality profile.
+MCP clients use `RAGS_URL` and `RAGS_API_KEY` from `data/client.env`.
+
+
 ## MCP and API reference
 
-The stdio bridge exposes `search_knowledge` and `list_knowledge_documents`:
+The stdio bridge exposes `search_knowledge` and `list_knowledge_documents` when their remote permissions allow them. From the repository used for the Compose bootstrap, load its generated client identity:
 
 ```bash
 export RAGS_URL=http://127.0.0.1:8000
-export RAGS_API_KEY=local-development-key
+set -a
+source data/client.env
+set +a
 python -m rags.mcp_server
 ```
 
-Start the HTTP service first and use a Python environment with `.[mcp]` installed. The process waits for an MCP client over stdio. See [Codex configuration](docs/codex-mcp.toml) and [Claude Code configuration](docs/claude-mcp.json); use an absolute virtual-environment Python path when necessary.
+For the explicit SQLite setup, use its development `RAGS_API_KEY` instead. Start the HTTP service first and use a Python environment with `.[mcp]` installed. The process waits for an MCP client over stdio. See [Codex configuration](docs/codex-mcp.toml) and [Claude Code configuration](docs/claude-mcp.json); use an absolute virtual-environment Python path when necessary.
 
 | Routes | Purpose |
 | --- | --- |
-| `/live`; `/health`; `/strategies` | Public liveness; authenticated configuration and capabilities |
+| `/live`; `/health`; `/capabilities`; `/strategies` | Public liveness; authenticated storage/configuration, permissions and strategy availability |
 | `/documents`, `/documents/{id}` | Ingest, list, read, delete |
 | `/documents/{id}/revisions`, `/documents/{id}/reindex` | Historical metadata and guarded reindexing |
 | `/documents/upload` | UTF-8 text/Markdown/JSON/CSV and PDF text extraction |
@@ -391,7 +556,26 @@ provider failures retain their typed status, including `502`.
 
 ## Validation and measured limits
 
-The current local core suite passes **336 unit tests and 170 integration tests**
+### Verified v0.4 implementation
+
+[CI 44996488847](https://github.com/MasterLKH180cm/RAGs/actions/runs/44996488847)
+passed all six automatic jobs at `f3c9506b850c0196517861b11cf51ca56d6ed991`.
+The selected suites passed **411 unit tests, 300 ordinary integration tests and
+21 actual PostgreSQL tests**, with zero selected skips. Complete-package coverage
+across all 30 production modules is **82.94% of statements and 77.66% of branches**;
+the unchanged floors are 80% and 72%. PostgreSQL execution is included in this
+measurement; independent processes and models have separate evidence.
+
+The other gates passed real encoders, RAPTOR/LightRAG HTTP lifecycles, admission
+runtime/recorded-quality checks and a real PostgreSQL/pgvector Compose deployment
+with restart persistence. The manual full quality benchmark was not selected.
+See the [v0.4 implementation review](docs/IMPLEMENTATION_REVIEW_V04.md),
+[machine-readable results and source hashes](docs/testing-results-v04.json), and
+[current PR checks](https://github.com/MasterLKH180cm/RAGs/pull/4/checks).
+
+### Historical baseline and test policy
+
+The last recorded v0.3 local core baseline passed **336 unit tests and 170 integration tests**
 (**506 unique cases, zero selected skips**). Five actual encoder/research tests
 are explicitly deselected here and have separately provisioned CI jobs. Every
 pytest case has one primary layer, and a machine-readable inventory identifies
@@ -399,7 +583,7 @@ each node ID and its resource requirements. See the committed
 [test specification](docs/TEST_SPEC.md), [request-boundary polish specification](docs/POLISH_SPEC.md)
 and [test/code review](docs/TEST_REVIEW.md).
 
-| Coverage of the complete production Python package | Original test baseline | Current local result | Required floor |
+| Coverage of the complete production Python package | Original test baseline | Recorded v0.3 result | Required floor |
 | --- | ---: | ---: | ---: |
 | Statements | 75.88% | **80.86%** | 80% |
 | Branches | 68.51% | **74.97%** | 72% |
@@ -407,7 +591,7 @@ and [test/code review](docs/TEST_REVIEW.md).
 Both measurements use ordinary parent-process tests, including every production
 module in the denominator. Optional models and independent MCP/worker processes
 have separate execution evidence; their coverage is not folded into this figure.
-No new module omissions or coverage exclusions were added. CI publishes JUnit,
+The v0.4 required measurement appends the actual PostgreSQL selection before checking these same floors; the new storage implementation remains in the denominator. These historical percentages are not v0.4 results. No module omissions or new coverage exclusions are allowed. CI publishes JUnit,
 collection inventories and per-file JSON/XML/HTML coverage. A selected
 skip/xfail/xpass, an unclassified test or a missing production coverage file
 fails the required gate.
@@ -415,7 +599,7 @@ fails the required gate.
 Ordinary CI runs actual Qwen acceptance/refusal on two preselected calibration cases and audits the immutable complete quality report. It checks all file/dataset/profile identities and recomputes the recorded gates, while clearly labelling those metrics as historical. The full 472-forward benchmark is a separate manual workflow option, `full_admission_benchmark`, using the unchanged `--enforce-quality` command and a bounded CPU budget. Any scoring/retrieval change or proposed profile promotion requires a new complete benchmark; a successful contract smoke or recorded-report audit cannot substitute for it. See [the CI resource specification](docs/SPEC_V03.md#9-ci-resource-and-evidence-amendment).
 
 ```bash
-python -m pip install -e ".[dev,pdf,mcp,vision]"
+python -m pip install -e ".[dev,pdf,mcp,vision,postgres]"
 export ORT_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_TELEMETRY=1
 RAGS_ENV=test python -m pytest -q -m unit --require-no-skips \
   --test-inventory reports/testing/inventory-unit.json \
@@ -424,6 +608,15 @@ RAGS_ENV=test python -m pytest -q -m unit --require-no-skips \
 RAGS_ENV=test python -m pytest -q -m "integration and not external" --require-no-skips \
   --test-inventory reports/testing/inventory-integration.json \
   --junitxml reports/testing/junit-integration.xml \
+  --cov=rags --cov-branch --cov-config=pyproject.toml --cov-append \
+  --cov-report=json:reports/testing/coverage-core.json \
+  --cov-report=xml:reports/testing/coverage-core.xml \
+  --cov-report=html:reports/testing/coverage-html
+# Provision a disposable PostgreSQL database and enable vector as an administrator first.
+# RAGS_TEST_POSTGRES_URL must select that database; missing/unreachable service fails.
+RAGS_ENV=test python -m pytest -q tests/test_postgres_storage.py -m postgres --require-no-skips \
+  --test-inventory reports/testing/inventory-postgres.json \
+  --junitxml reports/testing/junit-postgres.xml \
   --cov=rags --cov-branch --cov-config=pyproject.toml --cov-append \
   --cov-report=json:reports/testing/coverage-core.json \
   --cov-report=xml:reports/testing/coverage-core.xml \
@@ -457,9 +650,86 @@ The [recorded v0.2 CI run](https://github.com/MasterLKH180cm/RAGs/actions/runs/4
 
 The historical v0.2 companion HTTP/worker/MCP flow also passed with Agent SQLite and PostgreSQL; RAG storage remained SQLite. Version 0.3 additionally executes actual upstream engines through the full HTTP and Agent boundary: [RAPTOR report](reports/research_raptor_http_v03.json) and [LightRAG report](reports/research_lightrag_http_v03.json). Both include tenant isolation, updates/as-of/deletion, process cleanup, independent worker and terminal REST/SSE/MCP checks. These use real BGE and explicitly deterministic generation fixtures; live paid-generation quality remains unverified.
 
-See the [v0.3 implementation review](docs/IMPLEMENTATION_REVIEW_V03.md), [v0.3 specification](docs/SPEC_V03.md), [upstream ledger](docs/RESEARCH_ENGINES.md) and [architecture](docs/ARCHITECTURE.md) for current evidence. The [v0.2 review](docs/IMPLEMENTATION_REVIEW.md) remains a historical record.
+See the [v0.4 implementation review](docs/IMPLEMENTATION_REVIEW_V04.md), [v0.4 specification](docs/SPEC_V04.md), [upstream ledger](docs/RESEARCH_ENGINES.md) and [architecture](docs/ARCHITECTURE.md) for current scope and evidence. The [v0.3 review](docs/IMPLEMENTATION_REVIEW_V03.md) and [v0.2 review](docs/IMPLEMENTATION_REVIEW.md) remain historical records.
+
+## Database migration and backups
+
+The deployed source, revision, graph, audit and original-image records now live
+in PostgreSQL. Text/image embeddings use its native `vector` type and exact
+cosine-distance SQL after tenant/revision/filter authorization. PostgreSQL sparse
+search uses a GIN-indexed full-text representation and `ts_rank_cd`; SQLite
+development retains FTS5/BM25. Hybrid combines the backend's ranked lists with
+RRF. No ANN/HNSW throughput or recall result is claimed.
+
+Changing `RAGS_DATABASE_URL` selects a store; it does **not** move existing data.
+For an existing SQLite deployment, stop writers (including Agent workers using
+this RAG), retain a SQLite backup using its backup API, and prepare a fresh
+PostgreSQL database with the `vector` extension. The target must be empty.
+The explicit importer opens SQLite read-only and transactionally preserves
+IDs, revisions, provenance, original image bytes and vectors without model calls:
+
+```bash
+# In an installed Python environment; export the application PostgreSQL DSN first.
+python -m pip install -e '.[postgres]'
+python -m rags.migrate --sqlite /absolute/path/to/source-rags.db
+```
+
+For the supplied stack the legacy `rag-data` volume remains mounted at
+`/app/data`. With writers stopped and a fresh PostgreSQL target:
+
+```bash
+docker compose up -d --wait postgres
+docker compose stop rags
+docker compose run --rm --no-deps rags \
+  python -m rags.migrate --sqlite /app/data/rags.db
+docker compose up -d --wait rags
+```
+
+A nonempty target or unsupported/corrupt data fails without deleting the source.
+Validate source/revision counts and representative historical queries before
+switching clients. Keep the original SQLite backup and old deployment available
+for rollback; writes made after switching are not automatically synchronized
+back. Model-profile incompatibility still requires reindexing.
+
+Before an application/schema or extension upgrade, stop writes and save a logical
+backup. Use a new filename each time; the example refuses overwriting:
+
+```bash
+mkdir -p data/backups
+umask 077
+set -C
+docker compose exec -T postgres pg_dump -U postgres -Fc -d rags \
+  > data/backups/rags-before-upgrade.dump
+set +C
+```
+
+Restore into a new database for verification, using the already provisioned
+application role, and point a separate deployment at the restored DSN:
+
+```bash
+docker compose exec -T postgres createdb -U postgres -O rags_app rags_restore
+docker compose exec -T postgres pg_restore -U postgres --exit-on-error -d rags_restore \
+  < data/backups/rags-before-upgrade.dump
+```
+
+Restrict database connection grants to the intended application role before use,
+verify health and representative queries, then switch traffic. Existing volumes
+do not rerun Docker initialization scripts; changing a password in `.env` alone
+does not rotate the stored role password. Rotate database credentials and DSNs
+together. An extension update is an explicit administrator operation
+(`ALTER EXTENSION vector UPDATE`) after compatibility review; a PostgreSQL major
+upgrade requires `pg_upgrade` or dump/restore, not merely changing the image tag.
+`docker compose down -v` deletes volumes and is appropriate only for disposable
+test data.
+
 
 ## Deployment and project map
+
+The current deployment/configuration contract is [SPEC_V04](docs/SPEC_V04.md).
+The [v0.4 results](docs/testing-results-v04.json) identify the tested implementation,
+source hashes and actual PostgreSQL/Compose evidence; the companion Agent report
+records Chromium and independent-worker checks. Earlier counts and frozen quality
+measurements remain labelled historical.
 
 Production requires `RAGS_KEYS_JSON` mapping strong API keys to tenant IDs; production keys must be at least 24 characters. Authentication precedes source selection, hierarchy expansion, graph traversal, historical reads, and asset access. The local development keys are examples for localhost.
 
@@ -490,10 +760,10 @@ configuration. For a standalone deployment, provision `RAGS_ENV=production`
 and `RAGS_KEYS_JSON` through your secret manager with an independently generated
 token; use the same token in `AGENT_RAG_KEYS_JSON` if adding Agent later.
 `data/production.env` is loaded explicitly by the Python instructions; the
-standalone Compose quick start continues to read its development `.env`.
+standalone Compose quick start uses its separately generated production-authentication `.env`.
 The [polish specification](docs/POLISH_SPEC.md) records the setup contract.
 
-SQLite WAL, full vector scans, bounded local worker threads for federation, and on-demand research encodings target small deployments. Multi-node operation requires different storage/indexing infrastructure. A public deployment also needs identity integration, document-level policy where required, quotas, TLS, backups, and monitoring. No universal answer-grounding guarantee or production quality claim is made by the smoke tests.
+PostgreSQL/pgvector is the deployed store; SQLite remains explicit local development compatibility. Exact vector SQL, bounded federation threads and on-demand research encoding retain workload-dependent scaling limits. Distributed vector indexes and measured high-availability behavior are not supplied. A public deployment also needs identity integration, document-level policy where required, quotas, TLS, backups, and monitoring. No universal answer-grounding guarantee or production quality claim is made by the smoke tests.
 
 | Module | Responsibility |
 | --- | --- |

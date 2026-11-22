@@ -84,7 +84,7 @@ async def project_chunks(chunks: list[dict], store, sources: dict[str, str], top
 
 async def search(question: str, passages: list[dict], top_k: int, workdir: Path, provider) -> dict:
     sources = validate_request(question, passages, top_k)
-    bridge = ProviderBridge(provider)
+    bridge = ProviderBridge(provider, engine="lightrag")
     directory = private_directory(workdir, "lightrag")
     verify_source("lightrag", SOURCE_FILES)
     try:

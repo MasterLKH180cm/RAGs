@@ -37,6 +37,7 @@ def validate_image(raw: bytes) -> str:
 
 
 def describe_image(raw: bytes, media_type: str, settings: Settings) -> str:
+    settings.features.require("image_captioning", "model_generation")
     if settings.model_provider not in {"openai", "anthropic"}:
         raise ValueError("Configure a vision-capable model provider")
     encoded = base64.b64encode(raw).decode("ascii")
@@ -47,11 +48,11 @@ def describe_image(raw: bytes, media_type: str, settings: Settings) -> str:
         "Do not assume sensitive or clinically meaningful conclusions."
     )
     if settings.model_provider == "openai":
-        if not settings.openai_key:
-            raise ValueError("OPENAI_API_KEY is required for image description")
+        if not settings.generation_credential:
+            raise ValueError("RAGS_GENERATION_API_KEY or OPENAI_API_KEY is required for image description")
         response = httpx.post(
-            settings.openai_base_url + "/chat/completions",
-            headers={"Authorization": "Bearer " + settings.openai_key},
+            settings.generation_endpoint + "/chat/completions",
+            headers={"Authorization": "Bearer " + settings.generation_credential},
             json={
                 "model": settings.chat_model,
                 "messages": [{
@@ -69,12 +70,12 @@ def describe_image(raw: bytes, media_type: str, settings: Settings) -> str:
             timeout=90,
         )
     else:
-        if not settings.anthropic_key:
-            raise ValueError("ANTHROPIC_API_KEY is required for image description")
+        if not settings.generation_credential:
+            raise ValueError("RAGS_GENERATION_API_KEY or ANTHROPIC_API_KEY is required for image description")
         response = httpx.post(
-            "https://api.anthropic.com/v1/messages",
+            settings.generation_endpoint + "/messages",
             headers={
-                "x-api-key": settings.anthropic_key,
+                "x-api-key": settings.generation_credential,
                 "anthropic-version": "2023-06-01",
             },
             json={

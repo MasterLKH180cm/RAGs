@@ -3,7 +3,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 RAGS_ENV=production
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY rags ./rags
-ARG RAGS_EXTRAS=pdf,mcp,vision
+ARG RAGS_EXTRAS=postgres,pdf,mcp,vision
 RUN pip install --no-cache-dir ".[${RAGS_EXTRAS}]" \
     && useradd --uid 10001 --create-home appuser \
     && mkdir -p /app/data && chown appuser:appuser /app/data

@@ -1,17 +1,87 @@
+# PostgreSQL deployment. Generate private .env/config files with scripts/bootstrap_compose.py.
+# PostgreSQL is private to this stack; only localhost HTTP ports are published.
 services:
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Run python scripts/bootstrap_compose.py first}"
+      RAGS_DB_PASSWORD: "${RAGS_DB_PASSWORD:?Run python scripts/bootstrap_compose.py first}"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/init-databases.sh:/docker-entrypoint-initdb.d/10-app-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d postgres"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
   rags:
-    build: .
+    build:
+      context: .
+      args:
+        RAGS_EXTRAS: "${RAGS_EXTRAS:-postgres,pdf,mcp,vision}"
     ports:
       - "127.0.0.1:8000:8000"
-    env_file: .env
+    environment:
+      RAGS_ENV: "${RAGS_ENV:-production}"
+      RAGS_API_KEY: "${RAGS_API_KEY}"
+      RAGS_KEYS_JSON: "${RAGS_KEYS_JSON:?Run python scripts/bootstrap_compose.py first}"
+      RAGS_DATABASE_URL: "${RAGS_DATABASE_URL:?Run python scripts/bootstrap_compose.py first}"
+      RAGS_DB_PATH: "${RAGS_DB_PATH:-/app/data/rags.db}"
+      RAGS_FEATURES_FILE: "${RAGS_FEATURES_FILE:-/app/config/rags.features.json}"
+      RAGS_FEATURES_JSON: "${RAGS_FEATURES_JSON}"
+      RAGS_EMBEDDING_PROVIDER: "${RAGS_EMBEDDING_PROVIDER:-local}"
+      RAGS_MODEL_PROVIDER: "${RAGS_MODEL_PROVIDER:-extractive}"
+      RAGS_EMBEDDING_BASE_URL: "${RAGS_EMBEDDING_BASE_URL}"
+      RAGS_EMBEDDING_API_KEY: "${RAGS_EMBEDDING_API_KEY}"
+      RAGS_EMBEDDING_API_KEY_FILE: "${RAGS_EMBEDDING_API_KEY_FILE}"
+      RAGS_EMBEDDING_MODEL: "${RAGS_EMBEDDING_MODEL}"
+      RAGS_GENERATION_BASE_URL: "${RAGS_GENERATION_BASE_URL}"
+      RAGS_GENERATION_API_KEY: "${RAGS_GENERATION_API_KEY}"
+      RAGS_GENERATION_API_KEY_FILE: "${RAGS_GENERATION_API_KEY_FILE}"
+      RAGS_GENERATION_MODEL: "${RAGS_GENERATION_MODEL}"
+      RAGS_TOKENIZER_JSON: "${RAGS_TOKENIZER_JSON}"
+      RAGS_GENERATION_TOKENIZER_JSON: "${RAGS_GENERATION_TOKENIZER_JSON}"
+      RAGS_CHUNKING_JSON: "${RAGS_CHUNKING_JSON}"
+      RAGS_CONTEXT_BUDGET: "${RAGS_CONTEXT_BUDGET:-16000}"
+      RAGS_OUTPUT_BUDGET: "${RAGS_OUTPUT_BUDGET:-1024}"
+      RAGS_ENVELOPE_BUDGET: "${RAGS_ENVELOPE_BUDGET:-256}"
+      RAGS_MAX_ITERATIONS: "${RAGS_MAX_ITERATIONS:-3}"
+      RAGS_SOURCES_JSON: "${RAGS_SOURCES_JSON}"
+      RAGS_FASTEMBED_MODEL: "${RAGS_FASTEMBED_MODEL:-BAAI/bge-small-en-v1.5}"
+      RAGS_MODEL_CACHE: "${RAGS_MODEL_CACHE:-/app/data/models}"
+      RAGS_LATE_INTERACTION_MODEL: "${RAGS_LATE_INTERACTION_MODEL:-answerdotai/answerai-colbert-small-v1}"
+      RAGS_MULTIMODAL_MODEL: "${RAGS_MULTIMODAL_MODEL:-clip-vit-b-32}"
+      RAGS_ADMISSION_POLICY: "${RAGS_ADMISSION_POLICY:-compatibility}"
+      RAGS_ADMISSION_PROFILE: "${RAGS_ADMISSION_PROFILE}"
+      RAGS_RESEARCH_BACKENDS_JSON: "${RAGS_RESEARCH_BACKENDS_JSON}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+      OPENAI_API_KEY_FILE: "${OPENAI_API_KEY_FILE}"
+      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+      OPENAI_EMBEDDING_MODEL: "${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}"
+      OPENAI_CHAT_MODEL: "${OPENAI_CHAT_MODEL:-gpt-4.1-mini}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      ANTHROPIC_API_KEY_FILE: "${ANTHROPIC_API_KEY_FILE}"
+      ANTHROPIC_BASE_URL: "${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}"
+      ANTHROPIC_CHAT_MODEL: "${ANTHROPIC_CHAT_MODEL:-claude-sonnet-4-5}"
     volumes:
       - rag-data:/app/data
-    restart: unless-stopped
+      - ./data/config:/app/config:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/live', timeout=3)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/live',timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
 
 volumes:
+  postgres-data:
   rag-data:

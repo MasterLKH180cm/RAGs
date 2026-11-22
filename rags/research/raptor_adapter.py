@@ -55,7 +55,7 @@ def project_leaves(selected: list[dict], nodes: dict, leaves: dict[int, str], so
 
 def search(question: str, passages: list[dict], top_k: int, workdir: Path, provider) -> dict:
     sources = validate_request(question, passages, top_k)
-    bridge = ProviderBridge(provider)
+    bridge = ProviderBridge(provider, engine="raptor")
     private_directory(workdir, "raptor")
     verify_source("raptor", SOURCE_FILES)
     try:
