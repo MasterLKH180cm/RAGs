@@ -127,8 +127,9 @@ class AgentEngine:
         _id(session_id, "session")
         if model not in self.config.models:
             raise CapabilityError("model_not_allowed", "Unknown model alias", 403)
-        history = self.history.last(principal.tenant, session_id,
-                                    limit=self.config.max_history_turns)
+        history = (self.history.last(principal.tenant, session_id,
+                                     limit=self.config.max_history_turns)
+                   if self.config.memory_enabled else [])
         observations = (self.observations.recent(principal.tenant, session_id)
                         if self.config.memory_enabled and "rags:memory" in principal.permissions else [])
         messages = [{"role": "system", "content":
@@ -211,7 +212,7 @@ class AgentEngine:
                         raise ValueError("Tool response too long")
                 except CapabilityError:
                     raise
-                except Exception as exc:
+                except Exception:
                     return self._step(cp, status="failed", stop_reason="tool_execution_failed")
             messages = [*cp.state["messages"], {"role": "tool", "tool_call_id": call.id,
                        "content": json.dumps(result, ensure_ascii=False, allow_nan=False)}]
@@ -278,7 +279,8 @@ class AgentEngine:
                 return self._step(cp, status="failed", steps=steps,
                                   stop_reason="empty_model_answer")
             cp = self._step(cp, status="completed", steps=steps, answer=answer)
-            self.history.append(cp.tenant, cp.state["session_id"], "user", cp.state["goal"])
-            self.history.append(cp.tenant, cp.state["session_id"], "assistant", answer[:4000])
+            if self.config.memory_enabled:
+                self.history.append(cp.tenant, cp.state["session_id"], "user", cp.state["goal"])
+                self.history.append(cp.tenant, cp.state["session_id"], "assistant", answer[:4000])
             return cp
         return cp
