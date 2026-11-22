@@ -6,13 +6,13 @@ Date: 2026-11-23. Status: contract-first. Implementation follows on a feature br
 
 - Expose one typed `ModelRouter.complete` request/response format with normalized `tool_calls`, regardless of the configured provider. Transport is an **operator-controlled LiteLLM Gateway** speaking OpenAI-compatible Chat Completions; its upstream [provider catalog](https://docs.litellm.ai/docs/providers) exceeds forty providers, including OpenAI (`openai/`), Anthropic (`anthropic/`), Google Gemini (`gemini/`) and xAI (`xai/`). The user never supplies a URL, token, model path, or provider credentials. All model names are exact pre-approved operator aliases.
 - This is a **LiteLLM Gateway adapter**, not a bundled direct implementation and not a claim that this repo has tested >40 upstream credentials/models. Integration tests with a fake gateway verify normalization and safety; real-provider interoperability remains environment dependent. Do not add an unpinned Python SDK dependency or break `uv sync --locked`.
-- An opt-in agent uses bounded execution, explicit tool permissions, typed arguments, timeouts, stop conditions and human approval. Workflow DSL composes Python-registered steps using `.then()`, `.branch()`, and `.parallel()`, without evaluating dynamically supplied user code.
+- A default-enabled agent (still protected by caller scopes) uses bounded execution, explicit tool permissions, typed arguments, timeouts, stop conditions and human approval. Workflow DSL composes Python-registered steps using `.then()`, `.branch()`, and `.parallel()`, without evaluating dynamically supplied user code.
 - Persist resumable agent/workflow checkpoints, conversation history, and attributable *observation records* in the same tenant-scoped SQLite/PostgreSQL storage. Observation memory is a bounded, provenance-aware compaction, not unsupported human-like understanding and not automatic storage of PHI, secrets, or entire prompts.
 - Preserve v0.7 Dashboard, OTel, API auth modes, tenant filters, provider defaults, existing model-generated RAG and all prior tests.
 
 ## Activation and isolation
 
-- `RAGS_AGENT_ENABLED=false`, `RAGS_ROUTER_ENABLED=false`, `RAGS_MEMORY_ENABLED=false` by default (three separate operator gates).
+- `RAGS_AGENT_ENABLED=true`, `RAGS_ROUTER_ENABLED=true`, `RAGS_MEMORY_ENABLED=true` by default. Operators can set each to `false`. Running an agent still requires authenticated scopes and an explicitly configured model Gateway. With Memory enabled, permitted conversations are persisted automatically; disabling memory prevents history and observation writes.
 - Router requires configured HTTPS gateway endpoint, token loaded via env or `_FILE`, and exact `RAGS_ROUTER_MODELS_JSON` alias-to-model mapping; names restricted to operator-defined aliases and model values (provider/model). Optional loopback/private HTTP allowed only with explicitly opted-in development flag; no implicit fallback.
 - Config includes bounded `max_steps <= 8`, `max_tool_calls <= 16`, `max_runtime_seconds <= 90`, `max_output_tokens <= 4096`, `max_history_turns <= 20`, and typed input sizes. No model fees or completion budget are guessed.
 - New `rags:agent` permission (admin & agent-runner roles) on start/resume; `rags:memory` only on direct memory management. Every `knowledge_search` tool additionally requires `rags:query`, `query` Feature Flag and tenant from Principal, never a token/model supplied tenant.
@@ -63,7 +63,7 @@ A workflow is a deterministic, bounded graph plan compiled from a Python registr
 ## Default-on with secure gateway readiness (user-selected)
 
 Router, Agent and Memory are enabled by default, including in a fresh installation.
-This overrides the earlier default-off notes in the original specification.
+This is the authoritative runtime default across Python, environment templates, Docker Compose and CLI.
 Operators may explicitly disable any individual feature using its RAGS_*_ENABLED
 flag. The service exposes authenticated capabilities and local workflow execution
 without any cloud provider credentials. Without a complete, valid gateway,

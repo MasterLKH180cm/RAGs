@@ -22,7 +22,7 @@
 
 - Existing unit/integration, real PostgreSQL+pgvector, model training/research sidecars, wheel installation, static analysis and coverage gates stay in CI.
 - Added HTTP mock provider normalization, denied alias/status/oversized/malformed responses, Pydantic tool schema, tenant isolation, human gate approval/denial, workflow restore/version conflict, conversation and observation TTL, and real PostgreSQL state read/write tests.
-- All features remain opt-in, retain a single Gateway egress endpoint controlled by the operator, and never silently downgrade OAuth2/feature/scoped authorizations.
+- Agent, Router and Memory are enabled by default, while model requests remain gated by explicit Gateway configuration, credentials and authorization. Operators can disable each via `RAGS_AGENT_ENABLED=false`, `RAGS_ROUTER_ENABLED=false`, or `RAGS_MEMORY_ENABLED=false`. Never silently downgrade OAuth2/feature/scoped authorizations.
 
 ## Default-on readiness with explicit credential boundaries
 
@@ -51,3 +51,8 @@ evidence admission checks continue to apply.
 ## Runtime deadline and side-effect safety
 
 The Agent Engine propagates a context-local deadline into external chat and embedding network timeouts. Registered read-only, idempotent tools use bounded daemon workers so HTTP requests can return after a time budget without trusting late results; a semaphore limits orphaned workers to eight. The only built-in read-only tool is knowledge retrieval. **This is not a sandbox or a kill switch for arbitrary side effects**: operator-defined state-changing tools execute synchronously, require cooperative cancellation and idempotent downstream operations, and can exceed the configured wall-time budget if their own code ignores the deadline. Never report such handlers as hard-interruptible. See the additional unit/integration deadline regression tests.
+
+
+## Verified conversation citations
+
+A successful answer persists only validated and actually cited source IDs, attached to its assistant turn under the authenticated tenant and subject-scoped session. Follow-up turns may reuse up to 80 references from retained history, in addition to at most 80 newly retrieved IDs. The stored per-turn provenance limit is 160, matching their maximum combined budget. Chat history APIs retain their existing role/text response shape unless explicitly reading provenance. Legacy SQLite/PostgreSQL history gains an empty citation array without rewriting old messages. This proves *prior verification*, not that source contents remain unchanged forever; use fresh RAG retrieval when current-source freshness matters.

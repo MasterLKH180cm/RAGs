@@ -320,3 +320,14 @@ def test_existing_legacy_agent_messages_gain_empty_citation_metadata(tmp_path):
     ) == 2
     assert ConversationStore(state).last("tenant", "legacy", with_evidence=True)[1][
         "evidence_ids"] == ["chunk_1"]
+
+
+def test_verified_provenance_budget_supports_fresh_and_prior_references(state):
+    history = ConversationStore(state)
+    references = [f"chunk_{number:03d}" for number in range(160)]
+    history.append("tenant", "session", "assistant",
+                   "Validated citation references", evidence_ids=references)
+    assert history.last("tenant", "session", with_evidence=True)[0]["evidence_ids"] == references
+    with pytest.raises(ValueError, match="provenance"):
+        history.append("tenant", "session", "assistant", "Too many",
+                       evidence_ids=references + ["extra_source"])

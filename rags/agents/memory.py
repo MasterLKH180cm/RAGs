@@ -11,6 +11,12 @@ from rags import postgres
 from rags.agents.state import StateStore, _id, _when
 
 
+# Maximum current evidence: 16 tool calls x 5 citations = 80.
+# Maximum reused prior evidence: 80. Persist the union (<=160) without
+# silently discarding citations after completing the run checkpoint.
+MAX_VERIFIED_CITATIONS = 160
+
+
 def _fact(value: str, maximum: int) -> str:
     if not isinstance(value, str) or not 1 <= len(value.strip()) <= maximum:
         raise ValueError("Memory content exceeds allowed length")
@@ -42,7 +48,7 @@ class ConversationStore:
             raise ValueError("Invalid history role")
         body = _fact(content, 4000)
         citations = [] if evidence_ids is None else evidence_ids
-        if (not isinstance(citations, list) or len(citations) > 80
+        if (not isinstance(citations, list) or len(citations) > MAX_VERIFIED_CITATIONS
                 or (role != "assistant" and citations) or any(
                     not isinstance(value, str) or not 1 <= len(value) <= 128
                     or any(ch.isspace() or ord(ch) < 32 or ch in "[]" for ch in value)
