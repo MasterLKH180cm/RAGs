@@ -3,7 +3,6 @@
 The Gateway supports >40 upstream providers; this adapter only claims an
 OpenAI-compatible HTTP contract. Exact model aliases are operator-approved.
 """
-from dataclasses import dataclass, field
 import json
 import re
 from typing import Any
