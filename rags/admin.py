@@ -138,6 +138,8 @@ def install_admin(app: FastAPI, *, settings: Settings, authenticator: Authentica
         if request.url.path == "/admin" or request.url.path.startswith("/admin/"):
             for key, value in ADMIN_HEADERS.items():
                 response.headers[key] = value
+            if request.url.scheme == "https":
+                response.headers["Strict-Transport-Security"] = "max-age=31536000"
         return response
 
     def authenticate(request: Request) -> tuple[Principal, AdminSession, str]:
@@ -190,6 +192,9 @@ def install_admin(app: FastAPI, *, settings: Settings, authenticator: Authentica
         cookie_name, secure = _cookie(request, settings)
         principal = authenticator.authenticate(authorization)
         principal.require("rags:admin", "rags:read")
+        # A new browser login revokes the previous session cookie, preventing
+        # unnecessary parallel privileges and session fixation.
+        sessions.revoke(request.cookies.get(cookie_name))
         session_cookie, session = sessions.create(authorization.partition(" ")[2], principal)
         request.state.principal = principal
         response = Response(content='{"status":"authenticated"}', media_type="application/json",

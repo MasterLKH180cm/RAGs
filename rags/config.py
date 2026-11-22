@@ -158,6 +158,8 @@ class Settings:
                 tenant_claim=os.getenv("RAGS_OAUTH2_TENANT_CLAIM", "tenant_id"),
                 timeout_seconds=float(os.getenv("RAGS_OAUTH2_TIMEOUT_SECONDS", "3")),
             )
+        if admin_enabled and env == "production" and auth_mode == "api_key" and not roles_json:
+            raise ValueError("Production admin dashboard requires explicit RAGS_KEY_ROLES_JSON")
         embedding_provider = os.getenv("RAGS_EMBEDDING_PROVIDER", "local").lower()
         model_provider = os.getenv("RAGS_MODEL_PROVIDER", "extractive").lower()
         if embedding_provider not in {"local", "openai", "fastembed"}:

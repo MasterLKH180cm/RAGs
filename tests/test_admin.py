@@ -60,6 +60,7 @@ def test_static_dashboard_is_bundled_accessible_and_csp_protected(config):
         assert page.status_code == 200
         assert "Content-Security-Policy" in page.headers
         assert "frame-ancestors 'none'" in page.headers["content-security-policy"]
+        assert page.headers["strict-transport-security"] == "max-age=31536000"
         assert page.headers["cache-control"] == "no-store"
         assert "管理知識" in page.text
         assert "<html lang=\"zh-Hant\">" in page.text

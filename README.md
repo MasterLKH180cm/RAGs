@@ -105,6 +105,8 @@ In production use HTTPS behind a trusted reverse proxy that correctly forwards s
 
 **Important session limitations:** In-memory sessions are lost on restart and do not synchronize across workers/replicas. Use a single web worker or sticky affinity; add durable, encrypted server-side session storage and an OIDC authorization-code/PKCE browser login for distributed SSO. A TLS reverse proxy is not a substitute for the existing OAuth2/Bearer authorization checks.
 
+In **production API-key mode**, enabling `RAGS_ADMIN_ENABLED=true` also requires a complete, explicit `RAGS_KEY_ROLES_JSON` at startup. This prevents inadvertently exposing the dashboard to all legacy full-access keys. Dashboard exporter success/failure/dropped counters are tenant-scoped; process-global exporter counters are never shown to other tenants.
+
 ### OTLP/HTTP traces and metrics
 
 RAGs optionally exports **real OTLP/HTTP JSON** using the existing `httpx` dependency, with a bounded asynchronous queue. This is a minimal OTLP protocol exporter, **not the OpenTelemetry Python SDK's automatic instrumentation**. The service uses standard OpenTelemetry trace/metric JSON envelopes with route-template names and service resource attributes. No query text, source content, original URLs/document IDs, raw tenants, bearer values, headers, cookies, model payloads or stack traces are exported. Export failures never prevent API requests.

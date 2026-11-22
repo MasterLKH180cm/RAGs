@@ -5,7 +5,7 @@ httpx rather than claiming to be the full OpenTelemetry Python SDK. The
 collector endpoint is operator-configured; no request can change it.
 """
 from collections import Counter, deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 import math
 import queue
@@ -64,6 +64,7 @@ class RequestEvent:
     duration_ms: float
     start_ns: int
     end_ns: int
+    tenant: str | None = field(default=None, repr=False)
 
 
 class Monitor:
@@ -76,6 +77,7 @@ class Monitor:
         self.service_name = service_name
         self._lock = Lock()
         self._per_tenant: dict[str, deque[RequestEvent]] = {}
+        self._tenant_export: dict[str, dict[str, int]] = {}
         self._counts: Counter[tuple[str, str, str]] = Counter()
         self._durations: dict[tuple[str, str, str], tuple[int, float, list[int]]] = {}
         self._start_ns = time.time_ns()
@@ -98,15 +100,20 @@ class Monitor:
         method = method if method in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"} else "OTHER"
         status = status if isinstance(status, int) and 100 <= status <= 599 else 500
         duration_ms = max(0., min(float(duration_ms), 120_000.))
-        event = RequestEvent(time.time(), route, method, status, duration_ms, start_ns, end_ns)
+        event = RequestEvent(time.time(), route, method, status, duration_ms, start_ns, end_ns,
+                             tenant=tenant)
         group = f"{status // 100}xx"
         key = (route, method, group)
         with self._lock:
             if tenant is not None:
                 if tenant not in self._per_tenant and len(self._per_tenant) >= MAX_TENANTS:
                     # Do not let unbounded attacker-controlled tenants exhaust memory.
-                    self._per_tenant.pop(next(iter(self._per_tenant)))
+                    evicted = next(iter(self._per_tenant))
+                    self._per_tenant.pop(evicted)
+                    self._tenant_export.pop(evicted, None)
                 self._per_tenant.setdefault(tenant, deque(maxlen=MAX_EVENTS_PER_TENANT)).append(event)
+                self._tenant_export.setdefault(tenant, {"exported": 0, "dropped": 0,
+                                                        "export_failures": 0})
             if key not in self._counts and len(self._counts) >= MAX_SERIES:
                 key = ("/other", "OTHER", "other")
             self._counts[key] += 1
@@ -120,14 +127,19 @@ class Monitor:
             except queue.Full:
                 with self._lock:
                     self.dropped += 1
+                    if tenant is not None and tenant in self._tenant_export:
+                        self._tenant_export[tenant]["dropped"] += 1
 
     def snapshot(self, tenant: str) -> dict:
         now = time.time()
         with self._lock:
             recent = [e for e in self._per_tenant.get(tenant, ()) if e.time >= now - 3600]
-            stats = {"enabled": self.enabled, "exported": self.exported,
-                     "dropped": self.dropped, "export_failures": self.export_failures,
-                     "scope": "single_process"}
+            tenant_stats = self._tenant_export.get(tenant) or {}
+            stats = {"enabled": self.enabled,
+                     "exported": tenant_stats.get("exported", 0),
+                     "dropped": tenant_stats.get("dropped", 0),
+                     "export_failures": tenant_stats.get("export_failures", 0),
+                     "scope": "tenant_single_process"}
         five_minutes = [e for e in recent if e.time >= now - 300]
         errors = sum(e.status >= 500 for e in five_minutes)
         series = []
@@ -213,9 +225,16 @@ class Monitor:
         except (httpx.HTTPError, OSError, ValueError):
             with self._lock:
                 self.export_failures += 1
+                for tenant in {e.tenant for e in events if e.tenant is not None}:
+                    if tenant in self._tenant_export:
+                        self._tenant_export[tenant]["export_failures"] += 1
         else:
+            exported_by_tenant = Counter(e.tenant for e in events if e.tenant is not None)
             with self._lock:
                 self.exported += len(events)
+                for tenant, count in exported_by_tenant.items():
+                    if tenant in self._tenant_export:
+                        self._tenant_export[tenant]["exported"] += count
 
     def _work(self) -> None:
         while not self._stopping.is_set() or not self._queue.empty():

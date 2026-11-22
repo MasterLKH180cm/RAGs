@@ -32,7 +32,7 @@ def test_per_tenant_metrics_are_bounded_and_private():
     assert b["requests_5m"] == 1 and b["errors_5m"] == 0
     assert a["p50_ms_5m"] == 12. and a["p95_ms_5m"] == 90.
     assert sum(p["requests"] for p in a["series"]) == 2
-    assert a["otel"]["enabled"] is False and a["otel"]["scope"] == "single_process"
+    assert a["otel"]["enabled"] is False and a["otel"]["scope"] == "tenant_single_process"
     assert percentile([], .95) is None
 
 
@@ -142,3 +142,58 @@ def test_otel_insecure_optin_and_production_admin_http_prohibited(monkeypatch):
     monkeypatch.setenv("RAGS_KEYS_JSON", '{"abcdefghijklmnopqrstuvwxyzzzz":"local"}')
     with pytest.raises(ValueError, match="only permitted"):
         Settings.from_env()
+
+
+def test_observability_export_counters_never_aggregate_other_tenants():
+    monitor = Monitor(enabled=True, endpoint="https://collector.invalid", start_worker=False)
+    monitor._post = lambda *_args: None
+    monitor.record(tenant="tenant-A", route="/query", method="POST", status=200,
+                   duration_ms=1., start_ns=1, end_ns=2)
+    monitor.record(tenant="tenant-B", route="/query", method="POST", status=500,
+                   duration_ms=2., start_ns=2, end_ns=3)
+    a = monitor._queue.get_nowait()
+    b = monitor._queue.get_nowait()
+    monitor.flush([a])
+    assert monitor.snapshot("tenant-A")["otel"]["exported"] == 1
+    assert monitor.snapshot("tenant-B")["otel"]["exported"] == 0
+    assert monitor.snapshot("tenant-unrelated")["otel"]["exported"] == 0
+    monitor.flush([b])
+    assert monitor.snapshot("tenant-B")["otel"]["exported"] == 1
+    assert "tenant-A" not in json.dumps(monitor._traces([a]))
+    assert "tenant-B" not in json.dumps(monitor._traces([b]))
+
+
+def test_otlp_emits_http_json_to_expected_collector_paths(monkeypatch):
+    import rags.monitoring as telemetry
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        assert request.method == "POST"
+        assert request.url.path in {"/v1/traces", "/v1/metrics"}
+        assert request.headers["content-type"] == "application/json"
+        assert request.headers.get("authorization") is None
+        assert "private-tenant" not in request.content.decode("utf-8")
+        assert request.content.startswith(b"{")
+        return httpx.Response(200, json={})
+
+    actual = httpx.Client
+    monkeypatch.setattr(telemetry.httpx, "Client",
+                        lambda **kwargs: actual(transport=httpx.MockTransport(handler)))
+    monitor = Monitor(enabled=True, endpoint="https://collector.test:4318", start_worker=False)
+    monitor.record(tenant="private-tenant", route="/query", method="POST", status=200,
+                   duration_ms=9.5, start_ns=1_000, end_ns=20_000)
+    monitor.flush([monitor._queue.get_nowait()])
+    assert len(requests) == 2
+    assert monitor.snapshot("private-tenant")["otel"]["exported"] == 1
+
+
+def test_production_dashboard_requires_explicit_api_key_roles(monkeypatch):
+    monkeypatch.setenv("RAGS_ENV", "production")
+    monkeypatch.setenv("RAGS_ADMIN_ENABLED", "true")
+    monkeypatch.setenv("RAGS_KEYS_JSON", '{"abcdefghijklmnopqrstuvwxyz123456":"tenant-a"}')
+    with pytest.raises(ValueError, match="RAGS_KEY_ROLES_JSON"):
+        Settings.from_env()
+    monkeypatch.setenv("RAGS_KEY_ROLES_JSON",
+                       '{"abcdefghijklmnopqrstuvwxyz123456":["admin"]}')
+    assert Settings.from_env().admin_enabled is True
