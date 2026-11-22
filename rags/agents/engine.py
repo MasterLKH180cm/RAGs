@@ -232,8 +232,15 @@ class AgentEngine:
                     data = json.dumps(result, ensure_ascii=False, allow_nan=False)
                     if len(data.encode("utf-8")) > 8192:
                         raise ValueError("Tool response too long")
-                except CapabilityError:
-                    raise
+                except CapabilityError as exc:
+                    # Normalize error codes before persisting; provider messages,
+                    # URLs, credentials and exception details never enter state.
+                    safe_code = exc.code if exc.code in {
+                        "feature_disabled", "requires_provider", "requires_index",
+                        "context_budget_exceeded", "invalid_citation",
+                        "invalid_evidence", "unknown_strategy",
+                    } else "tool_execution_failed"
+                    return self._step(cp, status="failed", stop_reason=safe_code)
                 except Exception:
                     return self._step(cp, status="failed", stop_reason="tool_execution_failed")
             messages = [*cp.state["messages"], {"role": "tool", "tool_call_id": call.id,

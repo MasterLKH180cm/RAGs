@@ -65,11 +65,15 @@ class Workflow:
         return self._append(Node(name, "then", fn=fn, approval=approval, idempotent=idempotent))
 
     def branch(self, name: str, predicate: Callable, *, if_true: Callable,
-               if_false: Callable) -> "Workflow":
+               if_false: Callable, idempotent: bool = False) -> "Workflow":
         if not all(callable(fn) for fn in (predicate, if_true, if_false)):
             raise ValueError("Branch predicate and both actions must be registered functions")
+        if type(idempotent) is not bool:
+            raise ValueError("Branch idempotency must be explicitly true or false")
+        # Arbitrary branch predicates/actions may mutate external systems.
+        # Recovery is only safe when the operator declares replay idempotent.
         return self._append(Node(name, "branch", predicate=predicate,
-                                 if_true=if_true, if_false=if_false, idempotent=True))
+                                 if_true=if_true, if_false=if_false, idempotent=idempotent))
 
     def parallel(self, name: str, branches: dict[str, Callable], *,
                  idempotent: bool = False) -> "Workflow":

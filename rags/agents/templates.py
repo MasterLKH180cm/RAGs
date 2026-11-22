@@ -85,7 +85,7 @@ def make_evidence_review(rag, principal: Principal, flags: FeatureFlags) -> Work
 
     return (Workflow("evidence_review", version=EVIDENCE_REVIEW.version)
             .then("retrieve", retrieve, idempotent=True)
-            .branch("quality_gate", gate, if_true=yes, if_false=no)
+            .branch("quality_gate", gate, if_true=yes, if_false=no, idempotent=True)
             .parallel("cross_checks",
                       {"provenance": provenance, "dedup": uniqueness}, idempotent=True)
             .then("human_approval", approve, approval=True, idempotent=True)
