@@ -110,11 +110,15 @@ def _validate_introspection(raw: object, config: OAuth2Config, now: float) -> Pr
         raise _invalid_token()
     if config.audience not in ([audience] if isinstance(audience, str) else audience):
         raise _invalid_token()
+    def timestamp_is_valid(value: object) -> bool:
+        # Bounds also reject hostile arbitrary-precision ints that overflow float conversion.
+        return type(value) in (int, float) and 0 <= value < 1_000_000_000_000
+
     exp = raw.get("exp")
-    if type(exp) not in (int, float) or not math.isfinite(exp) or exp <= now:
+    if not timestamp_is_valid(exp) or exp <= now:
         raise _invalid_token()
     nbf = raw.get("nbf")
-    if nbf is not None and (type(nbf) not in (int, float) or not math.isfinite(nbf) or nbf > now):
+    if nbf is not None and (not timestamp_is_valid(nbf) or nbf > now):
         raise _invalid_token()
     subject, tenant, scopes = raw.get("sub"), raw.get(config.tenant_claim), raw.get("scope")
     if not isinstance(subject, str) or not 1 <= len(subject) <= 256:

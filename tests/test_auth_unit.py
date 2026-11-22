@@ -170,6 +170,7 @@ def test_oauth2_mode_does_not_fallback_to_static_secrets(monkeypatch):
     {"active": False}, {"active": 1}, {"iss": "https://evil.invalid/"}, {"aud": "another-api"},
     {"aud": []}, {"aud": 12}, {"aud": ["rags-api", 1]}, {"exp": 0},
     {"exp": True}, {"exp": float("nan")}, {"nbf": time.time()+300},
+    {"exp": 10**400}, {"nbf": 10**400},
     {"nbf": "not-a-time"}, {"sub": ""}, {"sub": 42}, {"tenant_id": "tenant with spaces"},
     {"tenant_id": ""}, {"tenant_id": None}, {"tenant_id": "../../parent"},
     {"scope": ["rags:read"]}, {"scope": 42}, {"scope": "rags:read\nrags:delete"},

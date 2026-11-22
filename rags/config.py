@@ -92,7 +92,7 @@ class Settings:
             not isinstance(k, str) or not k or not isinstance(v, str) or not TENANT.fullmatch(v)
             for k, v in keys.items()
         ):
-            raise ValueError("RAGS_KEYS_JSON requires API keys and bounded tenant identifiers")
+            raise ValueError("RAGS_KEYS_JSON must map non-empty API keys to bounded tenant identifiers")
         auth_mode = os.getenv("RAGS_AUTH_MODE", "api_key").lower()
         if auth_mode not in {"api_key", "oauth2_introspection"}:
             raise ValueError("RAGS_AUTH_MODE must be api_key or oauth2_introspection")
