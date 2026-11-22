@@ -140,7 +140,7 @@ See [v0.7 design contract](docs/SPEC_V07.md) and [security/operations review](do
 
 ## Agent Platform: model routing, workflows and memory (v0.8)
 
-The **opt-in** Agent Platform provides one typed router interface, bounded tool-calling agents, a programmable workflow graph, durable human-in-the-loop checkpoints, and tenant-scoped conversation/observation memory. It uses the existing `rags-platform` wheel and PostgreSQL/pgvector or SQLite database, with no new mandatory dependency.
+The **default-enabled** Agent Platform provides one typed router interface, bounded tool-calling agents, a programmable workflow graph, durable human-in-the-loop checkpoints, and tenant-scoped conversation/observation memory. It uses the existing `rags-platform` wheel and PostgreSQL/pgvector or SQLite database, with no new mandatory dependency.
 
 ### One model interface across 40+ upstream providers
 
@@ -165,7 +165,7 @@ The Gateway deployment is independent: see [LiteLLM supported providers](https:/
 
 ### Bounded agents, scopes and APIs
 
-Default deployment has `RAGS_AGENT_ENABLED=false`, `RAGS_ROUTER_ENABLED=false`, `RAGS_MEMORY_ENABLED=false`; there is **zero model router networking until explicitly enabled**.
+All three platform switches—`RAGS_AGENT_ENABLED`, `RAGS_ROUTER_ENABLED`, and `RAGS_MEMORY_ENABLED`—default to **true**. Set an individual flag to `false` to disable it. The absence of a configured Gateway does **not** crash startup: the service reports `router_ready=false` and returns `503 router_unconfigured` for model inference, without making any external request. The local registered workflow and explicitly authorized memory APIs remain available. `rags agent doctor --json` reports `configuration_required` and exits nonzero until a trusted Gateway is configured.
 
 The HTTP API uses existing Bearer authentication and tenant identity:
 
@@ -215,6 +215,31 @@ assert finished.status == "completed"
 
 The durable state, revision CAS, and immutable graph version fingerprint live in the same tenant-scoped database. **For an external side-effecting step, idempotent retries must be implemented by the operator**; a process crash between a side effect and a checkpoint is not an exactly-once guarantee. Workflows are Python DSL graphs, not a drag-and-drop editor in this release.
 
+### Interactive workflow graph and CLI
+
+The **Agents** page in the Admin Dashboard includes a visual graph of registered
+sequential, conditional, parallel and human-approval steps. It supports execution,
+approve/deny and checkpoint recovery. It does not execute arbitrary Python
+submitted from the browser: workflows are defined by trusted operators.
+
+```bash
+# Available without a cloud model: operates on authorized local RAG evidence.
+rags workflow list
+printf 'What are the records retention requirements?\n' > question.txt
+rags workflow run --template evidence_review --question-file question.txt --mode sparse
+rags workflow status --run-id RUN_ID
+rags workflow review --run-id RUN_ID --revision REVISION --approve
+rags workflow recover --run-id RUN_ID --revision REVISION
+```
+
+The corresponding endpoints are `GET /agents/workflows`,
+`POST /agents/workflows/evidence_review/runs`,
+`GET /agents/workflows/runs/{run_id}`,
+`POST /agents/workflows/runs/{run_id}/resume`, and
+`POST /agents/workflows/runs/{run_id}/recover`. Authorization requires
+`rags:agent` and `rags:query`; dashboard requests also require `rags:admin`,
+a session cookie and CSRF validation. Runs are restricted to their creator
+and tenant, and stale checkpoint revisions are rejected.
 ### History and observation memory
 
 Each conversation is stored under `(tenant, session_id)`, with bounded retrieval of at most 20 recent turns. `ObservationStore` records short, explicitly supplied/approved facts with provenance, confidence, deterministic deduplication and TTL (default 30 days, configurable via `RAGS_MEMORY_TTL_DAYS`). Expired facts are excluded from prompt context. Memory, RAG citations and model outputs are **untrusted context**, not executable commands or authorization data. Memory is never written when `RAGS_MEMORY_ENABLED=false`.
