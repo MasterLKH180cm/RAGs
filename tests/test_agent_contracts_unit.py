@@ -88,7 +88,7 @@ def test_workflow_builder_is_immutable_and_defaults_to_non_idempotent_branches()
 
 
 def test_parallel_and_approval_steps_require_explicit_replay_safety():
-    with pytest.raises(ValueError, match="idempotent"):
+    with pytest.raises(ValueError, match="idempotency"):
         Workflow("safe").then("publish", lambda ctx: True, approval=True)
     with pytest.raises(ValueError, match="idempotent"):
         Workflow("safe").parallel("parallel", {"a": lambda ctx: 1, "b": lambda ctx: 2})
