@@ -198,8 +198,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def auth(request: Request, authorization: Annotated[str | None, Header()] = None) -> str:
         principal = authenticator.authenticate(authorization)
-        authorization_for_path(principal, path=request.url.path, method=request.method,
-                               is_mcp=request.headers.get("X-RAGS-Interface") == "mcp")
+        is_mcp = request.headers.get("X-RAGS-Interface") == "mcp"
+        authorization_for_path(principal, path=request.url.path, method=request.method, is_mcp=is_mcp)
+        if is_mcp:
+            config.features.require("mcp")
         request.state.principal = principal
         path = request.url.path
         # Operator flags and identity privileges are independent restrictions.
