@@ -161,7 +161,7 @@ def test_interrupted_workflow_recovers_from_saved_cursor_not_replaying_first(sta
     actions = []
     graph = (Workflow("recoverable", "v1")
              .then("first", lambda ctx: actions.append("first") or True)
-             .then("second", lambda ctx: actions.append("second") or True))
+             .then("second", lambda ctx: actions.append("second") or True, idempotent=True))
     cp = state.create("tenant-a", kind="workflow", fingerprint=graph.fingerprint,
                       state={"cursor": 1, "input": {}, "outputs": {"first": True},
                              "approved": None}, status="running")

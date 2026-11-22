@@ -21,6 +21,9 @@ def settings(tmp_path, monkeypatch):
     for key, value in {
         "RAGS_ENV": "test",
         "RAGS_DB_PATH": str(tmp_path / "router.db"),
+        "RAGS_ROUTER_ENABLED": "true",
+        "RAGS_AGENT_ENABLED": "true",
+        "RAGS_MEMORY_ENABLED": "true",
         "RAGS_ROUTER_GATEWAY_URL": "https://lite.test/v1",
         "RAGS_ROUTER_API_KEY": "not-a-real-secret",
         "RAGS_ROUTER_MODELS_JSON": '{"chat":"anthropic/claude-sonnet-latest","embed":"openai/text-embedding-3-small"}',
