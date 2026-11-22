@@ -35,3 +35,53 @@ input:not([type="checkbox"]),textarea,select{width:100%;background:var(--surface
 .citation-id{display:inline-block;max-width:100%;overflow-wrap:anywhere;user-select:text;
   padding:3px 7px;background:var(--accent-faint);border:1px solid var(--border);
   border-radius:6px;color:var(--accent);font-size:11px;line-height:1.6}
+
+/* v0.8 Agent workspace: clarity, high-contrast approval states and responsive pipeline. */
+.agent-banner{margin-bottom:20px;min-height:192px}
+.agent-pipeline{display:flex;gap:11px;align-items:center;flex-wrap:wrap;justify-content:flex-end;max-width:410px;position:relative;z-index:1}
+.agent-pipeline span{border:1px solid rgba(143,220,206,.32);border-radius:11px;padding:11px 14px;background:rgba(36,87,102,.55);font-size:12px;font-weight:740;color:#d9f2ed}
+.agent-pipeline b{color:#75e1bc;font-weight:500}
+.agent-layout{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr)}
+.agent-result{margin-top:23px}
+.agent-result h3,.approval-panel h3{font-size:14px;margin:0 0 12px}
+.agent-result .result-answer{max-height:300px;overflow-y:auto;overflow-wrap:anywhere}
+.approval-panel{border:1px solid var(--accent);border-radius:12px;padding:20px;margin-top:22px;background:var(--accent-faint)}
+.approval-panel>p{color:var(--muted);font-size:12px;line-height:1.7}
+.approval-panel .metric-list{margin:14px 0}
+.tool-preview{font-size:11px;line-height:1.7;border-radius:9px;border:1px solid var(--border);background:var(--surface);padding:14px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:var(--text)}
+#agent-run-id{font-family:ui-monospace,Consolas,monospace;font-size:11px;word-break:break-all}
+@media(max-width:1120px){.agent-layout{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:650px){.agent-pipeline{margin-top:14px;justify-content:flex-start;gap:7px}
+  .agent-banner{flex-direction:column;align-items:flex-start}
+  .agent-pipeline span{padding:8px 10px;font-size:11px}
+  .approval-panel{padding:15px}
+  .approval-panel .modal-actions{flex-wrap:wrap}
+}
+
+/* v0.8 operator-defined workflow visualization */
+.workflow-studio{margin-top:20px}
+.workflow-studio .panel-heading h2{font-size:17px;margin:7px 0 5px}
+.workflow-layout{display:grid;grid-template-columns:minmax(260px,.85fr) minmax(300px,1.15fr);gap:22px;align-items:start}
+.workflow-graph-pane{border:1px solid var(--border);background:var(--surface-raised);padding:22px;border-radius:13px;min-width:0}
+.workflow-graph-pane .panel-heading h3{margin:0;font-size:15px}
+.workflow-graph{display:grid;gap:0;list-style:none;padding:0;margin:20px 0 22px}
+.workflow-node{display:flex;position:relative;align-items:flex-start;gap:14px;padding:10px 0 20px;min-height:66px}
+.workflow-node:not(:last-child)::before{content:"";position:absolute;top:42px;bottom:0;left:19px;width:2px;background:var(--border)}
+.workflow-node.complete:not(:last-child)::before{background:var(--accent)}
+.workflow-step-number{display:grid;place-items:center;border-radius:12px;min-width:40px;height:40px;border:1px solid var(--border);color:var(--muted);background:var(--surface);font-size:12px;font-weight:760;flex-shrink:0;z-index:1}
+.workflow-node.active .workflow-step-number{border:1px solid var(--accent);background:var(--accent-faint);color:var(--accent)}
+.workflow-node.complete .workflow-step-number{background:var(--accent);color:#092521;border-color:var(--accent)}
+.workflow-step-content{display:flex;flex-direction:column;gap:4px;padding-top:2px;min-width:0}
+.workflow-step-content strong{font-size:13px;overflow-wrap:anywhere}
+.workflow-step-content span{color:var(--muted);font-size:11px}
+.workflow-step-content em{font-size:11px;font-style:normal;color:var(--accent);font-weight:720}
+.workflow-actions{padding-top:10px;border-top:1px solid var(--border)}
+.workflow-actions .approval-panel{margin-bottom:20px}
+.workflow-actions .approval-panel strong{font-size:13px}
+.workflow-actions .metric-list{margin-top:20px}
+#workflow-run-id{overflow-wrap:anywhere}
+#workflow-recover{margin-top:12px}
+@media(max-width:960px){.workflow-layout{grid-template-columns:1fr}}
+@media(max-width:650px){.workflow-graph-pane{padding:16px}.workflow-studio{margin-top:15px}
+.workflow-node{min-height:58px}.workflow-step-number{min-width:40px}
+.workflow-actions .modal-actions{display:grid;grid-template-columns:1fr 1fr}}

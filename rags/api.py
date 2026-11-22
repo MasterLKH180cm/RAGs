@@ -13,6 +13,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from rags.admin import install_admin
+from rags.agents.config import AgentPlatformConfig
+from rags.agents.api import mount_agent_api
 from rags.auth import Authenticator, authorization_for_path, Principal
 from rags.chunking import ChunkConfig
 from rags.config import Settings
@@ -185,7 +187,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             monitor.shutdown()
-    app = FastAPI(title="RAGs", version="0.7.0", docs_url="/docs" if docs else None,
+    app = FastAPI(title="RAGs", version="0.8.0", docs_url="/docs" if docs else None,
                   redoc_url="/redoc" if docs else None, openapi_url="/openapi.json" if docs else None, lifespan=lifespan)
     app.add_middleware(BodyLimitMiddleware, max_body_bytes=2_100_000)
     store = Store(config.db_path)
@@ -474,6 +476,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     install_admin(app, settings=config, authenticator=authenticator,
                   store=store, service=service, monitor=monitor)
+    mount_agent_api(app, store=store, rag=service, config=AgentPlatformConfig.from_env(),
+                    auth=auth, features=config.features)
     return app
 
 

@@ -304,3 +304,57 @@ def test_light_theme_foreground_tokens_retain_well_above_aa_contrast():
             back = luminance(background)
             ratio = (max(foreground, back) + .05) / (min(foreground, back) + .05)
             assert ratio >= 4.5, (name, background, ratio)
+
+
+def test_dashboard_workflow_graph_lifecycle_and_csrf_scope(config, monkeypatch):
+    """The visual workflow uses the same tenant model and an exact CSRF boundary."""
+    monkeypatch.setenv("RAGS_ROUTER_ENABLED", "true")
+    monkeypatch.setenv("RAGS_AGENT_ENABLED", "true")
+    app = create_app(config)
+    with TestClient(app, base_url=ORIGIN) as client:
+        assert sign_in(client).status_code == 200
+        nonce = csrf(client)
+        templates = client.get("/admin/api/agents/workflows")
+        assert templates.status_code == 200
+        graph = templates.json()["templates"][0]["nodes"]
+        assert [node["kind"] for node in graph] == [
+            "then", "branch", "parallel", "then", "then"]
+        payload = {"question": "Which documents define retention policy?",
+                   "mode": "sparse", "top_k": 3}
+        endpoint = "/admin/api/agents/workflows/evidence_review/runs"
+        assert client.post(endpoint, json=payload).status_code == 403
+        assert client.post(endpoint, json=payload,
+                           headers=secured(nonce, origin="https://evil.invalid")).status_code == 403
+        started = client.post(endpoint, json=payload, headers=secured(nonce))
+        assert started.status_code == 201, started.text
+        run = started.json()
+        assert run["status"] == "waiting_for_approval"
+        path = "/admin/api/agents/workflows/runs/" + run["run_id"]
+        assert client.get(path).status_code == 200
+        assert client.post(path + "/resume",
+                           json={"expected_revision": run["revision"], "approved": True}).status_code == 403
+        done = client.post(path + "/resume", headers=secured(nonce),
+                           json={"expected_revision": run["revision"], "approved": True})
+        assert done.status_code == 200 and done.json()["status"] == "completed"
+        assert client.post(path + "/resume", headers=secured(nonce),
+                           json={"expected_revision": run["revision"], "approved": True}).status_code == 409
+
+
+def test_admin_workflow_isolation_between_tenants_and_subjects(config, monkeypatch):
+    monkeypatch.setenv("RAGS_ROUTER_ENABLED", "true")
+    monkeypatch.setenv("RAGS_AGENT_ENABLED", "true")
+    app = create_app(config)
+    with TestClient(app, base_url=ORIGIN) as a, TestClient(app, base_url=ORIGIN) as b:
+        assert sign_in(a, ADMIN_A).status_code == 200
+        key_a = csrf(a)
+        created = a.post("/admin/api/agents/workflows/evidence_review/runs",
+                         headers=secured(key_a), json={"question": "Find the source retention policy"})
+        assert created.status_code == 201, created.text
+        run = created.json()
+        assert sign_in(b, ADMIN_B).status_code == 200
+        key_b = csrf(b)
+        path = "/admin/api/agents/workflows/runs/" + run["run_id"]
+        assert b.get(path).status_code == 404
+        assert b.post(path + "/resume", headers=secured(key_b),
+                      json={"expected_revision": run["revision"], "approved": True}).status_code == 404
+        assert a.get(path).status_code == 200

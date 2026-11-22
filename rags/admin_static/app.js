@@ -3,8 +3,8 @@
   'use strict';
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
-  const titles = {overview:'總覽',documents:'知識文件',explorer:'檢索探索',observability:'可觀測性',settings:'設定與權限'};
-  const state = {csrf:'',tenant:'',permissions:[],view:'overview',offset:0,search:'',limit:20,deleteTarget:null,loading:false,authenticated:false,epoch:0};
+  const titles = {overview:'總覽',documents:'知識文件',explorer:'檢索探索',agents:'自主代理',observability:'可觀測性',settings:'設定與權限'};
+  const state = {csrf:'',tenant:'',permissions:[],view:'overview',offset:0,search:'',limit:20,deleteTarget:null,agentRun:null,workflowRun:null,workflowTemplates:[],loading:false,authenticated:false,epoch:0};
   const pending=new Set();
   let searchTimer,toastTimer;
   function el(tag,klass,label){
@@ -29,27 +29,40 @@
     for(const controller of pending)controller.abort();
     pending.clear();
     state.csrf='';state.tenant='';state.permissions=[];state.offset=0;
-    state.search='';state.loading=false;state.deleteTarget=null;
+    state.search='';state.loading=false;state.deleteTarget=null;state.agentRun=null;
+    state.workflowRun=null;state.workflowTemplates=[];
     clearTimeout(searchTimer);
     for(const id of ['#query-citations','#documents-body',
         '#activity-list','#feature-list','#permission-list','#overview-chart','#monitor-chart']){
       $(id).replaceChildren();
     }
     $('#query-output').hidden=true;$('#query-empty').hidden=false;
+    $('#agent-output').hidden=true;$('#agent-empty').hidden=false;
+    $('#agent-approval').hidden=true;
+    $('#workflow-actions').hidden=true;$('#workflow-approval').hidden=true;
+    $('#workflow-recover').hidden=true;$('#workflow-graph').replaceChildren();
     $('#login-error').hidden=true;$('#login-error').textContent='';
-    $('#query-form').reset();$('#add-form').reset();$('#delete-form').reset();
+    $('#query-form').reset();$('#add-form').reset();$('#delete-form').reset();$('#agent-form').reset();$('#workflow-form').reset();
     $('#document-search').value='';$('#delete-confirm').value='';
     $('#delete-submit').disabled=true;
     // Async request finalizers skip a changed identity by design; restore all
     // tenant-specific controls here instead of leaving them busy for the next login.
     $('#query-submit').disabled=false;$('#query-submit').textContent='開始檢索 ↗';
     $('#add-submit').disabled=false;$('#add-submit').textContent='建立並索引';
+    $('#agent-submit').disabled=false;$('#agent-submit').textContent='執行代理任務 ↗';
+    $('#agent-approve').disabled=false;$('#agent-deny').disabled=false;
+    $('#workflow-start').disabled=false;$('#workflow-start').textContent='執行工作流 →';
+    $('#workflow-approve').disabled=false;$('#workflow-deny').disabled=false;
     for(const id of ['#add-dialog','#delete-dialog'])if($(id).open)$(id).close();
     for(const id of ['#query-answer','#citation-count','#query-status',
         '#document-count','#document-range','#stat-documents','#stat-chunks',
         '#stat-revisions','#stat-images','#setting-tenant','#setting-auth',
         '#setting-storage','#setting-embedding','#setting-generation',
-        '#tenant-sidebar','#session-expiry','#monitor-requests',
+        '#tenant-sidebar','#session-expiry','#agent-answer','#agent-run-id',
+        '#agent-steps','#agent-tool-count','#agent-stop-reason','#agent-pending-tool',
+        '#agent-pending-args','#agent-status','#agent-availability',
+        '#workflow-status','#workflow-availability','#workflow-cursor','#workflow-run-id',
+        '#workflow-human-status','#workflow-sources','#workflow-description','#monitor-requests',
         '#monitor-errors','#monitor-p50','#monitor-p95','#exported-spans',
         '#dropped-spans','#failed-exports','#collector-status'])txt(id,'—');
     $('#global-notice').classList.remove('visible');
@@ -123,6 +136,7 @@
     if(view==='overview'||view==='observability')refreshOverview();
     if(view==='documents')loadDocuments();
     if(view==='settings')loadOperations();
+    if(view==='agents'){loadAgentCapabilities();loadWorkflowCatalog();}
   }
   function drawChart(target,series){
     const root=$(target);root.replaceChildren();
@@ -310,6 +324,177 @@
     }catch(e){if(epoch===state.epoch){txt('#query-status','執行失敗');notice(errorText(e),true);}}
     finally{if(epoch===state.epoch)busy(btn,false,'開始檢索 ↗');}
   }
+  async function loadAgentCapabilities(){
+    const epoch=state.epoch, select=$('#agent-model');select.replaceChildren();
+    const placeholder=el('option','', '檢查可用模型…');placeholder.value='';select.append(placeholder);
+    try{
+      const data=await api('agents/capabilities');
+      if(epoch!==state.epoch)return;
+      select.replaceChildren();
+      const models=Array.isArray(data.models)?data.models:[];
+      for(const model of models){
+        const option=el('option','',model);option.value=model;select.append(option);
+      }
+      if(!models.length){
+        const empty=el('option','', '尚未設定模型');empty.value='';select.append(empty);
+      }
+      $('#agent-submit').disabled=!models.length;
+      txt('#agent-availability',models.length?('已授權 · '+models.length+' 個模型'):'沒有可用的模型');
+    }catch(e){
+      if(epoch!==state.epoch)return;
+      $('#agent-submit').disabled=true;txt('#agent-availability','代理功能未啟用');
+      const empty=el('option','', '代理服務尚不可用');empty.value='';select.replaceChildren(empty);
+    }
+  }
+  function renderAgent(result){
+    state.agentRun=result;$('#agent-empty').hidden=true;$('#agent-output').hidden=false;
+    txt('#agent-status',result.status||'未知');
+    txt('#agent-run-id',result.run_id);txt('#agent-steps',n(result.steps));
+    txt('#agent-tool-count',n(result.tool_calls));
+    txt('#agent-stop-reason',result.stop_reason||'—');
+    txt('#agent-answer',result.answer||(
+      result.status==='waiting_for_approval'?'代理已暫停，等待人工核准。'
+        :result.status==='stopped'?'代理達到停止條件。':'代理尚未提供最終回答。'));
+    const gate=$('#agent-approval');
+    const pending=result.pending_approval;
+    gate.hidden=!(result.status==='waiting_for_approval'&&pending);
+    if(!gate.hidden){
+      txt('#agent-pending-tool',pending.name);
+      txt('#agent-pending-args',JSON.stringify(pending.arguments,null,2));
+    }else{
+      txt('#agent-pending-tool','—');txt('#agent-pending-args','');
+    }
+  }
+  async function startAgent(event){
+    event.preventDefault();const epoch=state.epoch;
+    const goal=$('#agent-goal').value.trim(),model=$('#agent-model').value;
+    const session_id=$('#agent-session').value.trim();
+    if(goal.length<2||!model||!session_id){
+      notice('請填寫目標、模型與有效的工作階段 ID。',true);return;
+    }
+    const button=$('#agent-submit');busy(button,true,'代理執行中…');
+    try{
+      const result=await api('agents/runs',{method:'POST',body:{goal,model,session_id}});
+      if(epoch!==state.epoch)return;
+      renderAgent(result);notice(result.status==='waiting_for_approval'
+        ?'任務已暫停，請確認受保護的工具操作。':'已更新代理任務狀態。');
+    }catch(e){if(epoch===state.epoch)notice(errorText(e),true);}
+    finally{if(epoch===state.epoch)busy(button,false,'執行代理任務 ↗');}
+  }
+  async function decideAgent(approved){
+    const run=state.agentRun,epoch=state.epoch;
+    if(!run||run.status!=='waiting_for_approval')return;
+    const approve=$('#agent-approve'),deny=$('#agent-deny');
+    approve.disabled=true;deny.disabled=true;
+    try{
+      const result=await api('agents/runs/'+encodeURIComponent(run.run_id)+'/resume',{
+        method:'POST',body:{expected_revision:run.revision,approved},
+      });
+      if(epoch!==state.epoch)return;
+      renderAgent(result);notice(approved?'已核准，代理繼續執行。':'已拒絕受保護操作。');
+    }catch(e){if(epoch===state.epoch)notice(errorText(e),true);}
+    finally{if(epoch===state.epoch){approve.disabled=false;deny.disabled=false;}}
+  }
+  function renderWorkflowGraph(template,checkpoint){
+    const root=$('#workflow-graph');root.replaceChildren();if(!template)return;
+    const cursor=checkpoint?.state?.cursor??-1,status=checkpoint?.status||'';
+    (template.nodes||[]).forEach((step,index)=>{
+      const node=el('li','workflow-node'),finished=index<cursor,active=index===cursor;
+      node.classList.toggle('complete',finished);node.classList.toggle('active',active);
+      const kind=step.kind==='parallel'?'平行檢查':step.kind==='branch'?'條件分支':
+        step.approval?'人工核准':'依序執行';
+      const count=el('div','workflow-step-number',finished?'✓':String(index+1));
+      const body=el('div','workflow-step-content');
+      body.append(el('strong','',step.name),el('span','',kind));
+      if(active&&status==='waiting_for_approval')body.append(el('em','','等待審核'));
+      node.append(count,body);root.append(node);
+    });
+  }
+  async function loadWorkflowCatalog(){
+    const epoch=state.epoch,select=$('#workflow-template');
+    select.replaceChildren();const placeholder=el('option','','載入中…');
+    placeholder.value='';select.append(placeholder);
+    try{
+      const data=await api('agents/workflows');
+      if(epoch!==state.epoch)return;
+      state.workflowTemplates=Array.isArray(data.templates)?data.templates:[];
+      select.replaceChildren();
+      for(const template of state.workflowTemplates){
+        const option=el('option','',template.title);option.value=template.name;select.append(option);
+      }
+      if(!state.workflowTemplates.length){
+        const none=el('option','','尚無安全工作流範本');none.value='';select.append(none);
+      }
+      $('#workflow-start').disabled=!state.workflowTemplates.length;
+      txt('#workflow-availability',state.workflowTemplates.length?'工作流可用':'未設定');
+      const first=state.workflowTemplates[0];
+      txt('#workflow-description',first?.description||'請先註冊工作流範本。');
+      renderWorkflowGraph(first,null);
+    }catch(error){
+      if(epoch!==state.epoch)return;
+      $('#workflow-start').disabled=true;
+      txt('#workflow-availability','工作流無法使用');
+      txt('#workflow-description',errorText(error));
+    }
+  }
+  function renderWorkflow(result){
+    state.workflowRun=result;
+    $('#workflow-actions').hidden=false;
+    txt('#workflow-run-id','執行 ID：'+result.run_id);
+    txt('#workflow-cursor',n(result.state?.cursor));
+    txt('#workflow-status',result.status||'未知');
+    const selected=state.workflowTemplates.find(t=>t.name===$('#workflow-template').value);
+    renderWorkflowGraph(selected,result);
+    const citations=result.state?.outputs?.retrieve?.citations;
+    txt('#workflow-sources',n(Array.isArray(citations)?citations.length:0));
+    const approval=result.status==='waiting_for_approval';
+    $('#workflow-approval').hidden=!approval;
+    $('#workflow-recover').hidden=!['running','needs_resume'].includes(result.status);
+    txt('#workflow-human-status',approval?'待審核':result.status==='completed'?'已完成':
+      result.status==='stopped'?'拒絕／停止':'尚未審核');
+  }
+  async function startWorkflow(event){
+    event.preventDefault();const epoch=state.epoch;
+    const name=$('#workflow-template').value,question=$('#workflow-question').value.trim();
+    if(!name||question.length<2){notice('請選擇流程並填寫問題。',true);return;}
+    const button=$('#workflow-start');busy(button,true,'正在執行…');
+    try{
+      const result=await api('agents/workflows/'+encodeURIComponent(name)+'/runs',{
+        method:'POST',body:{question,mode:$('#workflow-mode').value,
+          top_k:Number($('#workflow-topk').value)},
+      });
+      if(epoch!==state.epoch)return;
+      renderWorkflow(result);notice(result.status==='waiting_for_approval'
+        ?'流程已安全暫停，等待人工審核。':'工作流狀態已更新。');
+    }catch(error){if(epoch===state.epoch)notice(errorText(error),true);}
+    finally{if(epoch===state.epoch)busy(button,false,'執行工作流 →');}
+  }
+  async function decideWorkflow(approved){
+    const epoch=state.epoch,run=state.workflowRun;
+    if(!run||run.status!=='waiting_for_approval')return;
+    const yes=$('#workflow-approve'),no=$('#workflow-deny');
+    yes.disabled=true;no.disabled=true;
+    try{
+      const result=await api('agents/workflows/runs/'+encodeURIComponent(run.run_id)+'/resume',{
+        method:'POST',body:{expected_revision:run.revision,approved},
+      });
+      if(epoch!==state.epoch)return;
+      renderWorkflow(result);notice(approved?'核准完成，流程繼續執行。':'流程已拒絕並停止。');
+    }catch(error){if(epoch===state.epoch)notice(errorText(error),true);}
+    finally{if(epoch===state.epoch){yes.disabled=false;no.disabled=false;}}
+  }
+  async function recoverWorkflow(){
+    const epoch=state.epoch,run=state.workflowRun;
+    if(!run||!['running','needs_resume'].includes(run.status))return;
+    const button=$('#workflow-recover');busy(button,true,'正在恢復…');
+    try{
+      const result=await api('agents/workflows/runs/'+encodeURIComponent(run.run_id)+'/recover',{
+        method:'POST',body:{expected_revision:run.revision},
+      });
+      if(epoch===state.epoch)renderWorkflow(result);
+    }catch(error){if(epoch===state.epoch)notice(errorText(error),true);}
+    finally{if(epoch===state.epoch)busy(button,false,'從儲存的檢查點恢復');}
+  }
   async function bootstrap(){
     const epoch=state.epoch;
     try{const info=await api('session');if(epoch===state.epoch)showApp(info);}
@@ -353,6 +538,18 @@
     $('#add-form').addEventListener('submit',addSource);
     $('#delete-form').addEventListener('submit',removeSource);
     $('#query-form').addEventListener('submit',runQuery);
+    $('#agent-form').addEventListener('submit',startAgent);
+    $('#agent-approve').addEventListener('click',()=>decideAgent(true));
+    $('#agent-deny').addEventListener('click',()=>decideAgent(false));
+    $('#workflow-form').addEventListener('submit',startWorkflow);
+    $('#workflow-approve').addEventListener('click',()=>decideWorkflow(true));
+    $('#workflow-deny').addEventListener('click',()=>decideWorkflow(false));
+    $('#workflow-recover').addEventListener('click',recoverWorkflow);
+    $('#workflow-template').addEventListener('change',()=>{
+      const template=state.workflowTemplates.find(t=>t.name===$('#workflow-template').value);
+      txt('#workflow-description',template?.description||'—');
+      renderWorkflowGraph(template,null);
+    });
     $('#delete-confirm').addEventListener('input',()=>{
       $('#delete-submit').disabled=!state.deleteTarget||
         $('#delete-confirm').value.trim()!==state.deleteTarget.id;

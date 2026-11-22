@@ -90,7 +90,7 @@ jobs:
           --cov-report=html:reports/testing/coverage-html
       - name: Actual PostgreSQL and pgvector contracts included in package coverage
         run: >-
-          python -m pytest -q tests/test_postgres_storage.py -m postgres --require-no-skips
+          python -m pytest -q tests/test_postgres_storage.py tests/test_agent_postgres.py -m postgres --require-no-skips
           --test-inventory reports/testing/inventory-postgres.json
           --junitxml reports/testing/junit-postgres.xml
           --cov=rags --cov-branch --cov-config=pyproject.toml --cov-append
@@ -134,7 +134,7 @@ jobs:
               assert len(root.joinpath(name).read_bytes()) > 1000
           print("Installed wheel contains the standalone self-hosted dashboard")
           PYTHON
-          "$RUNNER_TEMP/rags-wheel/bin/rags" --version | grep -F '0.7.0'
+          "$RUNNER_TEMP/rags-wheel/bin/rags" --version | grep -F '0.8.0'
           mkdir -p "$RUNNER_TEMP/rags-wheel-profile"
           "$RUNNER_TEMP/rags-wheel/bin/rags" init --profile offline \
             --directory "$RUNNER_TEMP/rags-wheel-profile"

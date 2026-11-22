@@ -19,11 +19,13 @@ from fastapi import HTTPException
 
 PERMISSIONS = frozenset({
     "rags:read", "rags:query", "rags:write", "rags:reindex",
-    "rags:delete", "rags:generate", "rags:original_image", "rags:mcp", "rags:admin",
+    "rags:delete", "rags:generate", "rags:original_image", "rags:mcp", "rags:admin", "rags:agent", "rags:memory",
 })
 ROLES = {
     "reader": frozenset(("rags:read", "rags:query")),
     "editor": frozenset(("rags:read", "rags:query", "rags:write", "rags:reindex")),
+    "agent_runner": frozenset(("rags:read", "rags:query", "rags:generate",
+                                "rags:agent", "rags:memory")),
     "admin": PERMISSIONS,
 }
 TENANT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
@@ -204,6 +206,32 @@ def route_permissions(path: str, method: str) -> tuple[str, ...]:
         "/documents", "/assets/images",
     }:
         return ("rags:read",)
+    if path == "/agents/workflows" and method == "GET":
+        return ("rags:agent", "rags:query")
+    if path.startswith("/agents/workflows/"):
+        rest = path[len("/agents/workflows/"):].split("/")
+        if len(rest) == 2 and rest[1] == "runs" and method == "POST":
+            return ("rags:agent", "rags:query")
+        if len(rest) == 2 and rest[0] == "runs" and method == "GET":
+            return ("rags:agent", "rags:query")
+        if len(rest) == 3 and rest[0] == "runs" and rest[2] in {"resume", "recover"} and method == "POST":
+            return ("rags:agent", "rags:query")
+    if path == "/agents/capabilities" and method == "GET":
+        return ("rags:agent",)
+    if path == "/agents/runs" and method == "POST":
+        return ("rags:agent", "rags:generate")
+    if path.startswith("/agents/runs/"):
+        suffix = path[len("/agents/runs/"):]
+        if "/" not in suffix and method == "GET":
+            return ("rags:agent",)
+        if suffix.endswith("/resume") and suffix.count("/") == 1 and method == "POST":
+            return ("rags:agent", "rags:generate")
+    if path.startswith("/agents/sessions/"):
+        suffix = path[len("/agents/sessions/"):]
+        chunks = suffix.split("/")
+        if len(chunks) == 2 and chunks[0] and chunks[1] in {"messages", "observations"}:
+            if method == "GET" or (method == "POST" and chunks[1] == "observations"):
+                return ("rags:agent", "rags:memory")
     if path == "/documents" and method == "POST":
         return ("rags:write",)
     if path == "/documents/upload" and method == "POST":
