@@ -18,6 +18,7 @@ MANIFEST = {
     "api_docs": "Expose OpenAPI and interactive API documentation",
     "mcp": "Expose the shipped HTTP-backed MCP tools",
     "model_generation": "Call a configured generation model",
+    "agents": "Use operator-registered bounded tool-calling agents",
     "federation": "Query configured tenant-authorized remote knowledge services",
     "research": "Call configured external research engines",
     "image_captioning": "Generate and ingest image descriptions",
