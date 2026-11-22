@@ -140,7 +140,7 @@ See [v0.7 design contract](docs/SPEC_V07.md) and [security/operations review](do
 
 ## Agent Platform: model routing, workflows and memory (v0.8)
 
-The **default-enabled** Agent Platform provides one typed router interface, bounded tool-calling agents, a programmable workflow graph, durable human-in-the-loop checkpoints, and tenant-scoped conversation/observation memory. It uses the existing `rags-platform` wheel and PostgreSQL/pgvector or SQLite database, with no new mandatory dependency.
+The **opt-in** Agent Platform provides one typed router interface, bounded tool-calling agents, a programmable workflow graph, durable human-in-the-loop checkpoints, and tenant-scoped conversation/observation memory. It uses the existing `rags-platform` wheel and PostgreSQL/pgvector or SQLite database, with no new mandatory dependency.
 
 ### One model interface across 40+ upstream providers
 
@@ -187,7 +187,7 @@ An embedding model must support `/v1/embeddings`; a chat model must support
 unknown aliases, partial chat completions and model calls without credentials.
 ### Bounded agents, scopes and APIs
 
-All three platform switches—`RAGS_AGENT_ENABLED`, `RAGS_ROUTER_ENABLED`, and `RAGS_MEMORY_ENABLED`—default to **true**. Set an individual flag to `false` to disable it. The absence of a configured Gateway does **not** crash startup: the service reports `router_ready=false` and returns `503 router_unconfigured` for model inference, without making any external request. The local registered workflow and explicitly authorized memory APIs remain available. `rags agent doctor --json` reports `configuration_required` and exits nonzero until a trusted Gateway is configured.
+All three platform switches—`RAGS_AGENT_ENABLED`, `RAGS_ROUTER_ENABLED`, and `RAGS_MEMORY_ENABLED`—default to **false**. Explicitly enable the features you need. After enabling Agent and Router, absence of a configured Gateway does **not** trigger model calls: the service reports `router_ready=false` and returns `503 router_unconfigured` for inference. An explicitly enabled local evidence-review workflow can run without remote models; memory APIs require separately enabling memory. `rags agent doctor --json` reports `configuration_required` and exits nonzero until a trusted Gateway is configured.
 
 The HTTP API uses existing Bearer authentication and tenant identity:
 
