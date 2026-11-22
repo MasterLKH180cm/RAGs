@@ -11,11 +11,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from rags.admin import install_admin
 from rags.auth import Authenticator, authorization_for_path, Principal
 from rags.chunking import ChunkConfig
 from rags.config import Settings
 from rags.limits import BodyLimitMiddleware
 from rags.multimodal import install_multimodal_routes
+from rags.monitoring import Monitor, route_name
 from rags.providers import Providers
 from rags.registry import CapabilityError
 from rags.retrieval import MODES, RAGService, now
@@ -175,7 +177,7 @@ class QueryIn(BaseModel):
 def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings or Settings.from_env()
     docs = config.features.enabled("api_docs")
-    app = FastAPI(title="RAGs", version="0.6.0", docs_url="/docs" if docs else None,
+    app = FastAPI(title="RAGs", version="0.7.0", docs_url="/docs" if docs else None,
                   redoc_url="/redoc" if docs else None, openapi_url="/openapi.json" if docs else None)
     app.add_middleware(BodyLimitMiddleware, max_body_bytes=2_100_000)
     store = Store(config.db_path)
@@ -183,6 +185,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.service = service
     authenticator = Authenticator(mode=config.auth_mode, keys=config.keys,
                                   key_roles=config.key_roles, oauth2=config.oauth2)
+
+    monitor = Monitor(enabled=config.otel_enabled, endpoint=config.otel_endpoint,
+                      service_name=config.otel_service_name)
+    app.state.monitor = monitor
+    app.add_event_handler("shutdown", monitor.shutdown)
+
+    @app.middleware("http")
+    async def observe_http(request: Request, call_next):
+        # No headers, bodies, untemplated paths, subjects, tenant IDs or prompts
+        # enter OTLP. The tenant is used only for process-local admin metrics.
+        import time
+        start_ns = time.time_ns()
+        started = time.perf_counter()
+        status = 500
+        try:
+            response = await call_next(request)
+            status = response.status_code
+            return response
+        finally:
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            principal = getattr(request.state, "principal", None)
+            monitor.record(
+                tenant=principal.tenant if principal is not None else None,
+                route=route_name(request.scope), method=request.method, status=status,
+                duration_ms=elapsed_ms, start_ns=start_ns, end_ns=time.time_ns(),
+            )
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, exc):
@@ -437,6 +465,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    install_admin(app, settings=config, authenticator=authenticator,
+                  store=store, service=service, monitor=monitor)
     return app
 
 

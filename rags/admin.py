@@ -292,14 +292,27 @@ def install_admin(app: FastAPI, *, settings: Settings, authenticator: Authentica
         return {"deleted": True}
 
     @app.post("/admin/api/query", include_in_schema=False)
-    def query(request: Request):
-        # Importing the existing Pydantic contract inside this function avoids
-        # a circular import with rags.api.
+    def query(request: Request, payload: dict):
+        # Import the existing typed contract at request time, not module import
+        # time, to avoid a circular dependency with the FastAPI application.
+        from pydantic import ValidationError
         from rags.api import QueryIn
 
         principal, _ = require(request, "rags:query", mutation=True)
         settings.features.require("query")
-        return principal, QueryIn
+        try:
+            data = QueryIn.model_validate(payload)
+        except ValidationError as exc:
+            raise HTTPException(422, detail={"code": "invalid_query"}) from exc
+        if ((data.generate and settings.model_provider != "extractive")
+                or "model_generation" in strategy_features(data.mode)):
+            principal.require("rags:generate")
+        try:
+            return service.query(principal.tenant, **data.model_dump(exclude_none=True))
+        except CapabilityError:
+            raise
+        except ValueError as exc:
+            raise HTTPException(400, detail={"code": "query_failed"}) from exc
 
     @app.get("/admin/api/operations", include_in_schema=False)
     def operations(request: Request):
