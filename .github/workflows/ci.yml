@@ -44,10 +44,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: pip
-      - name: Install
-        run: python -m pip install -e ".[dev,pdf,mcp,vision,postgres]"
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.9"
+          enable-cache: true
+          cache-suffix: core
+          cache-dependency-glob: |
+            uv.lock
+            requirements/*.txt
+      - name: Install locked development dependencies
+        run: |
+          uv sync --locked --extra dev --extra pdf --extra mcp --extra vision --extra postgres
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
       - name: Bootstrap the vector extension before application connections
         run: |
           python - <<'PYTHON'
@@ -156,13 +165,23 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: pip
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.9"
+          enable-cache: true
+          cache-suffix: encoders
+          cache-dependency-glob: |
+            uv.lock
+            requirements/*.txt
       - uses: actions/cache@v4
         with:
           path: /tmp/rags-model-cache
           key: rags-onnx-colbert-clip-v02-${{ runner.os }}
-      - run: python -m pip install -e ".[dev,encoders,vision]"
+      - name: Install locked encoder dependencies
+        run: |
+          uv sync --locked --extra dev --extra encoders --extra vision
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
       - name: Actual ColBERT and aligned CLIP inference
         run: >-
           python -m pytest -q tests/test_backends.py tests/test_multimodal.py tests/test_semantic_encoder.py
@@ -197,8 +216,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: pip
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.9"
+          enable-cache: true
+          cache-suffix: research-${{ matrix.engine }}
+          cache-dependency-glob: |
+            uv.lock
+            requirements/*.txt
       - uses: actions/cache@v4
         with:
           path: /tmp/rags-research-models
@@ -238,8 +264,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: pip
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.9"
+          enable-cache: true
+          cache-suffix: admission-runtime
+          cache-dependency-glob: |
+            uv.lock
+            requirements/*.txt
       - uses: actions/cache@v4
         with:
           path: /tmp/rags-answerability-models
@@ -316,8 +349,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: pip
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.9"
+          enable-cache: true
+          cache-suffix: admission-full
+          cache-dependency-glob: |
+            uv.lock
+            requirements/*.txt
       - uses: actions/cache@v4
         with:
           path: /tmp/rags-answerability-models

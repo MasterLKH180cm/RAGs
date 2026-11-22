@@ -9,10 +9,12 @@ research_engine="$1"
 research_venv="$2"
 research_repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 research_python="${RAGS_RESEARCH_BOOTSTRAP_PYTHON:-python3.12}"
-"$research_python" -m venv "$research_venv"
+command -v uv >/dev/null || { printf 'Install uv first: https://docs.astral.sh/uv/getting-started/installation/\n' >&2; exit 127; }
+# Keep pip available for upstream pipmaster compatibility; installation uses uv.
+uv venv --python "$research_python" --seed --allow-existing "$research_venv"
 research_venv="$(cd "$research_venv" && pwd)"
-"$research_venv/bin/python" -m pip install --disable-pip-version-check -r "$research_repo/requirements/research-$research_engine.txt"
-"$research_venv/bin/python" -m pip install --disable-pip-version-check --no-deps -e "$research_repo"
+uv pip install --python "$research_venv/bin/python" --torch-backend cpu -r "$research_repo/requirements/research-$research_engine.txt"
+uv pip install --python "$research_venv/bin/python" --no-deps -e "$research_repo"
 if [[ "$research_engine" == raptor ]]; then
   research_source="${3:-$research_venv/upstream-raptor}"
   research_commit="7da1d48a7e1d7dec61a63c9d9aae84e2dfaa5767"
@@ -33,4 +35,4 @@ import sys
 Path(site.getsitepackages()[0], "rags_raptor_upstream.pth").write_text(sys.argv[1] + "\n")
 PY
 fi
-"$research_venv/bin/python" -m pip check
+uv pip check --python "$research_venv/bin/python"

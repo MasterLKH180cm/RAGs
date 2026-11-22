@@ -1,7 +1,7 @@
 """Optional stdio MCP integration for Codex and Claude Code.
 
-Install with: pip install -e '.[mcp]'
-Launch with: python -m rags.mcp_server
+Install with: uv sync --locked --extra mcp (include other selected extras)
+Launch with: uv run --no-sync python -m rags.mcp_server
 """
 import os
 
@@ -17,7 +17,7 @@ if __name__ == "__main__":
 try:
     from mcp.server.fastmcp import FastMCP
 except ImportError as exc:
-    raise SystemExit("Install MCP support: pip install -e '.[mcp]'") from exc
+    raise SystemExit("Install MCP support: uv sync --locked --extra mcp (include other selected extras)") from exc
 
 mcp = FastMCP("rags")
 BASE_URL = os.getenv("RAGS_URL", "http://127.0.0.1:8000").rstrip("/")
