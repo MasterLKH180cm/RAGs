@@ -57,3 +57,31 @@ input:not([type="checkbox"]),textarea,select{width:100%;background:var(--surface
   .approval-panel{padding:15px}
   .approval-panel .modal-actions{flex-wrap:wrap}
 }
+
+/* v0.8 operator-defined workflow visualization */
+.workflow-studio{margin-top:20px}
+.workflow-studio .panel-heading h2{font-size:17px;margin:7px 0 5px}
+.workflow-layout{display:grid;grid-template-columns:minmax(260px,.85fr) minmax(300px,1.15fr);gap:22px;align-items:start}
+.workflow-graph-pane{border:1px solid var(--border);background:var(--surface-raised);padding:22px;border-radius:13px;min-width:0}
+.workflow-graph-pane .panel-heading h3{margin:0;font-size:15px}
+.workflow-graph{display:grid;gap:0;list-style:none;padding:0;margin:20px 0 22px}
+.workflow-node{display:flex;position:relative;align-items:flex-start;gap:14px;padding:10px 0 20px;min-height:66px}
+.workflow-node:not(:last-child)::before{content:"";position:absolute;top:42px;bottom:0;left:19px;width:2px;background:var(--border)}
+.workflow-node.complete:not(:last-child)::before{background:var(--accent)}
+.workflow-step-number{display:grid;place-items:center;border-radius:12px;min-width:40px;height:40px;border:1px solid var(--border);color:var(--muted);background:var(--surface);font-size:12px;font-weight:760;flex-shrink:0;z-index:1}
+.workflow-node.active .workflow-step-number{border:1px solid var(--accent);background:var(--accent-faint);color:var(--accent)}
+.workflow-node.complete .workflow-step-number{background:var(--accent);color:#092521;border-color:var(--accent)}
+.workflow-step-content{display:flex;flex-direction:column;gap:4px;padding-top:2px;min-width:0}
+.workflow-step-content strong{font-size:13px;overflow-wrap:anywhere}
+.workflow-step-content span{color:var(--muted);font-size:11px}
+.workflow-step-content em{font-size:11px;font-style:normal;color:var(--accent);font-weight:720}
+.workflow-actions{padding-top:10px;border-top:1px solid var(--border)}
+.workflow-actions .approval-panel{margin-bottom:20px}
+.workflow-actions .approval-panel strong{font-size:13px}
+.workflow-actions .metric-list{margin-top:20px}
+#workflow-run-id{overflow-wrap:anywhere}
+#workflow-recover{margin-top:12px}
+@media(max-width:960px){.workflow-layout{grid-template-columns:1fr}}
+@media(max-width:650px){.workflow-graph-pane{padding:16px}.workflow-studio{margin-top:15px}
+.workflow-node{min-height:58px}.workflow-step-number{min-width:40px}
+.workflow-actions .modal-actions{display:grid;grid-template-columns:1fr 1fr}}
