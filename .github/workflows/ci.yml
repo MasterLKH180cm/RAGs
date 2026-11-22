@@ -106,7 +106,18 @@ jobs:
           result = json.load(open("reports/testing/pgvector-synthetic-benchmark.json", encoding="utf-8"))
           assert result["workload"] == "synthetic_temp_tables"
           assert result["measurements"]["scoped_revision_join"]["rows"] == 16
-          print("Synthetic pgvector benchmark:", result["measurements"])
+          print("Small synthetic pgvector benchmark:", result["measurements"])
+          PYTHON
+          RAGS_DATABASE_URL="$RAGS_TEST_POSTGRES_URL" rags benchmark \
+            --documents 500 --chunks-per-document 8 --iterations 10 --json \
+            > reports/testing/pgvector-synthetic-benchmark-large.json
+          python - <<'PYTHON'
+          import json
+          result = json.load(open("reports/testing/pgvector-synthetic-benchmark-large.json", encoding="utf-8"))
+          assert result["workload"] == "synthetic_temp_tables"
+          assert result["measurements"]["scoped_revision_join"]["rows"] == 400
+          assert result["measurements"]["unfiltered_tenant_scan"]["rows"] == 400
+          print("Scaled synthetic pgvector benchmark:", result["measurements"])
           PYTHON
       - name: Verify standalone wheel installation and packaged CLI templates
         run: |
