@@ -22,6 +22,8 @@ def client(tmp_path,monkeypatch):
         if name.startswith(("RAGS_","OPENAI_","ANTHROPIC_")):
             monkeypatch.delenv(name,raising=False)
     monkeypatch.setenv("RAGS_ENV","test")
+    monkeypatch.setenv("RAGS_ROUTER_ENABLED", "true")
+    monkeypatch.setenv("RAGS_AGENT_ENABLED", "true")
     cfg=replace(Settings.from_env(),db_path=str(tmp_path/"workflows.db"),
         keys={"runner-a":"tenant-a","runner-b":"tenant-b",
               "reader-a":"tenant-a","admin-a":"tenant-a"},
@@ -105,6 +107,8 @@ def test_workflow_run_with_disabled_feature_does_not_access_sources(tmp_path,mon
         if name.startswith(("RAGS_ROUTER_","RAGS_AGENT_","RAGS_MEMORY_")):
             monkeypatch.delenv(name,raising=False)
     monkeypatch.setenv("RAGS_ENV","test")
+    monkeypatch.setenv("RAGS_ROUTER_ENABLED", "true")
+    monkeypatch.setenv("RAGS_AGENT_ENABLED", "true")
     cfg=replace(Settings.from_env(),db_path=str(tmp_path/"denied.db"),
         keys={"operator":"tenant-a"},key_roles={"operator":("admin",)},
         features=FeatureFlags((("query",False),)))

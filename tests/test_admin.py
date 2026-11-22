@@ -306,8 +306,10 @@ def test_light_theme_foreground_tokens_retain_well_above_aa_contrast():
             assert ratio >= 4.5, (name, background, ratio)
 
 
-def test_dashboard_workflow_graph_lifecycle_and_csrf_scope(config):
+def test_dashboard_workflow_graph_lifecycle_and_csrf_scope(config, monkeypatch):
     """The visual workflow uses the same tenant model and an exact CSRF boundary."""
+    monkeypatch.setenv("RAGS_ROUTER_ENABLED", "true")
+    monkeypatch.setenv("RAGS_AGENT_ENABLED", "true")
     app = create_app(config)
     with TestClient(app, base_url=ORIGIN) as client:
         assert sign_in(client).status_code == 200
@@ -338,7 +340,9 @@ def test_dashboard_workflow_graph_lifecycle_and_csrf_scope(config):
                            json={"expected_revision": run["revision"], "approved": True}).status_code == 409
 
 
-def test_admin_workflow_isolation_between_tenants_and_subjects(config):
+def test_admin_workflow_isolation_between_tenants_and_subjects(config, monkeypatch):
+    monkeypatch.setenv("RAGS_ROUTER_ENABLED", "true")
+    monkeypatch.setenv("RAGS_AGENT_ENABLED", "true")
     app = create_app(config)
     with TestClient(app, base_url=ORIGIN) as a, TestClient(app, base_url=ORIGIN) as b:
         assert sign_in(a, ADMIN_A).status_code == 200

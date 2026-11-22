@@ -112,7 +112,7 @@ def test_agent_approval_gate_happens_before_tool_and_resumes_exactly_once(compon
     with pytest.raises(CapabilityError):
         service.resume(principal(), waiting.run_id,
                        expected_revision=waiting.revision, approved=True)
-    assert invoked == [("tenant-a", "conversation", 3)]
+    assert invoked == [("tenant-a", scoped_session(principal().subject, "conversation"), 3)]
 
 
 def test_agent_human_denial_preserves_tool_trace_without_executing(components):
