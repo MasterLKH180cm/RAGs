@@ -139,6 +139,12 @@ class Workflow:
             raise CapabilityError("revision_conflict", "Run checkpoint changed", 409)
         if cp.status not in {"running", "needs_resume"}:
             raise CapabilityError("invalid_state", "Workflow is not recoverable", 409)
+        cursor = cp.state.get("cursor")
+        if (type(cursor) is not int or cursor < 0 or cursor >= len(self._nodes)
+                or not self._nodes[cursor].idempotent):
+            raise CapabilityError(
+                "unsafe_replay", "Interrupted step is not explicitly idempotent; manual recovery required", 409
+            )
         cp = state.update(tenant, run_id, expected_revision=cp.revision,
                           fingerprint=self.fingerprint, status="running", state=cp.state)
         return self._advance(state, cp)

@@ -172,3 +172,26 @@ def test_interrupted_workflow_recovers_from_saved_cursor_not_replaying_first(sta
     with pytest.raises(CapabilityError) as invalid:
         graph.recover(fresh, "tenant-a", cp.run_id, expected_revision=cp.revision)
     assert invalid.value.status_code == 409
+
+
+def test_interrupted_workflow_will_not_replay_non_idempotent_step(state):
+    calls = []
+
+    def unreliable(_ctx):
+        calls.append("side_effect_started")
+        raise SystemExit("simulated process termination")
+
+    graph = Workflow("unsafe").then("write_once", unreliable)
+    with pytest.raises(SystemExit, match="simulated process termination"):
+        graph.start(state, "tenant", {"value": 1})
+    # Inspect only the existing checkpoint; no step has been persisted as complete.
+    with state.store.connect() as db:
+        rows = db.execute("SELECT run_id,revision,status FROM agent_runs WHERE tenant=?",
+                          ("tenant",)).fetchall()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["status"] == "running"
+    with pytest.raises(CapabilityError) as failure:
+        graph.recover(state, "tenant", row["run_id"], expected_revision=row["revision"])
+    assert failure.value.code == "unsafe_replay"
+    assert calls == ["side_effect_started"]

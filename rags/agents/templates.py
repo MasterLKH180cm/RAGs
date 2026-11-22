@@ -77,8 +77,10 @@ def make_evidence_review(rag, principal: Principal, flags: FeatureFlags) -> Work
         return {"human_reviewed": True, "run_id": ctx.run_id}
 
     def finalize(ctx):
-        return {"status": "approved",
-                "source_count": len(ctx.outputs["retrieve"]["citations"]),
+        source_count = len(ctx.outputs["retrieve"]["citations"])
+        has_evidence = ctx.outputs["quality_gate"]["selected"] == "true" and source_count > 0
+        return {"status": "approved" if has_evidence else "insufficient_evidence",
+                "source_count": source_count,
                 "evidence_gate": ctx.outputs["quality_gate"]["selected"]}
 
     return (Workflow("evidence_review", version=EVIDENCE_REVIEW.version)
