@@ -125,3 +125,27 @@ def test_agent_api_feature_flags_are_independent_of_identity(settings, monkeypat
         assert client.get("/agents/capabilities", headers=AGENT).status_code == 403
         assert client.post("/agents/runs", headers=AGENT, json={
             "goal": "Find the policy", "model": "main", "session_id": "sess"}).status_code == 403
+
+
+def test_default_on_is_discoverable_but_unconfigured_gateway_never_calls_network(tmp_path, monkeypatch):
+    for name in list(os.environ):
+        if name.startswith(("RAGS_ROUTER_", "RAGS_AGENT_", "RAGS_MEMORY_")):
+            monkeypatch.delenv(name, raising=False)
+    from rags.agents.config import AgentPlatformConfig
+    cfg = AgentPlatformConfig.from_env()
+    assert cfg.agent_enabled and cfg.router_enabled and cfg.memory_enabled
+    assert not cfg.router_ready
+    settings = replace(Settings.from_env(), db_path=str(tmp_path / "unconfigured.db"),
+                       keys={"admin-token": "tenant"}, key_roles={"admin-token": ("admin",)})
+    client = TestClient(create_app(settings))
+    try:
+        headers = {"Authorization": "Bearer admin-token"}
+        capabilities = client.get("/agents/capabilities", headers=headers)
+        assert capabilities.status_code == 200
+        assert capabilities.json()["configuration_required"] is True
+        response = client.post("/agents/runs", headers=headers,
+                               json={"goal": "Please find details", "model": "main", "session_id": "sess"})
+        assert response.status_code == 503
+        assert response.json()["detail"]["code"] == "router_unconfigured"
+    finally:
+        client.close()

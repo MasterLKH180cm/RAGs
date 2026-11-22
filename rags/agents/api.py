@@ -57,7 +57,10 @@ def mount_agent_api(app, *, store, rag, config: AgentPlatformConfig, auth,
     @api.get("/capabilities")
     def capabilities(request: Request, tenant: Annotated[str, Depends(auth)]):
         principal = require(request, "rags:agent")
-        return {"models": sorted(config.models),
+        return {"router_enabled": config.router_enabled,
+                "router_ready": config.router_ready,
+                "configuration_required": not config.router_ready,
+                "models": sorted(config.models),
                 "tools": sorted(engine.tools.allowed(principal)),
                 "max_steps": config.max_steps, "max_tool_calls": config.max_tool_calls,
                 "memory_enabled": config.memory_enabled,
@@ -67,6 +70,9 @@ def mount_agent_api(app, *, store, rag, config: AgentPlatformConfig, auth,
     def start_run(request: Request, data: RunIn,
                   tenant: Annotated[str, Depends(auth)]):
         principal = require(request, "rags:agent", "rags:generate")
+        if not config.router_ready:
+            raise CapabilityError("router_unconfigured",
+                                  "Configure the model gateway before running an agent", 503)
         result = engine.start(principal, goal=data.goal, model=data.model,
                               session_id=data.session_id)
         return engine.summary(result)
@@ -81,6 +87,9 @@ def mount_agent_api(app, *, store, rag, config: AgentPlatformConfig, auth,
     def resume_run(request: Request, run_id: str, data: ResumeIn,
                    tenant: Annotated[str, Depends(auth)]):
         principal = require(request, "rags:agent", "rags:generate")
+        if not config.router_ready:
+            raise CapabilityError("router_unconfigured",
+                                  "Configure the model gateway before resuming an agent", 503)
         result = engine.resume(principal, run_id, expected_revision=data.expected_revision,
                                approved=data.approved, feedback=data.feedback)
         return engine.summary(result)

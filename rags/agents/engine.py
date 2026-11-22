@@ -129,7 +129,8 @@ class AgentEngine:
             raise CapabilityError("model_not_allowed", "Unknown model alias", 403)
         history = (self.history.last(principal.tenant, session_id,
                                      limit=self.config.max_history_turns)
-                   if self.config.memory_enabled else [])
+                   if (self.config.memory_enabled and
+                       "rags:memory" in principal.permissions) else [])
         observations = (self.observations.recent(principal.tenant, session_id)
                         if self.config.memory_enabled and "rags:memory" in principal.permissions else [])
         messages = [{"role": "system", "content":

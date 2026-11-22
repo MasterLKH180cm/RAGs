@@ -78,6 +78,9 @@ class ModelRouter:
 
     def complete(self, *, model: str, messages: list[dict], tools: list[dict] | None = None,
                  max_output_tokens: int | None = None) -> ModelReply:
+        if not self.config.router_ready:
+            raise CapabilityError("router_unconfigured",
+                                  "Model gateway is not yet configured; use agent doctor", 503)
         selected = self.config.models.get(model)
         if selected is None:
             raise CapabilityError("model_not_allowed", "Selected model alias is not configured", 403)

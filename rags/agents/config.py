@@ -1,4 +1,4 @@
-"""Operator-gated Agent Platform configuration: disabled and offline by default."""
+"""Operator-gated Agent Platform configuration: available by default, credentials fail-closed."""
 from dataclasses import dataclass, field
 import json
 import os
@@ -11,8 +11,8 @@ ALIAS = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,63}\Z")
 MODEL = re.compile(r"[a-z][a-z0-9_-]{0,39}/[A-Za-z0-9][A-Za-z0-9_.:/@+-]{0,159}\Z")
 
 
-def _boolean(name: str) -> bool:
-    raw = os.getenv(name, "false").lower()
+def _boolean(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name, "true" if default else "false").lower()
     if raw not in {"true", "false"}:
         raise ValueError(f"{name} must be true or false")
     return raw == "true"
@@ -46,9 +46,9 @@ def _secret(name: str) -> str:
 
 @dataclass(frozen=True)
 class AgentPlatformConfig:
-    router_enabled: bool = False
-    agent_enabled: bool = False
-    memory_enabled: bool = False
+    router_enabled: bool = True
+    agent_enabled: bool = True
+    memory_enabled: bool = True
     gateway_url: str = ""
     gateway_key: str = field(default="", repr=False)
     models: dict[str, str] = field(default_factory=dict)
@@ -63,20 +63,23 @@ class AgentPlatformConfig:
     def __post_init__(self) -> None:
         if self.agent_enabled and not self.router_enabled:
             raise ValueError("Agent engine requires an enabled model router")
-        if self.router_enabled:
+        if not isinstance(self.models, dict) or len(self.models) > 32 or any(
+            not isinstance(k, str) or not ALIAS.fullmatch(k)
+            or not isinstance(v, str) or not MODEL.fullmatch(v)
+            for k, v in self.models.items()
+        ):
+            raise ValueError("Router models require operator-approved alias to provider/model mapping")
+        # An empty operator configuration is a normal first-run state: keep
+        # endpoints available but do not attempt inference or invent credentials.
+        supplied = bool(self.gateway_url or self.gateway_key or self.models)
+        if self.router_enabled and supplied:
             url = urlsplit(self.gateway_url)
             if (url.scheme not in {"http", "https"} or not url.hostname
-                    or url.username or url.password or url.query or url.fragment or url.port == 0
+                    or url.username or url.password or url.query or url.fragment
                     or (url.scheme == "http" and not self.allow_http)):
                 raise ValueError("Router gateway must use HTTPS without credentials or URL query")
-            if not self.gateway_key or len(self.gateway_key) > 4096:
-                raise ValueError("Router gateway key is required")
-            if not isinstance(self.models, dict) or not 1 <= len(self.models) <= 32 or any(
-                not isinstance(k, str) or not ALIAS.fullmatch(k)
-                or not isinstance(v, str) or not MODEL.fullmatch(v)
-                for k, v in self.models.items()
-            ):
-                raise ValueError("Router models require operator-approved alias to provider/model mapping")
+            if not self.gateway_key or len(self.gateway_key) > 4096 or not self.models:
+                raise ValueError("Router requires gateway credentials and approved model aliases")
         for name, number, low, high in (
             ("max_steps", self.max_steps, 1, 8),
             ("max_tool_calls", self.max_tool_calls, 1, 16),
@@ -88,11 +91,15 @@ class AgentPlatformConfig:
             if type(number) is not int or not low <= number <= high:
                 raise ValueError(f"Agent {name} must be {low}..{high}")
 
+    @property
+    def router_ready(self) -> bool:
+        return bool(self.router_enabled and self.gateway_url and self.gateway_key and self.models)
+
     @classmethod
     def from_env(cls) -> "AgentPlatformConfig":
-        enabled = _boolean("RAGS_ROUTER_ENABLED")
-        agent = _boolean("RAGS_AGENT_ENABLED")
-        memory = _boolean("RAGS_MEMORY_ENABLED")
+        enabled = _boolean("RAGS_ROUTER_ENABLED", True)
+        agent = _boolean("RAGS_AGENT_ENABLED", True)
+        memory = _boolean("RAGS_MEMORY_ENABLED", True)
         allow_http = _boolean("RAGS_ROUTER_ALLOW_HTTP")
         if allow_http and os.getenv("RAGS_ENV", "production") not in {"test", "development"}:
             raise ValueError("Plaintext router connections only allowed in development/test")
