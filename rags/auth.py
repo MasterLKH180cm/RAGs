@@ -220,7 +220,7 @@ def route_permissions(path: str, method: str) -> tuple[str, ...]:
         suffix = path[len("/agents/sessions/"):]
         chunks = suffix.split("/")
         if len(chunks) == 2 and chunks[0] and chunks[1] in {"messages", "observations"}:
-            if method == "GET" or method == "POST" and chunks[1] == "observations":
+            if method == "GET" or (method == "POST" and chunks[1] == "observations"):
                 return ("rags:agent", "rags:memory")
     if path == "/documents" and method == "POST":
         return ("rags:write",)
