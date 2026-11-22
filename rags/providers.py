@@ -12,6 +12,7 @@ import httpx
 
 from rags.config import Settings
 from rags.registry import CapabilityError
+from rags.agents.deadline import remaining_timeout
 
 _calls: ContextVar[list | None] = ContextVar("rags_provider_calls", default=None)
 
@@ -203,7 +204,8 @@ class Providers:
         if self.settings.embedding_provider == "local":
             return local_embedding(text)
         if self.settings.embedding_provider == "router":
-            result = self.model_router.embedding(model=self.settings.embedding_model, text=text)
+            result = self.model_router.embedding(model=self.settings.embedding_model, text=text,
+                                                 timeout_seconds=remaining_timeout(30))
             self.record("embedding", self.embedding_model, {"usage": result.usage})
             return result.vector
         if self.settings.embedding_provider == "fastembed":
@@ -214,7 +216,7 @@ class Providers:
             self.settings.embedding_endpoint + "/embeddings",
             headers={"Authorization": "Bearer " + self.settings.embedding_credential},
             json={"model": self.settings.embedding_model, "input": text},
-            timeout=30,
+            timeout=remaining_timeout(30),
         )
         reason = "Provider returned an invalid embedding vector"
         payload = response_object(response, "invalid_embedding", reason)
@@ -248,7 +250,7 @@ class Providers:
                           {"role": "user", "content": user}],
                 max_output_tokens=min(self.settings.output_budget,
                                       self.model_router.config.max_output_tokens),
-                timeout_seconds=90.,
+                timeout_seconds=remaining_timeout(90),
             )
             if result.finish_reason != "stop" or result.tool_calls or not result.content.strip():
                 raise CapabilityError("invalid_model_output",
@@ -268,7 +270,7 @@ class Providers:
                     "temperature": 0,
                     "max_tokens": self.settings.output_budget,
                 },
-                timeout=90,
+                timeout=remaining_timeout(90),
             )
             payload = response_object(response, "invalid_model_output", "Generation provider returned an invalid response")
             self.record("generation", self.model_identity, payload)
@@ -285,7 +287,7 @@ class Providers:
                 "messages": [{"role": "user", "content": user}],
                 "max_tokens": self.settings.output_budget,
             },
-            timeout=90,
+            timeout=remaining_timeout(90),
         )
         payload = response_object(response, "invalid_model_output", "Generation provider returned an invalid response")
         self.record("generation", self.model_identity, payload)

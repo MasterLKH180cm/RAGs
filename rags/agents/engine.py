@@ -1,5 +1,7 @@
 """Bounded, tenant-scoped tool-calling agent with durable human approval gates."""
 from dataclasses import dataclass
+from queue import Empty, Queue
+from threading import BoundedSemaphore, Thread
 import hashlib
 import json
 import re
@@ -9,12 +11,18 @@ from typing import Callable
 from pydantic import BaseModel, ConfigDict, Field
 
 from rags.agents.config import AgentPlatformConfig
+from rags.agents.deadline import execution_deadline
 from rags.agents.memory import ConversationStore, ObservationStore, context_messages, scoped_session
 from rags.agents.router import ModelRouter, ToolCall, TOOL_NAME
 from rags.agents.state import Checkpoint, StateStore, _id
 from rags.auth import Principal
 from rags.features import FeatureFlags
 from rags.registry import CapabilityError
+
+
+# Max eight timed-out read-only calls may remain in background until their
+# transport/callback returns. Never spawn an unbounded number of workers.
+_READ_ONLY_SLOTS = BoundedSemaphore(8)
 
 
 class SearchArgs(BaseModel):
@@ -38,6 +46,7 @@ class ToolSpec:
     permission: str
     approval_required: bool = False
     idempotent: bool = True
+    read_only: bool = False
 
     def __post_init__(self):
         if not TOOL_NAME.fullmatch(self.name) or not issubclass(self.schema, BaseModel):
@@ -48,6 +57,10 @@ class ToolSpec:
             raise ValueError("Tool handler must be callable")
         if self.approval_required and not self.idempotent:
             raise ValueError("Approved tools require an idempotent implementation")
+        if type(self.read_only) is not bool:
+            raise ValueError("Tool read_only must be an explicit boolean")
+        if self.read_only and not self.idempotent:
+            raise ValueError("Timed read-only tools must be idempotent")
 
 
 class ToolRegistry:
@@ -82,7 +95,8 @@ class AgentEngine:
         self.observations = ObservationStore(state, ttl_days=config.memory_ttl_days)
         self.tools = registry or self._default_tools()
         self._fingerprint = hashlib.sha256(
-            json.dumps(["agent-runtime-v08", [(key, spec.permission, spec.approval_required)
+            json.dumps(["agent-runtime-v08", [(key, spec.permission, spec.approval_required,
+                                               spec.read_only)
                       for key, spec in sorted(self.tools._tools.items())]],
                       separators=(",", ":")).encode()
         ).hexdigest()
@@ -121,7 +135,7 @@ class AgentEngine:
             return result
 
         registry.register(ToolSpec("knowledge_search", SearchArgs, search,
-                                   permission="rags:query"))
+                                   permission="rags:query", read_only=True))
 
         def observe(tenant, session, arguments):
             if not self.config.memory_enabled:
@@ -209,6 +223,57 @@ class AgentEngine:
                                  fingerprint=self._fingerprint, status=status,
                                  state={**cp.state, **changes})
 
+    @staticmethod
+    def _invoke_tool(spec: ToolSpec, tenant: str, session: str, args: BaseModel,
+                     deadline: float):
+        """Bound waiting for read-only tools without interrupting unsafe writes.
+
+        A timed-out read-only worker may finish later, but its result is dropped,
+        and it cannot modify the checkpoint. Side-effecting tools are invoked
+        synchronously; the trusted operator must implement idempotency and
+        cooperative cancellation in those handlers.
+        """
+        def invoke():
+            marker = execution_deadline.set(deadline)
+            try:
+                return spec.handler(tenant, session, args)
+            finally:
+                execution_deadline.reset(marker)
+
+        if not spec.read_only:
+            return invoke()
+        if not _READ_ONLY_SLOTS.acquire(blocking=False):
+            raise CapabilityError("tool_capacity", "Read-only tool worker capacity exhausted", 503)
+
+        messages = Queue(maxsize=1)
+
+        def run():
+            try:
+                messages.put_nowait((True, invoke()))
+            except BaseException as exc:
+                messages.put_nowait((False, exc))
+            finally:
+                _READ_ONLY_SLOTS.release()
+
+        worker = Thread(target=run, name="rags-read-only-tool", daemon=True)
+        try:
+            worker.start()
+        except BaseException:
+            _READ_ONLY_SLOTS.release()
+            raise
+        worker.join(timeout=max(0., deadline - time.monotonic()))
+        if worker.is_alive():
+            raise CapabilityError("tool_timeout", "Read-only tool deadline exceeded", 504)
+        try:
+            success, value = messages.get_nowait()
+        except Empty as exc:
+            raise CapabilityError("tool_execution_failed", "Tool worker returned no result", 502) from exc
+        if not success:
+            if isinstance(value, Exception):
+                raise value
+            raise CapabilityError("tool_execution_failed", "Tool worker exited", 502)
+        return value
+
     def _pending(self, cp: Checkpoint, principal: Principal, *, deadline: float) -> Checkpoint:
         while cp.state["pending"]:
             if time.monotonic() > deadline:
@@ -228,7 +293,11 @@ class AgentEngine:
             else:
                 try:
                     args = spec.schema.model_validate(call.arguments)
-                    result = spec.handler(cp.tenant, scoped_session(principal.subject, cp.state["session_id"]), args)
+                    result = self._invoke_tool(
+                        spec, cp.tenant,
+                        scoped_session(principal.subject, cp.state["session_id"]),
+                        args, deadline,
+                    )
                     data = json.dumps(result, ensure_ascii=False, allow_nan=False)
                     if len(data.encode("utf-8")) > 8192:
                         raise ValueError("Tool response too long")
@@ -239,10 +308,13 @@ class AgentEngine:
                         "feature_disabled", "requires_provider", "requires_index",
                         "context_budget_exceeded", "invalid_citation",
                         "invalid_evidence", "unknown_strategy",
+                        "tool_timeout", "tool_capacity",
                     } else "tool_execution_failed"
                     return self._step(cp, status="failed", stop_reason=safe_code)
                 except Exception:
                     return self._step(cp, status="failed", stop_reason="tool_execution_failed")
+            if time.monotonic() >= deadline:
+                return self._step(cp, status="stopped", stop_reason="wall_time_budget")
             messages = [*cp.state["messages"], {"role": "tool", "tool_call_id": call.id,
                        "content": json.dumps(result, ensure_ascii=False, allow_nan=False)}]
             evidence = list(cp.state.get("evidence_ids", []))
