@@ -87,6 +87,8 @@ def test_router_parses_typed_tool_call_and_forbids_provider_argument_trust(confi
 
 @pytest.mark.parametrize("response", [
     {"choices": []},
+    {"choices": [{"finish_reason": "stop", "message": None}]},
+    {"choices": [{"finish_reason": "stop", "message": []}]},
     {"choices": [{"finish_reason": "tool_calls", "message": {"tool_calls": [
         {"id": "duplicate", "type": "function", "function": {"name": "exec", "arguments": "{}"}},
         {"id": "duplicate", "type": "function", "function": {"name": "exec", "arguments": "{}"}}]}}]},

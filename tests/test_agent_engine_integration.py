@@ -268,3 +268,40 @@ def test_long_utf8_search_excerpts_fit_tool_budget_without_losing_all_evidence(c
     payload = json.loads(tools[0]["content"])
     assert payload["citations"] and payload["citations"][0]["chunk_id"] == "chunk-0"
     assert "漢字" in payload["citations"][0]["text"]
+
+
+def test_all_delivered_citations_remain_valid_across_multiple_search_batches(components):
+    """9 tool calls can deliver 45 distinct citations, exceeding the old cap 40.
+
+    Each reference was genuinely returned by a tenant-authorized tool. A
+    hallucinated reference remains rejected by the separate negative test.
+    """
+    state, config = components
+    config = replace(config, max_tool_calls=12, max_steps=5)
+    registry = ToolRegistry()
+
+    def search(_tenant, _session, args):
+        return {"citations": [
+            {"chunk_id": f"chunk-{args.amount * 5 + i}",
+             "source": "authorized-fixture", "text": "Verified source"}
+            for i in range(5)
+        ]}
+
+    registry.register(ToolSpec("knowledge_search", Args, search,
+                               permission="rags:query"))
+    batch = [call("knowledge_search", {"amount": n}, identifier=f"search_{n}")
+             for n in range(8)]
+    router = FakeRouter(
+        reply("", *batch),
+        reply("", call("knowledge_search", {"amount": 8}, identifier="search_8")),
+        reply("Verified response [chunk-44]"),
+    )
+    finished = engine(state, config, router, registry).start(
+        principal(), goal="Inspect all authorized references across tool batches",
+        model="main", session_id="many-citations",
+    )
+    assert finished.status == "completed", finished.state.get("stop_reason")
+    assert finished.state["answer"] == "Verified response [chunk-44]"
+    assert finished.state["calls"] == 9
+    assert len(finished.state["evidence_ids"]) == 45
+    assert "chunk-44" in finished.state["evidence_ids"]

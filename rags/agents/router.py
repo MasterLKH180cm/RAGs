@@ -205,6 +205,8 @@ class ModelRouter:
         try:
             choices = data["choices"]
             message = choices[0]["message"]
+            if not isinstance(message, dict):
+                raise ValueError("Gateway message must be an object")
             raw_calls = message.get("tool_calls") or []
             if not isinstance(raw_calls, list) or len(raw_calls) > 8:
                 raise ValueError("Unexpected tool calls")

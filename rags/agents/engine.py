@@ -242,7 +242,11 @@ class AgentEngine:
             if call.name == "knowledge_search" and isinstance(result, dict):
                 for row in result.get("citations", [])[:5]:
                     if isinstance(row, dict) and isinstance(row.get("chunk_id"), str):
-                        if row["chunk_id"] not in evidence and len(evidence) < 40:
+                        # Every delivered citation remains eligible for later
+                        # verification. One authorized search can return at most
+                        # five citations; the run permits at most max_tool_calls.
+                        if (row["chunk_id"] not in evidence
+                                and len(evidence) < 5 * self.config.max_tool_calls):
                             evidence.append(row["chunk_id"])
             cp = self._step(cp, status="running", pending=cp.state["pending"][1:],
                             approval=None, messages=messages, calls=cp.state["calls"] + 1,
