@@ -203,6 +203,22 @@ def diagnose(*, check_db: bool = True) -> dict:
             checks.append(_check(name, "warning", details + "; credentials missing"))
         else:
             checks.append(_check(name, "ok", details))
+    if settings.model_provider == "router" or settings.embedding_provider == "router":
+        from rags.agents.config import AgentPlatformConfig
+
+        router_config = AgentPlatformConfig.from_env()
+        if not router_config.router_ready:
+            checks.append(_check("model_router", "warning",
+                                 "Gateway is enabled but lacks a credential and approved model aliases"))
+        else:
+            selected = [name for name in (
+                settings.chat_model if settings.model_provider == "router" else None,
+                settings.embedding_model if settings.embedding_provider == "router" else None,
+            ) if name]
+            if any(name not in router_config.models for name in selected):
+                checks.append(_check("model_router", "error", "Configured model alias is not approved"))
+            else:
+                checks.append(_check("model_router", "ok", "Approved routing aliases are configured"))
     if check_db:
         checks.append(database_check(settings))
     status = ("error" if any(check["status"] == "error" for check in checks)
