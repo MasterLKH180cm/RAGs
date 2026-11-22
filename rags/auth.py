@@ -206,6 +206,16 @@ def route_permissions(path: str, method: str) -> tuple[str, ...]:
         "/documents", "/assets/images",
     }:
         return ("rags:read",)
+    if path == "/agents/workflows" and method == "GET":
+        return ("rags:agent", "rags:query")
+    if path.startswith("/agents/workflows/"):
+        rest = path[len("/agents/workflows/"):].split("/")
+        if len(rest) == 2 and rest[1] == "runs" and method == "POST":
+            return ("rags:agent", "rags:query")
+        if len(rest) == 2 and rest[0] == "runs" and method == "GET":
+            return ("rags:agent", "rags:query")
+        if len(rest) == 3 and rest[0] == "runs" and rest[2] in {"resume", "recover"} and method == "POST":
+            return ("rags:agent", "rags:query")
     if path == "/agents/capabilities" and method == "GET":
         return ("rags:agent",)
     if path == "/agents/runs" and method == "POST":

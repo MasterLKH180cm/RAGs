@@ -12,6 +12,7 @@ from rags.agents.config import AgentPlatformConfig
 from rags.agents.engine import AgentEngine
 from rags.agents.router import ModelRouter
 from rags.agents.state import StateStore
+from rags.agents.templates import catalog as workflow_catalog, get_template, make_evidence_review
 from rags.registry import CapabilityError
 
 
@@ -34,6 +35,18 @@ class ObserveIn(BaseModel):
     fact: str = Field(min_length=1, max_length=600)
     source_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
     confidence: float = Field(default=1., ge=0., le=1.)
+
+
+class WorkflowRunIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question: str = Field(min_length=2, max_length=2000)
+    mode: str = Field(default="sparse", pattern="^(sparse|dense|hybrid)$")
+    top_k: int = Field(default=5, ge=1, le=10)
+
+
+class WorkflowRecoverIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(ge=0)
 
 
 def mount_agent_api(app, *, store, rag, config: AgentPlatformConfig, auth,
@@ -121,6 +134,58 @@ def mount_agent_api(app, *, store, rag, config: AgentPlatformConfig, auth,
                                              fact=data.fact, source_id=data.source_id,
                                              confidence=data.confidence)
         return {"observation_id": digest}
+
+    @api.get("/workflows")
+    def list_workflows(request: Request, tenant: Annotated[str, Depends(auth)]):
+        require(request, "rags:agent", "rags:query")
+        return {"templates": workflow_catalog()}
+
+    def workflow_identity(principal, run_id: str):
+        cp = state.get(principal.tenant, run_id)
+        if cp is None or cp.kind != "workflow" or cp.state["input"].get("owner_subject") != principal.subject:
+            raise CapabilityError("not_found", "Workflow run not found", 404)
+        if cp.fingerprint != make_evidence_review(rag, principal, features).fingerprint:
+            raise CapabilityError("definition_mismatch", "Workflow definition changed", 409)
+        return cp
+
+    @api.post("/workflows/{workflow_name}/runs", status_code=201)
+    def start_workflow(request: Request, workflow_name: str, data: WorkflowRunIn,
+                       tenant: Annotated[str, Depends(auth)]):
+        principal = require(request, "rags:agent", "rags:query")
+        features.require("query")
+        get_template(workflow_name)
+        graph = make_evidence_review(rag, principal, features)
+        cp = graph.start(state, principal.tenant, {
+            "question": data.question, "mode": data.mode, "top_k": data.top_k,
+            "owner_subject": principal.subject,
+        })
+        return cp.public()
+
+    @api.get("/workflows/runs/{run_id}")
+    def get_workflow(request: Request, run_id: str,
+                     tenant: Annotated[str, Depends(auth)]):
+        principal = require(request, "rags:agent", "rags:query")
+        cp = workflow_identity(principal, run_id)
+        return cp.public()
+
+    @api.post("/workflows/runs/{run_id}/resume")
+    def approve_workflow(request: Request, run_id: str, data: ResumeIn,
+                         tenant: Annotated[str, Depends(auth)]):
+        principal = require(request, "rags:agent", "rags:query")
+        cp = workflow_identity(principal, run_id)
+        graph = make_evidence_review(rag, principal, features)
+        return graph.resume(state, principal.tenant, run_id,
+                            expected_revision=data.expected_revision,
+                            approved=data.approved).public()
+
+    @api.post("/workflows/runs/{run_id}/recover")
+    def recover_workflow(request: Request, run_id: str, data: WorkflowRecoverIn,
+                         tenant: Annotated[str, Depends(auth)]):
+        principal = require(request, "rags:agent", "rags:query")
+        cp = workflow_identity(principal, run_id)
+        graph = make_evidence_review(rag, principal, features)
+        return graph.recover(state, principal.tenant, run_id,
+                             expected_revision=data.expected_revision).public()
 
     app.include_router(api)
     return engine
