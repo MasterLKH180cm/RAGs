@@ -351,3 +351,73 @@ def test_capability_error_from_trusted_tool_cannot_leak_exception_details(compon
     assert saved is not None
     assert "private_api_key_value" not in repr(saved.state)
     assert "Example private data" not in repr(saved.state)
+
+
+def test_readonly_tool_deadline_returns_failed_checkpoint_without_waiting_for_slow_io(components):
+    import threading
+    import time
+
+    state, config = components
+    entered = threading.Event()
+    release = threading.Event()
+
+    def stalled(_tenant, _session, _args):
+        entered.set()
+        release.wait(timeout=2.0)
+        return {"ok": True}
+
+    tools = ToolRegistry()
+    tools.register(ToolSpec("slow_read", Args, stalled,
+                            permission="rags:query", read_only=True))
+    service = engine(state, config, FakeRouter(), tools)
+    request = call("slow_read", {"amount": 1}, identifier="request_1")
+    checkpoint = state.create(
+        "tenant-a", kind="agent", fingerprint=service._fingerprint,
+        state={"subject": principal().subject, "session_id": "timeout",
+               "messages": [], "pending": [request.model_dump()],
+               "approval": None, "calls": 0, "steps": 1,
+               "seen": [], "evidence_ids": [], "model": "main",
+               "goal": "Test timeout", "answer": None, "stop_reason": None},
+    )
+    started = time.monotonic()
+    try:
+        result = service._pending(checkpoint, principal(),
+                                  deadline=time.monotonic() + 0.10)
+        assert entered.wait(timeout=0.1)
+        assert time.monotonic() - started < 0.5
+        assert result.status == "failed"
+        assert result.state["stop_reason"] == "tool_timeout"
+        assert result.state["calls"] == 0
+    finally:
+        release.set()
+    stored = state.get("tenant-a", checkpoint.run_id)
+    assert stored is not None and stored.status == "failed"
+    assert stored.state["messages"] == []
+
+
+def test_side_effecting_tools_do_not_run_on_unmanaged_background_workers(components):
+    import threading
+    import time
+
+    state, config = components
+    thread_names = []
+    tools = ToolRegistry()
+
+    def record(_tenant, _session, args):
+        thread_names.append(threading.current_thread().name)
+        return {"amount": args.amount}
+
+    tools.register(ToolSpec("write_consented", Args, record,
+                            permission="rags:memory", read_only=False))
+    service = engine(state, config, FakeRouter(), tools)
+    checkpoint = state.create(
+        "tenant-a", kind="agent", fingerprint=service._fingerprint,
+        state={"subject": principal().subject, "session_id": "write",
+               "messages": [], "pending": [call("write_consented", {"amount": 2}).model_dump()],
+               "approval": None, "calls": 0, "steps": 1,
+               "seen": [], "evidence_ids": [], "model": "main",
+               "goal": "Write once", "answer": None, "stop_reason": None},
+    )
+    updated = service._pending(checkpoint, principal(), deadline=time.monotonic() + 1.0)
+    assert updated.status == "running" and updated.state["calls"] == 1
+    assert thread_names == [threading.current_thread().name]

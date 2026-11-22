@@ -138,3 +138,35 @@ def test_idempotent_flag_cannot_be_a_string_or_integer():
                 if_true=lambda ctx: 1, if_false=lambda ctx: 0,
                 idempotent=unsafe,
             )
+
+
+def test_context_deadline_caps_model_network_timeout():
+    import time
+    from rags.agents.deadline import execution_deadline, remaining_timeout
+
+    assert remaining_timeout(30) == 30.0
+    token = execution_deadline.set(time.monotonic() + 1.0)
+    try:
+        budget = remaining_timeout(30)
+        assert 0.05 <= budget <= 1.0
+        assert 0.05 <= remaining_timeout(0.5) <= 0.5
+    finally:
+        execution_deadline.reset(token)
+    token = execution_deadline.set(time.monotonic() - 0.01)
+    try:
+        with pytest.raises(CapabilityError) as exhausted:
+            remaining_timeout(30)
+        assert exhausted.value.code == "tool_timeout"
+    finally:
+        execution_deadline.reset(token)
+
+
+def test_timed_tool_requires_explicit_readonly_and_idempotency_declaration():
+    with pytest.raises(ValueError, match="read_only"):
+        ToolSpec("read", StrictArgs, lambda *_: {}, permission="rags:query", read_only=1)
+    with pytest.raises(ValueError, match="idempotent"):
+        ToolSpec("read", StrictArgs, lambda *_: {}, permission="rags:query",
+                 idempotent=False, read_only=True)
+    tool = ToolSpec("read", StrictArgs, lambda *_: {}, permission="rags:query",
+                    read_only=True, idempotent=True)
+    assert tool.read_only is True

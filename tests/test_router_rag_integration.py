@@ -93,3 +93,44 @@ def test_unconfigured_gateway_does_not_fallback_to_another_vendor(settings, monk
     with pytest.raises(CapabilityError) as error:
         provider.embedding("Private content")
     assert error.value.code == "router_unconfigured"
+
+
+def test_routed_embedding_respects_caller_remaining_tool_deadline(config, monkeypatch):
+    import time
+    from rags.agents.deadline import execution_deadline
+
+    requested = []
+    real_client = httpx.Client
+
+    def client_for(self, seconds=30.):
+        requested.append(seconds)
+        return real_client(transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={
+                "data": [{"embedding": [0.25, 0.5, 0.25]}],
+                "usage": {"prompt_tokens": 2, "total_tokens": 2},
+            }),
+        ))
+
+    monkeypatch.setattr(ModelRouter, "_client", client_for)
+    token = execution_deadline.set(time.monotonic() + 0.8)
+    try:
+        assert Providers(config).embedding("Authorized source") == [0.25, 0.5, 0.25]
+    finally:
+        execution_deadline.reset(token)
+    assert len(requested) == 1
+    assert 0.05 <= requested[0] <= 0.8
+
+
+def test_expired_agent_deadline_prevents_router_embedding_network(config, monkeypatch):
+    import time
+    from rags.agents.deadline import execution_deadline
+
+    monkeypatch.setattr(ModelRouter, "_client",
+                        lambda *_: pytest.fail("Expired deadline must block network"))
+    token = execution_deadline.set(time.monotonic() - 1.0)
+    try:
+        with pytest.raises(CapabilityError) as expired:
+            Providers(config).embedding("Do not send")
+        assert expired.value.code == "tool_timeout"
+    finally:
+        execution_deadline.reset(token)
