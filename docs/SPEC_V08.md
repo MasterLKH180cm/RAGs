@@ -60,16 +60,14 @@ A workflow is a deterministic, bounded graph plan compiled from a Python registr
 - Use existing 80% line / 72% branch coverage floors, benchmark/quality gates, real sidecar suites, and final Codex Review. GitHub comments must contain exactly `@codex review`.
 - Do not claim production operations, 40 individual provider live integration checks, arbitrary action execution, end-user token management, distributed workers, cost accounting, OTel SDK automatic instrumentation, or RLS in this release. List remaining follow-up work explicitly.
 
-## Explicit activation and Gateway readiness
+## Default-on with secure gateway readiness (user-selected)
 
-Model routing, agents and memory are disabled by default, in production and local
-development. Operators must deliberately enable each subsystem using the
-`RAGS_ROUTER_ENABLED`, `RAGS_AGENT_ENABLED` and `RAGS_MEMORY_ENABLED`
-boolean settings. The default installation has no Agent endpoints and makes no
-Gateway outbound requests. A registered local `evidence_review` workflow can
-be used **only after** the Router and Agent gates are explicitly enabled; a
-fully configured model Gateway is not required for this offline workflow.
-When an enabled router is not configured, `router_ready=false` is exposed to
-authorized clients and model inference fails with a sanitized
-`router_unconfigured` error. Admin UI supports approved DAG execution,
-human approval and CAS recovery. CLI supports workflow lifecycle commands.
+Router, Agent and Memory are enabled by default, including in a fresh installation.
+This overrides the earlier default-off notes in the original specification.
+Operators may explicitly disable any individual feature using its RAGS_*_ENABLED
+flag. The service exposes authenticated capabilities and local workflow execution
+without any cloud provider credentials. Without a complete, valid gateway,
+router_ready=false and inference refuses with 503 router_unconfigured.
+The system never invents a model, key or external endpoint, and partial/unsafe
+gateway configuration fails validation. Tenant, identity, memory and human
+approval permissions remain mandatory.

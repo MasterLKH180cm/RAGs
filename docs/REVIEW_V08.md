@@ -24,22 +24,18 @@
 - Added HTTP mock provider normalization, denied alias/status/oversized/malformed responses, Pydantic tool schema, tenant isolation, human gate approval/denial, workflow restore/version conflict, conversation and observation TTL, and real PostgreSQL state read/write tests.
 - All features remain opt-in, retain a single Gateway egress endpoint controlled by the operator, and never silently downgrade OAuth2/feature/scoped authorizations.
 
-## Opt-in readiness, operator workflow and nonclaims
+## Default-on readiness with explicit credential boundaries
 
-The v0.8 Agent Platform, Router and observation memory interfaces are **all
-disabled by default**. An explicit operator flag is required for each. After
-enabling Router and Agent, without configured Gateway credentials the service
-reports `router_ready=false` and inference returns a sanitized 503; a
-registered evidence-review workflow can operate using only local, authorized
-RAG and a mandatory human approval step. The Admin Dashboard renders its
-DAG with ordered/conditional/parallel/approval nodes. Workflow API/CLI may
-start, inspect, approve, deny and recover checkpoints subject to operator
-permissions, per-tenant isolation and CAS checks.
+Router, Agent and observation memory interfaces default enabled per the user's
+requested deployment policy. This does not issue model credentials or authorize
+an anonymous network call. With no model Gateway, authenticated capabilities
+return router_ready=false and inference fails with 503. A registered offline
+workflow can still operate using authorized local RAG and an approval gate.
+The Admin Dashboard visualizes its ordered, branch, parallel and approval DAG,
+and the API/CLI allow start, inspect, approve, deny and recover checkpoints.
 
-Upstream LiteLLM provider coverage does not establish live interoperability
-or feature parity for every account. User-generated Python workflow code is
-not accepted; only approved operator-registered functions can run.
-
+Upstream LiteLLM provider coverage does not certify all live credentials.
+Only operator-approved aliases are accepted, and no user-generated code runs.
 ## Cross-RAG model routing and prompt trust boundary
 
 Existing RAG generation and embeddings can explicitly select the same Gateway

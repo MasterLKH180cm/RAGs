@@ -1,4 +1,4 @@
-"""Optional Agent Platform: external models, agents and memory default disabled."""
+"""Agent, memory and router are default enabled; external calls require Gateway setup."""
 from dataclasses import dataclass, field
 import json
 import os
@@ -46,9 +46,9 @@ def _secret(name: str) -> str:
 
 @dataclass(frozen=True)
 class AgentPlatformConfig:
-    router_enabled: bool = False
-    agent_enabled: bool = False
-    memory_enabled: bool = False
+    router_enabled: bool = True
+    agent_enabled: bool = True
+    memory_enabled: bool = True
     gateway_url: str = ""
     gateway_key: str = field(default="", repr=False)
     models: dict[str, str] = field(default_factory=dict)
@@ -69,8 +69,8 @@ class AgentPlatformConfig:
             for k, v in self.models.items()
         ):
             raise ValueError("Router models require operator-approved alias to provider/model mapping")
-        # Explicitly enabled workflows may operate without external models,
-        # but the Gateway never invents credentials or a model fallback.
+        # A default-on interface is not permission to invent an external model
+        # endpoint or secret. Until configured, Gateway calls fail closed.
         supplied = bool(self.gateway_url or self.gateway_key or self.models)
         if self.router_enabled and supplied:
             url = urlsplit(self.gateway_url)
@@ -97,9 +97,9 @@ class AgentPlatformConfig:
 
     @classmethod
     def from_env(cls) -> "AgentPlatformConfig":
-        enabled = _boolean("RAGS_ROUTER_ENABLED")
-        agent = _boolean("RAGS_AGENT_ENABLED")
-        memory = _boolean("RAGS_MEMORY_ENABLED")
+        enabled = _boolean("RAGS_ROUTER_ENABLED", True)
+        agent = _boolean("RAGS_AGENT_ENABLED", True)
+        memory = _boolean("RAGS_MEMORY_ENABLED", True)
         allow_http = _boolean("RAGS_ROUTER_ALLOW_HTTP")
         if allow_http and os.getenv("RAGS_ENV", "production") not in {"test", "development"}:
             raise ValueError("Plaintext router connections only allowed in development/test")
