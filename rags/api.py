@@ -1,4 +1,5 @@
 """FastAPI service with tenant-scoped key authentication and bounded inputs."""
+from contextlib import asynccontextmanager
 import io
 import json
 import math
@@ -177,8 +178,15 @@ class QueryIn(BaseModel):
 def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings or Settings.from_env()
     docs = config.features.enabled("api_docs")
+
+    @asynccontextmanager
+    async def lifespan(_application):
+        try:
+            yield
+        finally:
+            monitor.shutdown()
     app = FastAPI(title="RAGs", version="0.7.0", docs_url="/docs" if docs else None,
-                  redoc_url="/redoc" if docs else None, openapi_url="/openapi.json" if docs else None)
+                  redoc_url="/redoc" if docs else None, openapi_url="/openapi.json" if docs else None, lifespan=lifespan)
     app.add_middleware(BodyLimitMiddleware, max_body_bytes=2_100_000)
     store = Store(config.db_path)
     service = RAGService(store, Providers(config))
@@ -189,7 +197,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     monitor = Monitor(enabled=config.otel_enabled, endpoint=config.otel_endpoint,
                       service_name=config.otel_service_name)
     app.state.monitor = monitor
-    app.add_event_handler("shutdown", monitor.shutdown)
 
     @app.middleware("http")
     async def observe_http(request: Request, call_next):
