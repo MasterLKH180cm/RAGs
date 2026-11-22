@@ -96,10 +96,29 @@ class AgentEngine:
                 raise CapabilityError("requires_provider", "RAG search tool is not configured", 503)
             data = self.rag.query(tenant, arguments.question, arguments.mode,
                                   top_k=arguments.top_k, generate=False)
-            return {"outcome": data.get("outcome"), "citations": [
-                {"chunk_id": row["chunk_id"], "source": row["source"],
-                 "text": str(row["text"])[:900]}
-                for row in data.get("citations", [])[:5]]}
+            result = {"outcome": str(data.get("outcome", "retrieved"))[:100],
+                      "citations": [
+                          {"chunk_id": str(row["chunk_id"])[:128],
+                           "source": str(row["source"])[:500],
+                           "text": str(row["text"])[:900]}
+                          for row in data.get("citations", [])[:5]
+                          if isinstance(row, dict)
+                          and all(key in row for key in ("chunk_id", "source", "text"))]}
+            # A 900-character CJK excerpt may be ~2700 UTF-8 bytes; five
+            # excerpts plus JSON metadata can exceed the 8192-byte tool-result
+            # limit. Compact *the final serialized payload* instead of
+            # truncating characters independently and failing the whole run.
+            def encoded_size() -> int:
+                return len(json.dumps(result, ensure_ascii=False, allow_nan=False).encode("utf-8"))
+
+            while result["citations"] and encoded_size() > 7800:
+                excerpt = max(result["citations"],
+                              key=lambda item: len(item["text"].encode("utf-8")))
+                if excerpt["text"]:
+                    excerpt["text"] = excerpt["text"][:len(excerpt["text"]) // 2]
+                else:
+                    result["citations"].remove(excerpt)
+            return result
 
         registry.register(ToolSpec("knowledge_search", SearchArgs, search,
                                    permission="rags:query"))
@@ -249,8 +268,10 @@ class AgentEngine:
                     tools=self.tools.declarations(principal),
                     timeout_seconds=max(0.05, deadline - time.monotonic()),
                 )
-            except CapabilityError:
-                return self._step(cp, status="failed", stop_reason="model_gateway_failed")
+            except CapabilityError as error:
+                if error.code == "context_budget_exceeded":
+                    return self._step(cp, status="stopped", stop_reason="context_budget")
+                return self._step(cp, status="failed", stop_reason=error.code)
             if time.monotonic() >= deadline:
                 return self._step(cp, status="stopped", stop_reason="wall_time_budget")
             steps = cp.state["steps"] + 1

@@ -242,3 +242,29 @@ def test_same_tenant_different_subjects_cannot_share_conversation_or_observation
     observations = ObservationStore(state)
     observations.observe("tenant-a", alice, fact="Alice preference", source_id="consent")
     assert observations.recent("tenant-a", bob) == []
+
+
+def test_long_utf8_search_excerpts_fit_tool_budget_without_losing_all_evidence(components):
+    state, config = components
+    class CJKRag:
+        def query(self, tenant, question, mode, *, top_k, generate):
+            assert tenant == "tenant-a" and generate is False
+            return {"outcome": "supported", "citations": [
+                {"chunk_id": "chunk-" + str(i), "source": "政策文檔",
+                 "text": "漢字內容" * 300}
+                for i in range(5)]}
+    bot = FakeRouter(
+        reply("", call("knowledge_search", {"question": "Find policy"})),
+        reply("This is supported by [chunk-0]"))
+    service = AgentEngine(config=config, router=bot, state=state,
+                          features=FeatureFlags(), rag=CJKRag())
+    cp = service.start(principal(), goal="Find verified policy evidence",
+                       model="main", session_id="long-cjk")
+    assert cp.status == "completed", cp.state.get("stop_reason")
+    tools = [m for m in cp.state["messages"] if m["role"] == "tool"]
+    assert len(tools) == 1
+    assert len(tools[0]["content"].encode("utf-8")) <= 8192
+    import json
+    payload = json.loads(tools[0]["content"])
+    assert payload["citations"] and payload["citations"][0]["chunk_id"] == "chunk-0"
+    assert "漢字" in payload["citations"][0]["text"]

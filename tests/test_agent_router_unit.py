@@ -178,3 +178,19 @@ def test_env_router_secret_settings_are_never_revealed(monkeypatch):
 def test_unrecognized_model_role_rejected():
     with pytest.raises(ValueError):
         Message.model_validate({"role": "admin", "content": "malicious"})
+
+
+def test_gateway_accepts_maximum_supported_agent_history_envelope(config, monkeypatch):
+    router = ModelRouter(config)
+    def respond(req):
+        body = json.loads(req.content)
+        assert len(body["messages"]) == 47
+        return httpx.Response(200, json={"choices": [
+            {"message": {"content": "ok"}, "finish_reason": "stop"}]})
+    actual = httpx.Client
+    monkeypatch.setattr(router, "_client", lambda *_args:
+                        actual(transport=httpx.MockTransport(respond)))
+    bounded = [{"role": "user", "content": "x"} for _ in range(47)]
+    assert router.complete(model="openai", messages=bounded).content == "ok"
+    with pytest.raises(ValueError, match="64"):
+        router.complete(model="openai", messages=bounded * 2)

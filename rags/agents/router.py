@@ -147,8 +147,11 @@ class ModelRouter:
         selected = self.config.models.get(model)
         if selected is None:
             raise CapabilityError("model_not_allowed", "Selected model alias is not configured", 403)
-        if not isinstance(messages, list) or not 1 <= len(messages) <= 42:
-            raise ValueError("Messages must contain 1..42 turns")
+        # Supported agent bounds: initial system/goal + up to 20 history
+        # turns + 8 assistant steps + up to 16 tool results, including one
+        # observation context block. Reserve slack for interrupted runs.
+        if not isinstance(messages, list) or not 1 <= len(messages) <= 64:
+            raise ValueError("Messages must contain 1..64 turns")
         normalized = [Message.model_validate(msg).model_dump(exclude_none=True) for msg in messages]
         if len(json.dumps(normalized, ensure_ascii=False).encode("utf-8")) > MAX_CONTEXT_BYTES:
             raise CapabilityError("context_budget_exceeded", "Router message budget exceeded", 422)
