@@ -95,7 +95,7 @@ def test_unconfigured_gateway_does_not_fallback_to_another_vendor(settings, monk
     assert error.value.code == "router_unconfigured"
 
 
-def test_routed_embedding_respects_caller_remaining_tool_deadline(config, monkeypatch):
+def test_routed_embedding_respects_caller_remaining_tool_deadline(settings, monkeypatch):
     import time
     from rags.agents.deadline import execution_deadline
 
@@ -114,14 +114,14 @@ def test_routed_embedding_respects_caller_remaining_tool_deadline(config, monkey
     monkeypatch.setattr(ModelRouter, "_client", client_for)
     token = execution_deadline.set(time.monotonic() + 0.8)
     try:
-        assert Providers(config).embedding("Authorized source") == [0.25, 0.5, 0.25]
+        assert Providers(settings).embedding("Authorized source") == [0.25, 0.5, 0.25]
     finally:
         execution_deadline.reset(token)
     assert len(requested) == 1
     assert 0.05 <= requested[0] <= 0.8
 
 
-def test_expired_agent_deadline_prevents_router_embedding_network(config, monkeypatch):
+def test_expired_agent_deadline_prevents_router_embedding_network(settings, monkeypatch):
     import time
     from rags.agents.deadline import execution_deadline
 
@@ -130,7 +130,7 @@ def test_expired_agent_deadline_prevents_router_embedding_network(config, monkey
     token = execution_deadline.set(time.monotonic() - 1.0)
     try:
         with pytest.raises(CapabilityError) as expired:
-            Providers(config).embedding("Do not send")
+            Providers(settings).embedding("Do not send")
         assert expired.value.code == "tool_timeout"
     finally:
         execution_deadline.reset(token)
