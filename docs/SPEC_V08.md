@@ -59,3 +59,13 @@ A workflow is a deterministic, bounded graph plan compiled from a Python registr
 - Tests for 2-tenant isolation, invalid model alias, missing tools/rights, malformed tool arguments, provider transient errors, tool budget, run stop conditions, concurrent CAS, restart/resume, deny/approve/replay, branch/parallel order, checkpoint hash, memory TTL and dedupe, transcript injection isolation, feature flag off, offline no-network default, actual PostgreSQL+pgvector schema, and installed wheel.
 - Use existing 80% line / 72% branch coverage floors, benchmark/quality gates, real sidecar suites, and final Codex Review. GitHub comments must contain exactly \`@codex review\`.
 - Do not claim production operations, 40 individual provider live integration checks, arbitrary action execution, end-user token management, distributed workers, cost accounting, OTel SDK automatic instrumentation, or RLS in this release. List remaining follow-up work explicitly.
+
+## Amendment: default-enabled with explicit Gateway readiness
+
+The Agent Platform, Router, and Memory switches now default to true. This supersedes the
+earlier default-false requirement. API startup must succeed without a Gateway, and
+capabilities must report router_ready=false. Inference fails 503 router_unconfigured
+until an operator configures a TLS Gateway, credentials, and allowed model aliases.
+Local workflow graphs and tenant-scoped memory remain usable without external models.
+The Admin Dashboard exposes execution DAG nodes, human approval and CAS recovery;
+CLI supports workflow list, run, status, review and recover.

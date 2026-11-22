@@ -23,3 +23,16 @@
 - Existing unit/integration, real PostgreSQL+pgvector, model training/research sidecars, wheel installation, static analysis and coverage gates stay in CI.
 - Added HTTP mock provider normalization, denied alias/status/oversized/malformed responses, Pydantic tool schema, tenant isolation, human gate approval/denial, workflow restore/version conflict, conversation and observation TTL, and real PostgreSQL state read/write tests.
 - All features remain opt-in, retain a single Gateway egress endpoint controlled by the operator, and never silently downgrade OAuth2/feature/scoped authorizations.
+
+## Default-on readiness, operator workflow and nonclaims
+
+The v0.8 agent, router and observation memory interfaces default enabled; this never
+grants model credentials or auto-selects an external endpoint. Without a valid
+gateway, the API reports router_ready=false, agent inference returns 503, and
+the registered evidence-review workflow still operates using local authorized RAG.
+The Admin Dashboard renders a DAG for sequential, conditional, parallel and approval
+steps. Workflow API/CLI can start, inspect, approve, deny and recover checkpoints.
+
+Upstream LiteLLM provider coverage does not establish live interoperability or
+feature parity for every upstream account. A user-generated Python workflow editor
+is not exposed; only approved operator-registered steps can run.
