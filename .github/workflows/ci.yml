@@ -118,7 +118,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Generate private deployment credentials
-        run: python scripts/bootstrap_compose.py
+        run: |
+          umask 077
+          python scripts/bootstrap_compose.py
       - name: Verify rendered model and feature configuration
         run: python scripts/check_compose.py --report reports/testing/compose-config.json
       - name: Build and start the actual PostgreSQL stack

@@ -52,6 +52,8 @@ def strategy_features(mode: str) -> tuple[str, ...]:
         names.add("federation")
     if mode in set(UPSTREAM_IDS) - {"colbert", "multivector", "multimodal_native"}:
         names.update(("research", "model_generation"))
+    if mode in {"raptor", "lightrag"}:
+        names.add("tokenizer.tiktoken")
     if mode == "multimodal_native":
         names.add("multimodal")
     return tuple(sorted(names))

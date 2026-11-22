@@ -108,7 +108,27 @@ class RAGService:
         required = strategy_features(mode)
         if "strategy.dense" in required:
             required += ("embedding." + self.settings.embedding_provider,)
+        if mode in MODEL_MODES:
+            required += ("tokenizer." + self.settings.generation_tokenizer_config.get("backend", "unicode"),)
         return required
+
+    def preflight_ingestion(self, *, chunking=None, tokenizer=None, index_features=None):
+        """Check every processing prerequisite before parsing, vision or encoding."""
+        self.settings.features.require("ingestion", "embedding." + self.settings.embedding_provider)
+        features = sorted(set(index_features or []))
+        if not set(features) <= {"hierarchy", "graph"}:
+            raise ValueError("Unknown native index feature")
+        config = ChunkConfig(**(chunking or self.settings.chunking_config))
+        tokenizer_config = tokenizer or self.settings.tokenizer_config
+        self.settings.features.require("chunking." + config.strategy,
+                                       "tokenizer." + tokenizer_config.get("backend", "unicode"),
+                                       *("index." + name for name in features))
+        if config.strategy == "contextual" or (features and self.settings.model_provider != "extractive"):
+            self.provider.require_generation()
+            self.settings.features.require("tokenizer." + self.settings.generation_tokenizer_config.get("backend", "unicode"))
+        if config.strategy == "semantic" and self.settings.embedding_provider == "local":
+            raise CapabilityError("requires_provider", "Semantic chunking requires a trained embedding provider")
+        return config, tokenizer_config, features
 
     def _backend(self):
         if self._backend_manager is None:
@@ -161,7 +181,8 @@ class RAGService:
                index_features: list[str] | None = None, rows: list[dict] | None = None,
                valid_from: str | None = None, valid_to: str | None = None,
                expected_revision: str | None = None, force: bool = False) -> dict:
-        self.settings.features.require("ingestion", "embedding." + self.settings.embedding_provider)
+        config, tokenizer_config, features = self.preflight_ingestion(
+            chunking=chunking, tokenizer=tokenizer, index_features=index_features)
         metadata = dict(metadata or {})
         if any(k.startswith("_rags_") for k in metadata):
             raise ValueError("Metadata keys starting _rags_ are reserved")
@@ -175,20 +196,7 @@ class RAGService:
             metadata["_rags_rows"] = rows
         if not isinstance(text, str) or not text.strip() or len(text) > 200_000:
             raise ValueError("Source text must contain 1..200000 characters")
-        features = sorted(set(index_features or []))
-        if not set(features) <= {"hierarchy", "graph"}:
-            raise ValueError("Unknown native index feature")
-        config = ChunkConfig(**(chunking or self.settings.chunking_config))
-        tokenizer_config = tokenizer or self.settings.tokenizer_config
-        self.settings.features.require("chunking." + config.strategy,
-                                       "tokenizer." + tokenizer_config.get("backend", "unicode"),
-                                       *("index." + name for name in features))
-        if config.strategy == "contextual" or (features and self.settings.model_provider != "extractive"):
-            self.provider.require_generation()
-            self.settings.features.require("tokenizer." + self.settings.generation_tokenizer_config.get("backend", "unicode"))
         tok = resolve_tokenizer(tokenizer_config)
-        if config.strategy == "semantic" and self.settings.embedding_provider == "local":
-            raise CapabilityError("requires_provider", "Semantic chunking requires a trained embedding provider")
         doc_id = document_id or str(uuid.uuid4())
         existing = self.store.get_document(tenant, doc_id)
         embedding_endpoint = self.settings.embedding_endpoint
@@ -694,8 +702,10 @@ class RAGService:
 
     def query(self, tenant: str, question: str, mode: str = "hybrid", top_k: int = 5, generate: bool = True, **options) -> dict:
         self.settings.features.require("query")
+        if generate:
+            self.settings.features.require("tokenizer." + self.settings.generation_tokenizer_config.get("backend", "unicode"))
         if generate and self.settings.model_provider != "extractive":
-            self.settings.features.require("model_generation", "tokenizer." + self.settings.generation_tokenizer_config.get("backend", "unicode"))
+            self.settings.features.require("model_generation")
         self.provider.begin_usage()
         result = self._retrieve(tenant, question, mode, top_k, options)
         chunks = result.pop("chunks")

@@ -3,6 +3,7 @@ import asyncio
 from dataclasses import replace
 import json
 import os
+import io
 
 from fastapi.testclient import TestClient
 import httpx
@@ -214,3 +215,44 @@ def test_research_flag_propagates_to_worker_and_denies_before_spawn(settings, mo
     with TestClient(research_app(selected)) as client:
         response = client.post("/retrieve", headers=AUTH, json=body)
         assert response.status_code == 403 and response.json()["detail"]["code"] == "feature_disabled"
+
+
+@pytest.mark.parametrize("feature", ["chunking.structure", "tokenizer.unicode"])
+def test_caption_ingestion_preflights_chunker_and_tokenizer_before_vision(settings, monkeypatch, feature):
+    from PIL import Image
+    raw = io.BytesIO()
+    Image.new("RGB", (2, 2), "white").save(raw, format="PNG")
+    configured = replace(settings, model_provider="openai", openai_key="fixture-key", features=flags(feature))
+    monkeypatch.setattr(httpx, "post", lambda *a, **kw: pytest.fail("disabled ingestion called vision provider"))
+    with TestClient(create_app(configured)) as client:
+        response = client.post("/images", headers=AUTH, files={"file": ("image.png", raw.getvalue(), "image/png")})
+        assert response.status_code == 403 and response.json()["detail"]["code"] == "feature_disabled"
+        assert client.app.state.service.store.list_documents("tenant-a") == []
+
+
+@pytest.mark.parametrize("mode", ["fusion", "hyde", "adaptive", "corrective", "agentic", "self_reflective"])
+def test_internal_generation_preflights_tokenizer_even_with_generate_false(settings, monkeypatch, mode):
+    configured = replace(settings, embedding_provider="openai", model_provider="openai", openai_key="fixture-key")
+    calls = []
+
+    def embedding_response(url, **kwargs):
+        calls.append(url)
+        return httpx.Response(200, request=httpx.Request("POST", url), json={"data": [{"embedding": [1.0, 0.0]}]})
+
+    monkeypatch.setattr(httpx, "post", embedding_response)
+    ingest(configured)
+    assert calls
+    calls.clear()
+    with TestClient(create_app(replace(configured, features=flags("tokenizer.unicode")))) as client:
+        response = client.post("/query", headers=AUTH, json={"question": "Telemetry policy", "mode": mode, "generate": False})
+        assert response.status_code == 403 and response.json()["detail"]["code"] == "feature_disabled"
+    assert calls == []
+
+
+def test_extractive_context_packing_preflights_tokenizer_before_dense_encoding(settings, monkeypatch):
+    ingest(settings)
+    app = create_app(replace(settings, features=flags("tokenizer.unicode")))
+    monkeypatch.setattr(app.state.service.provider, "query_embedding", lambda *a: pytest.fail("disabled packing called embedding"))
+    with TestClient(app) as client:
+        response = client.post("/query", headers=AUTH, json={"question": "Telemetry policy", "mode": "dense"})
+        assert response.status_code == 403

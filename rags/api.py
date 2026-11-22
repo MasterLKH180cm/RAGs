@@ -207,6 +207,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 elif path == "/images":
                     config.features.require("uploads", "ingestion", "image_captioning", "model_generation",
                                             "embedding." + config.embedding_provider)
+                    service.preflight_ingestion()
                 elif path == "/documents" or path.startswith("/documents/"):
                     if request.method == "GET":
                         config.features.require("documents")
@@ -216,6 +217,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         config.features.require("ingestion")
                         if path == "/documents/upload":
                             config.features.require("uploads")
+                            service.preflight_ingestion()
                         elif path.endswith("/reindex"):
                             config.features.require("reindex")
                 return tenant

@@ -15,6 +15,12 @@ pytestmark = pytest.mark.integration
 AUTH = {"Authorization": "Bearer asset-feature-key"}
 
 
+@pytest.fixture(autouse=True)
+def isolated_multimodal_configuration(monkeypatch):
+    for name in ("RAGS_FEATURES_JSON", "RAGS_FEATURES_FILE", "RAGS_MULTIMODAL_MODEL", "RAGS_MODEL_CACHE"):
+        monkeypatch.delenv(name, raising=False)
+
+
 class CountingEncoder:
     id = "fixture:asset-flags-v1"
     dimensions = 3
@@ -111,8 +117,42 @@ def make_client(path, feature, encoder):
             raise HTTPException(401, "Invalid bearer token")
         return "tenant"
 
-    service = install_multimodal_routes(app, auth, db_path=path, encoder=encoder, features=disabled(feature))
+    features = disabled(feature) if feature is not None else None
+    service = install_multimodal_routes(app, auth, db_path=path, encoder=encoder, features=features)
     return TestClient(app), service
+
+
+@pytest.mark.parametrize("entry_point", ["direct", "standalone_routes"])
+@pytest.mark.parametrize("configuration", ["json", "file"])
+def test_default_multimodal_permissions_honor_operator_environment_before_encoding(
+    tmp_path, monkeypatch, entry_point, configuration,
+):
+    path = str(tmp_path / "assets.db")
+    original = MultimodalService(path, encoder=CountingEncoder())
+    original.ingest("tenant", red_image(), asset_id="asset", title="Original")
+    before = original.store.get("tenant", "asset", original=True)
+    if configuration == "json":
+        monkeypatch.setenv("RAGS_FEATURES_JSON", '{"multimodal":false}')
+    else:
+        flags = tmp_path / "features.json"
+        flags.write_text('{"multimodal":false}', encoding="utf-8")
+        monkeypatch.setenv("RAGS_FEATURES_FILE", str(flags))
+    encoder = CountingEncoder()
+    if entry_point == "direct":
+        service = MultimodalService(path, encoder=encoder)
+        with pytest.raises(CapabilityError) as error:
+            service.ingest("tenant", red_image(), asset_id="asset", title="Replacement")
+        assert error.value.code == "feature_disabled" and error.value.status_code == 403
+    else:
+        client, service = make_client(path, None, encoder)
+        with client:
+            response = client.post("/assets/images", headers=AUTH,
+                                   data={"asset_id": "asset", "title": "Replacement"},
+                                   files={"file": ("valid.png", red_image(), "image/png")})
+            assert response.status_code == 403 and response.json()["detail"]["code"] == "feature_disabled"
+    assert service.capability()["disabled_by"] == ["multimodal"]
+    assert encoder.calls == 0
+    assert original.store.get("tenant", "asset", original=True) == before
 
 
 @pytest.mark.parametrize("path,feature", [

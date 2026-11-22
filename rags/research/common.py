@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from typing import Protocol
 
+from rags.features import FeatureFlags, strategy_features
 from rags.registry import CapabilityError
 from rags.tokenization import resolve_tokenizer
 
@@ -119,20 +120,31 @@ def fastembed_token_window(encoder):
 class ProviderBridge:
     """Per-request counters/caches; never stores source data outside this instance."""
 
-    def __init__(self, provider: ProviderProtocol):
+    def __init__(self, provider: ProviderProtocol, *, engine: str | None = None):
         self.provider = provider
         settings = getattr(provider, "settings", None)
+        configured_features = getattr(settings, "features", None)
+        self.features = configured_features if configured_features is not None else FeatureFlags.from_env()
+        if not isinstance(self.features, FeatureFlags):
+            raise ValueError("Research features must be validated operator permissions")
+        self.features.require("research", "model_generation")
+        if engine is not None:
+            self.features.require(*strategy_features(engine))
         self.embedding_model = getattr(provider, "embedding_model", "")
         self.generation_provider = getattr(provider, "model_identity", "")
-        if (getattr(settings, "embedding_provider", "local") not in {"fastembed", "openai"}
+        embedding_provider = getattr(settings, "embedding_provider", "local")
+        if (embedding_provider not in {"fastembed", "openai"}
                 or not isinstance(self.embedding_model, str) or not self.embedding_model
                 or len(self.embedding_model) > 200 or "hash" in self.embedding_model.lower()):
             raise CapabilityError("requires_provider", "Research requires a configured trained embedding provider")
+        self.features.require("embedding." + embedding_provider)
+        tokenizer_config = getattr(settings, "generation_tokenizer_config", {"backend": "unicode"})
+        self.features.require("tokenizer." + tokenizer_config.get("backend", "unicode"))
         if (getattr(provider, "has_generation", False) is not True
                 or not isinstance(self.generation_provider, str) or not self.generation_provider
                 or len(self.generation_provider) > 200 or self.generation_provider.startswith("extractive")):
             raise CapabilityError("requires_provider", "Research requires a configured generation provider")
-        self.tokenizer = resolve_tokenizer(getattr(settings, "generation_tokenizer_config", {"backend": "unicode"}))
+        self.tokenizer = resolve_tokenizer(tokenizer_config)
         self.input_budget = (getattr(settings, "context_budget", 16000)
                              - getattr(settings, "output_budget", 1024)
                              - getattr(settings, "envelope_budget", 256))
@@ -158,6 +170,7 @@ class ProviderBridge:
             self._embedding_counter, self.embedding_token_limit = counter, limit
             self.embedding_window_policy = "provider_exact_counter_reject_oversize"
         elif self.provider.settings.embedding_provider == "fastembed":
+            self.features.require("embedding.fastembed")
             from rags.providers import _semantic_encoder
             name = getattr(self.provider.settings, "fastembed_model", None)
             if not isinstance(name, str) or not name:
@@ -166,6 +179,7 @@ class ProviderBridge:
             self._embedding_counter, self.embedding_token_limit = fastembed_token_window(encoder)
             self.embedding_window_policy = "native_tokenizer_reject_oversize"
         else:
+            self.features.require("tokenizer.tiktoken")
             name = getattr(self.provider.settings, "embedding_model", None)
             if name not in {"text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"}:
                 raise CapabilityError("requires_provider", "Research needs an exact token counter for this embedding model")

@@ -336,7 +336,7 @@ def _asset_id(value: str) -> str:
 class MultimodalService:
     def __init__(self, db_path: str, model_name: str | None = None, encoder: AlignedEncoder | None = None,
                  features: FeatureFlags | None = None):
-        self.features = features if features is not None else FeatureFlags()
+        self.features = features if features is not None else FeatureFlags.from_env()
         self.store = AssetStore(db_path)
         self.model_name = (os.getenv("RAGS_MULTIMODAL_MODEL", "") if model_name is None else model_name).strip().lower()
         if self.model_name and self.model_name != CLIP_PAIR:
