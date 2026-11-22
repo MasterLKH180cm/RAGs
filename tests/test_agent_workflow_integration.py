@@ -1,5 +1,4 @@
 """Real tenant-local SQLite workflow, human checkpoint and observation memory."""
-import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -87,17 +86,17 @@ def test_checkpoint_fingerprint_and_cas_conflicts(state):
     assert state.get("tenant", cp.run_id).status == "waiting_for_approval"
 
 
-def test_workflow_requires_explicit_parallel_idempotency_and_step_validation():
+def test_workflow_requires_explicit_parallel_idempotency_and_step_validation(state):
     with pytest.raises(ValueError, match="idempotent"):
         Workflow("example").parallel("parallel", {"a": lambda _: 1, "b": lambda _: 2})
     with pytest.raises(ValueError):
         Workflow("example").then("same", lambda _: 1).then("same", lambda _: 2)
     with pytest.raises(ValueError):
         Workflow("example").then("needs", lambda _: 1, approval=True)
-    with pytest.raises(ValueError):
+    with pytest.raises(CapabilityError) as invalid:
         Workflow("example").branch("branch", lambda _: "not bool",
-                                   if_true=lambda _: 1, if_false=lambda _: 2).start(
-                                       StateStore(Store("/tmp/rags-flow-test-invalid-bool.db")), "tenant", {})
+                                   if_true=lambda _: 1, if_false=lambda _: 2).start(state, "tenant", {})
+    assert invalid.value.code == "workflow_step_failed"
 
 
 def test_checkpoint_rejects_invalid_json_and_stale_versions(state):
