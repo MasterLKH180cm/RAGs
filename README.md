@@ -556,6 +556,25 @@ provider failures retain their typed status, including `502`.
 
 ## Validation and measured limits
 
+### Verified v0.4 implementation
+
+[CI 44996488847](https://github.com/MasterLKH180cm/RAGs/actions/runs/44996488847)
+passed all six automatic jobs at `f3c9506b850c0196517861b11cf51ca56d6ed991`.
+The selected suites passed **411 unit tests, 300 ordinary integration tests and
+21 actual PostgreSQL tests**, with zero selected skips. Complete-package coverage
+across all 30 production modules is **82.94% of statements and 77.66% of branches**;
+the unchanged floors are 80% and 72%. PostgreSQL execution is included in this
+measurement; independent processes and models have separate evidence.
+
+The other gates passed real encoders, RAPTOR/LightRAG HTTP lifecycles, admission
+runtime/recorded-quality checks and a real PostgreSQL/pgvector Compose deployment
+with restart persistence. The manual full quality benchmark was not selected.
+See the [v0.4 implementation review](docs/IMPLEMENTATION_REVIEW_V04.md),
+[machine-readable results and source hashes](docs/testing-results-v04.json), and
+[current PR checks](https://github.com/MasterLKH180cm/RAGs/pull/4/checks).
+
+### Historical baseline and test policy
+
 The last recorded v0.3 local core baseline passed **336 unit tests and 170 integration tests**
 (**506 unique cases, zero selected skips**). Five actual encoder/research tests
 are explicitly deselected here and have separately provisioned CI jobs. Every
@@ -631,7 +650,7 @@ The [recorded v0.2 CI run](https://github.com/MasterLKH180cm/RAGs/actions/runs/4
 
 The historical v0.2 companion HTTP/worker/MCP flow also passed with Agent SQLite and PostgreSQL; RAG storage remained SQLite. Version 0.3 additionally executes actual upstream engines through the full HTTP and Agent boundary: [RAPTOR report](reports/research_raptor_http_v03.json) and [LightRAG report](reports/research_lightrag_http_v03.json). Both include tenant isolation, updates/as-of/deletion, process cleanup, independent worker and terminal REST/SSE/MCP checks. These use real BGE and explicitly deterministic generation fixtures; live paid-generation quality remains unverified.
 
-See the [v0.3 implementation review](docs/IMPLEMENTATION_REVIEW_V03.md), [v0.3 specification](docs/SPEC_V03.md), [upstream ledger](docs/RESEARCH_ENGINES.md) and [architecture](docs/ARCHITECTURE.md) for current evidence. The [v0.2 review](docs/IMPLEMENTATION_REVIEW.md) remains a historical record.
+See the [v0.4 implementation review](docs/IMPLEMENTATION_REVIEW_V04.md), [v0.4 specification](docs/SPEC_V04.md), [upstream ledger](docs/RESEARCH_ENGINES.md) and [architecture](docs/ARCHITECTURE.md) for current scope and evidence. The [v0.3 review](docs/IMPLEMENTATION_REVIEW_V03.md) and [v0.2 review](docs/IMPLEMENTATION_REVIEW.md) remain historical records.
 
 ## Database migration and backups
 
@@ -706,7 +725,11 @@ test data.
 
 ## Deployment and project map
 
-The current deployment/configuration contract is [SPEC_V04](docs/SPEC_V04.md). The full v0.4 PostgreSQL, Compose and browser results must come from the exact revision's CI artifacts; earlier counts and quality measurements remain labelled historical.
+The current deployment/configuration contract is [SPEC_V04](docs/SPEC_V04.md).
+The [v0.4 results](docs/testing-results-v04.json) identify the tested implementation,
+source hashes and actual PostgreSQL/Compose evidence; the companion Agent report
+records Chromium and independent-worker checks. Earlier counts and frozen quality
+measurements remain labelled historical.
 
 Production requires `RAGS_KEYS_JSON` mapping strong API keys to tenant IDs; production keys must be at least 24 characters. Authentication precedes source selection, hierarchy expansion, graph traversal, historical reads, and asset access. The local development keys are examples for localhost.
 
