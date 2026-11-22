@@ -5,7 +5,7 @@
 - The operator-controlled **LiteLLM Gateway HTTP adapter** accepts an exact alias whitelist and validated Pydantic chat/tool output. Public upstream LiteLLM documentation advertises more than 100 model providers; the RAG code performs only one bounded standard Gateway request and is tested using a mock HTTP Gateway, not 100 direct vendor endpoints.
 - Tools are code-registered, typed by Pydantic, scoped by authenticated tenant and identity permissions, and bounded by explicit token, tool count, time, and iteration controls. No model-supplied arbitrary code or external network destinations.
 - Workflow graph DSL supports ordered `.then`, conditional `.branch`, and idempotent concurrent `.parallel` branches. Approval gate persists before any gated operation. Checkpoints use optimistic CAS and fingerprint to prevent resume against changed workflow definitions.
-- Tenant+session scoped user/assistant history and explicit provenance/TTL observations. Observation writes from the agent's model require human approval; external explicit API observation writes require a `rags:memory` scope. Separate memory enable flag.
+- Tenant+verified-subject+session scoped user/assistant history and explicit provenance/TTL observations; even equal public Session IDs belonging to different people in the same tenant remain isolated. Observation writes from the agent's model require human approval; external explicit API observation writes require a `rags:memory` scope. Separate memory enable flag.
 - Existing OAuth2 introspection, `rags:agent`/ `rags:generate` scopes, FeatureFlags, PostgreSQL+pgvector and frontend/admin paths retain their authority.
 
 ## Known limitations

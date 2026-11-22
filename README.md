@@ -264,7 +264,7 @@ a session cookie and CSRF validation. Runs are restricted to their creator
 and tenant, and stale checkpoint revisions are rejected.
 ### History and observation memory
 
-Each conversation is stored under `(tenant, session_id)`, with bounded retrieval of at most 20 recent turns. `ObservationStore` records short, explicitly supplied/approved facts with provenance, confidence, deterministic deduplication and TTL (default 30 days, configurable via `RAGS_MEMORY_TTL_DAYS`). Expired facts are excluded from prompt context. Memory, RAG citations and model outputs are **untrusted context**, not executable commands or authorization data. Memory is never written when `RAGS_MEMORY_ENABLED=false`.
+Each API conversation is stored under `(tenant, verified subject, session_id)` using an internal subject-derived namespace, with bounded retrieval of at most 20 recent turns. `ObservationStore` records short, explicitly supplied/approved facts with provenance, confidence, deterministic deduplication and TTL (default 30 days, configurable via `RAGS_MEMORY_TTL_DAYS`). Expired facts are excluded from prompt context. Memory, RAG citations and model outputs are **untrusted context**, not executable commands or authorization data. Memory is never written when `RAGS_MEMORY_ENABLED=false`.
 
 ```bash
 # Authorize rags:agent + rags:memory to read/write tenant session facts.
