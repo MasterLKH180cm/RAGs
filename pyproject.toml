@@ -16,6 +16,9 @@ dependencies = [
     "tiktoken>=0.8,<1",
 ]
 
+[project.scripts]
+rags = "rags.cli:main"
+
 [project.optional-dependencies]
 mcp = ["mcp>=1.19,<2"]
 postgres = ["psycopg[binary]>=3.2,<4"]
