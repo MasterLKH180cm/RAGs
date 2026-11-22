@@ -125,6 +125,7 @@ jobs:
           uv venv --python 3.12 "$RUNNER_TEMP/rags-wheel"
           uv pip install --python "$RUNNER_TEMP/rags-wheel/bin/python" dist/*.whl
           "$RUNNER_TEMP/rags-wheel/bin/rags" --help
+          "$RUNNER_TEMP/rags-wheel/bin/rags" --version | grep -F '0.5.0'
           mkdir -p "$RUNNER_TEMP/rags-wheel-profile"
           "$RUNNER_TEMP/rags-wheel/bin/rags" init --profile offline \
             --directory "$RUNNER_TEMP/rags-wheel-profile"

@@ -230,7 +230,7 @@ def _run_serve(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="rags", description="RAGs platform tooling")
-    parser.add_argument("--version", action="version", version="rags-platform 0.4.0")
+    parser.add_argument("--version", action="version", version="rags-platform 0.5.0")
     sub = parser.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init", help="Create private credentials and a deployment profile")
     init.add_argument("--profile", choices=PROFILES, default="offline")

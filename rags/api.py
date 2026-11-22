@@ -174,7 +174,7 @@ class QueryIn(BaseModel):
 def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings or Settings.from_env()
     docs = config.features.enabled("api_docs")
-    app = FastAPI(title="RAGs", version="0.4.0", docs_url="/docs" if docs else None,
+    app = FastAPI(title="RAGs", version="0.5.0", docs_url="/docs" if docs else None,
                   redoc_url="/redoc" if docs else None, openapi_url="/openapi.json" if docs else None)
     app.add_middleware(BodyLimitMiddleware, max_body_bytes=2_100_000)
     store = Store(config.db_path)
