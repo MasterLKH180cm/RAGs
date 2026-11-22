@@ -440,3 +440,22 @@ def test_scope_pushes_revision_filters_to_postgres_without_loading_unauthorized_
     assert store.scope("tenant", filters={"metadata": {"active": "True"}}) == []
     after = len([sql for sql, _ in calls if "FROM chunks c" in sql])
     assert before == after
+
+
+def test_benchmark_uses_only_temp_tables_and_reproduces_expected_counts(database):
+    from rags.benchmark import benchmark
+
+    result = benchmark(database, documents=20, chunks_per_document=3, iterations=3)
+    assert result["workload"] == "synthetic_temp_tables"
+    assert result["database"] == "postgresql+pgvector"
+    assert result["vector_dimensions"] == 32
+    assert result["candidate_fraction"] == 0.1
+    assert result["measurements"]["scoped_revision_join"]["rows"] == 6
+    assert result["measurements"]["unfiltered_tenant_scan"]["rows"] == 6
+    assert result["measurements"]["exact_scoped_cosine"]["rows"] == 6
+    assert all(sample["samples"] == 3 for sample in result["measurements"].values())
+    with Store(database).connect() as connection:
+        assert connection.execute(
+            "SELECT count(*) AS n FROM information_schema.tables "
+            "WHERE table_schema=current_schema() AND table_name='rags_bench_chunks'"
+        ).fetchone()["n"] == 0
