@@ -146,7 +146,7 @@ def test_observation_memory_deduplicates_expires_and_marks_untrusted(state):
     assert len(rows) == 1 and rows[0]["source_id"] == "explicit-approval"
     assert obs.recent("foreign", "session") == []
     prompt = context_messages([{"role": "user", "content": "What now?"}], rows)
-    assert "untrusted" in prompt[0]["content"]
+    assert "untrusted" in prompt[0]["content"].casefold()
     assert prompt[-1]["role"] == "user"
     old = (datetime.now(UTC) - timedelta(days=1)).isoformat()
     with state.store.connect() as db:
