@@ -395,6 +395,106 @@
     }catch(e){if(epoch===state.epoch)notice(errorText(e),true);}
     finally{if(epoch===state.epoch){approve.disabled=false;deny.disabled=false;}}
   }
+  function renderWorkflowGraph(template,checkpoint){
+    const root=$('#workflow-graph');root.replaceChildren();if(!template)return;
+    const cursor=checkpoint?.state?.cursor??-1,status=checkpoint?.status||'';
+    (template.nodes||[]).forEach((step,index)=>{
+      const node=el('li','workflow-node'),finished=index<cursor,active=index===cursor;
+      node.classList.toggle('complete',finished);node.classList.toggle('active',active);
+      const kind=step.kind==='parallel'?'平行檢查':step.kind==='branch'?'條件分支':
+        step.approval?'人工核准':'依序執行';
+      const count=el('div','workflow-step-number',finished?'✓':String(index+1));
+      const body=el('div','workflow-step-content');
+      body.append(el('strong','',step.name),el('span','',kind));
+      if(active&&status==='waiting_for_approval')body.append(el('em','','等待審核'));
+      node.append(count,body);root.append(node);
+    });
+  }
+  async function loadWorkflowCatalog(){
+    const epoch=state.epoch,select=$('#workflow-template');
+    select.replaceChildren();const placeholder=el('option','','載入中…');
+    placeholder.value='';select.append(placeholder);
+    try{
+      const data=await api('agents/workflows');
+      if(epoch!==state.epoch)return;
+      state.workflowTemplates=Array.isArray(data.templates)?data.templates:[];
+      select.replaceChildren();
+      for(const template of state.workflowTemplates){
+        const option=el('option','',template.title);option.value=template.name;select.append(option);
+      }
+      if(!state.workflowTemplates.length){
+        const none=el('option','','尚無安全工作流範本');none.value='';select.append(none);
+      }
+      $('#workflow-start').disabled=!state.workflowTemplates.length;
+      txt('#workflow-availability',state.workflowTemplates.length?'工作流可用':'未設定');
+      const first=state.workflowTemplates[0];
+      txt('#workflow-description',first?.description||'請先註冊工作流範本。');
+      renderWorkflowGraph(first,null);
+    }catch(error){
+      if(epoch!==state.epoch)return;
+      $('#workflow-start').disabled=true;
+      txt('#workflow-availability','工作流無法使用');
+      txt('#workflow-description',errorText(error));
+    }
+  }
+  function renderWorkflow(result){
+    state.workflowRun=result;
+    $('#workflow-actions').hidden=false;
+    txt('#workflow-run-id','執行 ID：'+result.run_id);
+    txt('#workflow-cursor',n(result.state?.cursor));
+    txt('#workflow-status',result.status||'未知');
+    const selected=state.workflowTemplates.find(t=>t.name===$('#workflow-template').value);
+    renderWorkflowGraph(selected,result);
+    const citations=result.state?.outputs?.retrieve?.citations;
+    txt('#workflow-sources',n(Array.isArray(citations)?citations.length:0));
+    const approval=result.status==='waiting_for_approval';
+    $('#workflow-approval').hidden=!approval;
+    $('#workflow-recover').hidden=!['running','needs_resume'].includes(result.status);
+    txt('#workflow-human-status',approval?'待審核':result.status==='completed'?'已完成':
+      result.status==='stopped'?'拒絕／停止':'尚未審核');
+  }
+  async function startWorkflow(event){
+    event.preventDefault();const epoch=state.epoch;
+    const name=$('#workflow-template').value,question=$('#workflow-question').value.trim();
+    if(!name||question.length<2){notice('請選擇流程並填寫問題。',true);return;}
+    const button=$('#workflow-start');busy(button,true,'正在執行…');
+    try{
+      const result=await api('agents/workflows/'+encodeURIComponent(name)+'/runs',{
+        method:'POST',body:{question,mode:$('#workflow-mode').value,
+          top_k:Number($('#workflow-topk').value)},
+      });
+      if(epoch!==state.epoch)return;
+      renderWorkflow(result);notice(result.status==='waiting_for_approval'
+        ?'流程已安全暫停，等待人工審核。':'工作流狀態已更新。');
+    }catch(error){if(epoch===state.epoch)notice(errorText(error),true);}
+    finally{if(epoch===state.epoch)busy(button,false,'執行工作流 →');}
+  }
+  async function decideWorkflow(approved){
+    const epoch=state.epoch,run=state.workflowRun;
+    if(!run||run.status!=='waiting_for_approval')return;
+    const yes=$('#workflow-approve'),no=$('#workflow-deny');
+    yes.disabled=true;no.disabled=true;
+    try{
+      const result=await api('agents/workflows/runs/'+encodeURIComponent(run.run_id)+'/resume',{
+        method:'POST',body:{expected_revision:run.revision,approved},
+      });
+      if(epoch!==state.epoch)return;
+      renderWorkflow(result);notice(approved?'核准完成，流程繼續執行。':'流程已拒絕並停止。');
+    }catch(error){if(epoch===state.epoch)notice(errorText(error),true);}
+    finally{if(epoch===state.epoch){yes.disabled=false;no.disabled=false;}}
+  }
+  async function recoverWorkflow(){
+    const epoch=state.epoch,run=state.workflowRun;
+    if(!run||!['running','needs_resume'].includes(run.status))return;
+    const button=$('#workflow-recover');busy(button,true,'正在恢復…');
+    try{
+      const result=await api('agents/workflows/runs/'+encodeURIComponent(run.run_id)+'/recover',{
+        method:'POST',body:{expected_revision:run.revision},
+      });
+      if(epoch===state.epoch)renderWorkflow(result);
+    }catch(error){if(epoch===state.epoch)notice(errorText(error),true);}
+    finally{if(epoch===state.epoch)busy(button,false,'從儲存的檢查點恢復');}
+  }
   async function bootstrap(){
     const epoch=state.epoch;
     try{const info=await api('session');if(epoch===state.epoch)showApp(info);}
@@ -441,6 +541,15 @@
     $('#agent-form').addEventListener('submit',startAgent);
     $('#agent-approve').addEventListener('click',()=>decideAgent(true));
     $('#agent-deny').addEventListener('click',()=>decideAgent(false));
+    $('#workflow-form').addEventListener('submit',startWorkflow);
+    $('#workflow-approve').addEventListener('click',()=>decideWorkflow(true));
+    $('#workflow-deny').addEventListener('click',()=>decideWorkflow(false));
+    $('#workflow-recover').addEventListener('click',recoverWorkflow);
+    $('#workflow-template').addEventListener('change',()=>{
+      const template=state.workflowTemplates.find(t=>t.name===$('#workflow-template').value);
+      txt('#workflow-description',template?.description||'—');
+      renderWorkflowGraph(template,null);
+    });
     $('#delete-confirm').addEventListener('input',()=>{
       $('#delete-submit').disabled=!state.deleteTarget||
         $('#delete-confirm').value.trim()!==state.deleteTarget.id;
