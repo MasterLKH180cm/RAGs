@@ -85,7 +85,7 @@ class Settings:
     def from_env(cls) -> "Settings":
         env = os.getenv("RAGS_ENV", "production").lower()
         try:
-            keys = json.loads(os.getenv("RAGS_KEYS_JSON", "{}"))
+            keys = json.loads(os.getenv("RAGS_KEYS_JSON") or "{}")
         except json.JSONDecodeError as exc:
             raise ValueError("RAGS_KEYS_JSON must be a JSON token-to-tenant mapping") from exc
         if not isinstance(keys, dict) or any(

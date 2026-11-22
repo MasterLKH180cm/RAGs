@@ -174,7 +174,7 @@ def diagnose(*, check_db: bool = True) -> dict:
             _check("configuration", "error", "Settings validation failed; check RAGS_* environment values")
         ]}
     storage = "postgresql" if settings.db_path.startswith(("postgresql://", "postgres://")) else "sqlite"
-    checks.append(_check("configuration", "ok", "Validated settings and token-to-tenant mapping"))
+    checks.append(_check("configuration", "ok", "Validated " + settings.auth_mode + " configuration"))
     checks.append(_check("storage", "ok", storage))
     checks.append(_check("features", "ok",
                          str(len([x for x in settings.features.as_dict().values() if x])) +

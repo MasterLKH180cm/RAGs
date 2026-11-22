@@ -13,6 +13,7 @@ Version 0.5 adds the installable CLI, five operator profiles, read-only doctor, 
 ## Contents
 
 - [Quick start](#quick-start)
+- [Tenant authorization and OAuth2](#tenant-authorization-and-oauth2)
 - [Installable CLI](#installable-cli-no-clone-needed)
 - [uv environment workflow](#uv-environment-workflow)
 - [Ingest and query](#ingest-and-query)
@@ -29,6 +30,46 @@ Version 0.5 adds the installable CLI, five operator profiles, read-only doctor, 
 - [MCP and API reference](#mcp-and-api-reference)
 - [Validation and measured limits](#validation-and-measured-limits)
 - [Deployment and project map](#deployment-and-project-map)
+
+## Tenant authorization and OAuth2
+
+The original tenant API key model allowed all document operations within the tenant. V0.6 retains it for compatibility but supports explicit per-key roles and an independent, opt-in OAuth2 Resource Server. **Feature flags are not a substitute for identity permissions.**
+
+### API key roles
+
+```bash
+export RAGS_KEYS_JSON='{"REPLACE_WITH_READER_KEY":"tenant-a","REPLACE_WITH_EDITOR_KEY":"tenant-a"}'
+export RAGS_KEY_ROLES_JSON='{"REPLACE_WITH_READER_KEY":["reader"],"REPLACE_WITH_EDITOR_KEY":["editor"]}'
+```
+
+| Role | Scope grants |
+| --- | --- |
+| reader | `rags:read`, `rags:query` |
+| editor | reader + `rags:write`, `rags:reindex` |
+| admin | all, including `rags:delete`, `rags:generate`, `rags:original_image`, `rags:mcp` |
+
+If `RAGS_KEY_ROLES_JSON` is absent, **every legacy key has admin-equivalent permissions**. When set, it must cover all keys and use known roles. Use secret storage for the mapping.
+
+### OAuth2 access-token introspection (RFC 7662)
+
+```bash
+export RAGS_AUTH_MODE=oauth2_introspection
+export RAGS_KEYS_JSON='{}'
+export RAGS_OAUTH2_INTROSPECTION_URL=https://idp.example.com/oauth2/introspect
+export RAGS_OAUTH2_ISSUER=https://idp.example.com/
+export RAGS_OAUTH2_AUDIENCE=rags-api
+export RAGS_OAUTH2_CLIENT_ID=rags-service
+export RAGS_OAUTH2_CLIENT_SECRET_FILE=/secrets/rags-introspection-secret
+# Optional: RAGS_OAUTH2_TENANT_CLAIM=tenant_id
+# Optional: RAGS_OAUTH2_TIMEOUT_SECONDS=3
+rags doctor --no-db
+rags serve
+```
+
+The authorization server must return an **active** authenticated introspection response with exact `iss`, `aud`, nonempty `sub`, fixed `tenant_id`, future `exp` and a space-delimited `scope`, e.g. `rags:read rags:query`. Ignore unrelated scopes such as `openid`. Additional scopes: `rags:write`, `rags:reindex`, `rags:delete`, `rags:generate`, `rags:original_image` (also requires read), and `rags:mcp`.
+
+The endpoint uses HTTPS, Basic client authentication, rejects redirects/invalid claims, and does not cache introspection. Missing/invalid credentials yield 401; insufficient scope yields 403; unavailable IdP yields 503. **This is resource-server OAuth2, not an OIDC login, JWT signature validator or Authorization Code+PKCE client.** See [security audit](docs/SECURITY_V06.md) for remaining RLS, per-document ACL and production risks.
+
 
 ## Quick start
 
