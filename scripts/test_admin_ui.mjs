@@ -92,7 +92,7 @@ const reply = (status, body = {}) => ({
 const queryResult = (identity) => ({
   answer: "PRIVATE " + identity + " only",
   outcome: "supported",
-  citations: [{title: "SECRET " + identity, source: "private-" + identity,
+  citations: [{title: "SECRET " + identity, chunk_id: "source-ID-" + identity, source: "private-" + identity,
     text: "Proprietary evidence of tenant " + identity, score: .987}],
 });
 async function fetch(url, options = {}) {
@@ -170,7 +170,7 @@ function snapshot(node, seen = new Set()) {
     (node.children || []).map((c) => snapshot(c, seen)).join(" ");
 }
 function assertNoOldTenant() {
-  const sensitive = ["PRIVATE A", "SECRET A", "Proprietary evidence of tenant A", "secret-A"];
+  const sensitive = ["PRIVATE A", "SECRET A", "Proprietary evidence of tenant A", "secret-A", "source-ID-A"];
   for (const value of sensitive) {
     for (const [key, node] of dom.entries()) {
       assert.equal(snapshot(node).includes(value), false,
@@ -184,6 +184,9 @@ await login("A");
 element("#query-question").value = "Confidential source request A";
 await trigger("#query-form", "submit");
 assert.match(element("#query-answer").textContent, /PRIVATE A/);
+assert.match(snapshot(element("#query-citations")), /\[source-ID-A\]/,
+  "Evidence card must show the exact answer citation ID");
+
 assert.equal(element("#query-output").hidden, false);
 await trigger("#logout-button");
 assert.equal(element("#workspace").hidden, true);
@@ -206,5 +209,8 @@ await hanging;
 await microtasks();
 assertNoOldTenant();
 assert.equal(element("#query-output").hidden, true);
+assert.equal(element("#query-submit").disabled, false);
+assert.equal(element("#add-submit").disabled, false);
+assert.equal(element("#query-submit").textContent, "開始檢索 ↗");
 assert.ok(queryRequests >= 2);
 console.log("Admin UI identity switch, DOM reset and stale request isolation: passed");
