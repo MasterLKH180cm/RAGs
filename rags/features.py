@@ -25,7 +25,7 @@ MANIFEST = {
     "multimodal": "Store and retrieve original image assets",
     "original_images": "Read original image bytes through the asset API",
     "admission_scoring": "Use an operator-selected evidence scoring profile",
-    **{f"embedding.{name}": f"Use the {name} embedding provider" for name in ("local", "openai", "fastembed")},
+    **{f"embedding.{name}": f"Use the {name} embedding provider" for name in ("local", "openai", "fastembed", "router")},
     **{f"index.{name}": f"Build the {name} index" for name in ("hierarchy", "graph")},
     **{f"tokenizer.{name}": f"Use the {name} text counter" for name in ("unicode", "tiktoken")},
     **{f"chunking.{name}": f"Use the {name} chunker" for name in STRATEGIES},

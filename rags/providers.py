@@ -6,7 +6,7 @@ import os
 import re
 from collections import Counter
 from contextvars import ContextVar
-from functools import lru_cache
+from functools import cached_property, lru_cache
 
 import httpx
 
@@ -91,16 +91,30 @@ class Providers:
     def __init__(self, settings: Settings):
         self.settings = settings
 
+    @cached_property
+    def model_router(self):
+        from rags.agents.config import AgentPlatformConfig
+        from rags.agents.router import ModelRouter
+
+        return ModelRouter(AgentPlatformConfig.from_env())
+
     @property
     def model_identity(self) -> str:
         if self.settings.model_provider == "openai":
             return "openai:" + self.settings.chat_model
         if self.settings.model_provider == "anthropic":
             return "anthropic:" + self.settings.anthropic_model
+        if self.settings.model_provider == "router":
+            return "router:" + self.model_router.config.models.get(
+                self.settings.chat_model, self.settings.chat_model)
         return "extractive-v1"
 
     @property
     def has_generation(self) -> bool:
+        if self.settings.model_provider == "router":
+            return bool(self.settings.features.enabled("model_generation")
+                        and self.model_router.config.router_ready
+                        and self.settings.chat_model in self.model_router.config.models)
         return bool(
             self.settings.features.enabled("model_generation")
             and self.settings.model_provider in {"openai", "anthropic"}
@@ -173,6 +187,9 @@ class Providers:
 
     @property
     def embedding_model(self) -> str:
+        if self.settings.embedding_provider == "router":
+            return "router:" + self.model_router.config.models.get(
+                self.settings.embedding_model, self.settings.embedding_model)
         if self.settings.embedding_provider == "fastembed":
             return "fastembed:" + self.settings.fastembed_model
         return (
@@ -185,6 +202,10 @@ class Providers:
         self.settings.features.require("embedding." + self.settings.embedding_provider)
         if self.settings.embedding_provider == "local":
             return local_embedding(text)
+        if self.settings.embedding_provider == "router":
+            result = self.model_router.embedding(model=self.settings.embedding_model, text=text)
+            self.record("embedding", self.embedding_model, {"usage": result.usage})
+            return result.vector
         if self.settings.embedding_provider == "fastembed":
             return next(_semantic_encoder(self.settings.fastembed_model, os.getenv("RAGS_MODEL_CACHE") or None).embed([text])).tolist()
         if not self.settings.embedding_credential:
@@ -220,6 +241,20 @@ class Providers:
         tokenizer = resolve_tokenizer(self.settings.generation_tokenizer_config)
         if tokenizer.count(system + user) > self.settings.context_budget - self.settings.output_budget - self.settings.envelope_budget:
             raise CapabilityError("context_budget_exceeded", "Rendered model input exceeds the configured budget", 422)
+        if self.settings.model_provider == "router":
+            result = self.model_router.complete(
+                model=self.settings.chat_model,
+                messages=[{"role": "system", "content": system},
+                          {"role": "user", "content": user}],
+                max_output_tokens=min(self.settings.output_budget,
+                                      self.model_router.config.max_output_tokens),
+                timeout_seconds=90.,
+            )
+            if result.finish_reason != "stop" or result.tool_calls or not result.content.strip():
+                raise CapabilityError("invalid_model_output",
+                                      "Gateway generation did not finish with a text answer", 502)
+            self.record("generation", self.model_identity, {"usage": result.usage})
+            return result.content
         if self.settings.model_provider == "openai":
             response = httpx.post(
                 self.settings.generation_endpoint + "/chat/completions",

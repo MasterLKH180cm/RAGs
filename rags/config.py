@@ -71,6 +71,8 @@ class Settings:
 
     @property
     def embedding_endpoint(self) -> str:
+        if self.embedding_provider == "router":
+            return "router"
         return (self.embedding_base_url or self.openai_base_url) if self.embedding_provider == "openai" else "local"
 
     @property
@@ -79,6 +81,8 @@ class Settings:
 
     @property
     def generation_endpoint(self) -> str:
+        if self.model_provider == "router":
+            return "router"
         return self.generation_base_url or (self.openai_base_url if self.model_provider == "openai"
                                            else "https://api.anthropic.com/v1")
 
@@ -162,9 +166,9 @@ class Settings:
             raise ValueError("Production admin dashboard requires explicit RAGS_KEY_ROLES_JSON")
         embedding_provider = os.getenv("RAGS_EMBEDDING_PROVIDER", "local").lower()
         model_provider = os.getenv("RAGS_MODEL_PROVIDER", "extractive").lower()
-        if embedding_provider not in {"local", "openai", "fastembed"}:
+        if embedding_provider not in {"local", "openai", "fastembed", "router"}:
             raise ValueError("Unsupported embedding provider")
-        if model_provider not in {"extractive", "openai", "anthropic"}:
+        if model_provider not in {"extractive", "openai", "anthropic", "router"}:
             raise ValueError("Unsupported model provider")
         database_url = os.getenv("RAGS_DATABASE_URL")
         if database_url and not database_url.startswith(("postgresql://", "postgres://")):
@@ -178,7 +182,8 @@ class Settings:
             embedding_base = endpoint(embedding_base, "RAGS_EMBEDDING_BASE_URL")
         if generation_base:
             generation_base = endpoint(generation_base, "RAGS_GENERATION_BASE_URL")
-        chat_model = os.getenv("RAGS_GENERATION_MODEL") or os.getenv("OPENAI_CHAT_MODEL") or "gpt-4.1-mini"
+        chat_model = os.getenv("RAGS_GENERATION_MODEL") or (
+            "main" if model_provider == "router" else os.getenv("OPENAI_CHAT_MODEL") or "gpt-4.1-mini")
         features = FeatureFlags.from_env()
         def object_env(name: str, fallback: str) -> dict:
             try:
@@ -238,7 +243,9 @@ class Settings:
             model_provider=model_provider,
             openai_key=secret("OPENAI_API_KEY"),
             openai_base_url=openai_base,
-            embedding_model=os.getenv("RAGS_EMBEDDING_MODEL") or os.getenv("OPENAI_EMBEDDING_MODEL") or "text-embedding-3-small",
+            embedding_model=os.getenv("RAGS_EMBEDDING_MODEL") or (
+                "embeddings" if embedding_provider == "router" else
+                os.getenv("OPENAI_EMBEDDING_MODEL") or "text-embedding-3-small"),
             chat_model=chat_model,
             anthropic_key=secret("ANTHROPIC_API_KEY"),
             anthropic_model=os.getenv("RAGS_GENERATION_MODEL") or os.getenv("ANTHROPIC_CHAT_MODEL") or "claude-sonnet-4-5",
