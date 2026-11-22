@@ -60,12 +60,16 @@ A workflow is a deterministic, bounded graph plan compiled from a Python registr
 - Use existing 80% line / 72% branch coverage floors, benchmark/quality gates, real sidecar suites, and final Codex Review. GitHub comments must contain exactly `@codex review`.
 - Do not claim production operations, 40 individual provider live integration checks, arbitrary action execution, end-user token management, distributed workers, cost accounting, OTel SDK automatic instrumentation, or RLS in this release. List remaining follow-up work explicitly.
 
-## Amendment: default-enabled with explicit Gateway readiness
+## Explicit activation and Gateway readiness
 
-The Agent Platform, Router, and Memory switches now default to true. This supersedes the
-earlier default-false requirement. API startup must succeed without a Gateway, and
-capabilities must report router_ready=false. Inference fails 503 router_unconfigured
-until an operator configures a TLS Gateway, credentials, and allowed model aliases.
-Local workflow graphs and tenant-scoped memory remain usable without external models.
-The Admin Dashboard exposes execution DAG nodes, human approval and CAS recovery;
-CLI supports workflow list, run, status, review and recover.
+Model routing, agents and memory are disabled by default, in production and local
+development. Operators must deliberately enable each subsystem using the
+`RAGS_ROUTER_ENABLED`, `RAGS_AGENT_ENABLED` and `RAGS_MEMORY_ENABLED`
+boolean settings. The default installation has no Agent endpoints and makes no
+Gateway outbound requests. A registered local `evidence_review` workflow can
+be used **only after** the Router and Agent gates are explicitly enabled; a
+fully configured model Gateway is not required for this offline workflow.
+When an enabled router is not configured, `router_ready=false` is exposed to
+authorized clients and model inference fails with a sanitized
+`router_unconfigured` error. Admin UI supports approved DAG execution,
+human approval and CAS recovery. CLI supports workflow lifecycle commands.

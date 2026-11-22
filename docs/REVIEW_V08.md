@@ -24,18 +24,21 @@
 - Added HTTP mock provider normalization, denied alias/status/oversized/malformed responses, Pydantic tool schema, tenant isolation, human gate approval/denial, workflow restore/version conflict, conversation and observation TTL, and real PostgreSQL state read/write tests.
 - All features remain opt-in, retain a single Gateway egress endpoint controlled by the operator, and never silently downgrade OAuth2/feature/scoped authorizations.
 
-## Default-on readiness, operator workflow and nonclaims
+## Opt-in readiness, operator workflow and nonclaims
 
-The v0.8 agent, router and observation memory interfaces default enabled; this never
-grants model credentials or auto-selects an external endpoint. Without a valid
-gateway, the API reports router_ready=false, agent inference returns 503, and
-the registered evidence-review workflow still operates using local authorized RAG.
-The Admin Dashboard renders a DAG for sequential, conditional, parallel and approval
-steps. Workflow API/CLI can start, inspect, approve, deny and recover checkpoints.
+The v0.8 Agent Platform, Router and observation memory interfaces are **all
+disabled by default**. An explicit operator flag is required for each. After
+enabling Router and Agent, without configured Gateway credentials the service
+reports `router_ready=false` and inference returns a sanitized 503; a
+registered evidence-review workflow can operate using only local, authorized
+RAG and a mandatory human approval step. The Admin Dashboard renders its
+DAG with ordered/conditional/parallel/approval nodes. Workflow API/CLI may
+start, inspect, approve, deny and recover checkpoints subject to operator
+permissions, per-tenant isolation and CAS checks.
 
-Upstream LiteLLM provider coverage does not establish live interoperability or
-feature parity for every upstream account. A user-generated Python workflow editor
-is not exposed; only approved operator-registered steps can run.
+Upstream LiteLLM provider coverage does not establish live interoperability
+or feature parity for every account. User-generated Python workflow code is
+not accepted; only approved operator-registered functions can run.
 
 ## Cross-RAG model routing and prompt trust boundary
 
