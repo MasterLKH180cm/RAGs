@@ -37,13 +37,13 @@ A \`StateStore\` uses a tenant/run composite primary key, optimistic revision CA
 flow = (
     Workflow("review")
       .then("retrieve", search_step)
-      .branch("quality", quality_predicate, if_true="publish", if_false="human_review")
+      .branch("quality", quality_predicate, if_true=accept_step, if_false=review_step)
       .parallel("cross_checks", {"a": check_a, "b": check_b}, idempotent=True)
       .then("publish", persist_result)
 )
 \`\`\`
 
-A workflow is a deterministic, bounded graph plan compiled from a Python registry. \`.branch\` validates targets and jumps forward only, preventing implicit cycles. \`.parallel\` returns named results with deterministic ordering using bounded workers, with no unsafe concurrent checkpoint mutation. On \`HumanPause\`, persist intent; on resume, approve/deny with expected revision and continue from the same node without replaying earlier nodes. Branches and parallel steps are explicit, not implicit LLM-generated code.
+A workflow is a deterministic, bounded graph plan compiled from a Python registry. `branch` invokes exactly one of two operator-registered callbacks and continues to the next node; it does not jump to arbitrary node labels. \`.parallel\` returns named results with deterministic ordering using bounded workers, with no unsafe concurrent checkpoint mutation. An approval-gated `.then(approval=True,idempotent=True)` persists intent; on resume, approve/deny with expected revision and continue from the same node without replaying earlier nodes. Branches and parallel steps are explicit, not implicit LLM-generated code.
 
 ## Conversation and observational memory
 
@@ -54,7 +54,7 @@ A workflow is a deterministic, bounded graph plan compiled from a Python registr
 ## API, CLI, UX, tests
 
 - Agent HTTP: \`POST /agents/runs\`, \`GET /agents/runs/{id}\`, \`POST /agents/runs/{id}/resume\` ; memory endpoints \`GET /agents/sessions/{id}/messages\` and \`GET /agents/sessions/{id}/observations\`. User-supplied session IDs bounded. POSTs require \`rags:agent\` and \`rags:generate\`, plus configured features; scopes are checked before model/DB calls.
-- CLI: \`rags agent doctor\` for model configuration readiness; \`rags agent run --goal ... --model ...\` with explicit local bearer/URL and safe defaults or document API as primary interface.
+- CLI: \`rags agent doctor\` for model configuration readiness; \`rags agent run --goal-file PATH --model ...\` with explicit local bearer/URL and safe defaults or document API as primary interface.
 - Dashboard: add "Agents" operator section with run status and approval form only if scoped admin session; no exposed provider keys or agent execution code.
 - Tests for 2-tenant isolation, invalid model alias, missing tools/rights, malformed tool arguments, provider transient errors, tool budget, run stop conditions, concurrent CAS, restart/resume, deny/approve/replay, branch/parallel order, checkpoint hash, memory TTL and dedupe, transcript injection isolation, feature flag off, offline no-network default, actual PostgreSQL+pgvector schema, and installed wheel.
 - Use existing 80% line / 72% branch coverage floors, benchmark/quality gates, real sidecar suites, and final Codex Review. GitHub comments must contain exactly \`@codex review\`.

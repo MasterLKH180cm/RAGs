@@ -1,4 +1,4 @@
-"""Operator-gated Agent Platform configuration: available by default, credentials fail-closed."""
+"""Optional Agent Platform: all external model and memory features default disabled."""
 from dataclasses import dataclass, field
 import json
 import os
@@ -46,9 +46,9 @@ def _secret(name: str) -> str:
 
 @dataclass(frozen=True)
 class AgentPlatformConfig:
-    router_enabled: bool = True
-    agent_enabled: bool = True
-    memory_enabled: bool = True
+    router_enabled: bool = False
+    agent_enabled: bool = False
+    memory_enabled: bool = False
     gateway_url: str = ""
     gateway_key: str = field(default="", repr=False)
     models: dict[str, str] = field(default_factory=dict)
@@ -97,9 +97,9 @@ class AgentPlatformConfig:
 
     @classmethod
     def from_env(cls) -> "AgentPlatformConfig":
-        enabled = _boolean("RAGS_ROUTER_ENABLED", True)
-        agent = _boolean("RAGS_AGENT_ENABLED", True)
-        memory = _boolean("RAGS_MEMORY_ENABLED", True)
+        enabled = _boolean("RAGS_ROUTER_ENABLED")
+        agent = _boolean("RAGS_AGENT_ENABLED")
+        memory = _boolean("RAGS_MEMORY_ENABLED")
         allow_http = _boolean("RAGS_ROUTER_ALLOW_HTTP")
         if allow_http and os.getenv("RAGS_ENV", "production") not in {"test", "development"}:
             raise ValueError("Plaintext router connections only allowed in development/test")

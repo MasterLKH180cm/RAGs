@@ -127,13 +127,15 @@ def test_gateway_redirect_and_errors_fail_closed(config, monkeypatch):
 
 def test_disabled_router_never_accepts_gateway_calls():
     config = AgentPlatformConfig()
-    assert config.router_enabled and config.agent_enabled and config.memory_enabled
-    assert not config.router_ready
+    assert not config.router_enabled and not config.agent_enabled and not config.memory_enabled
+    with pytest.raises(CapabilityError) as disabled:
+        ModelRouter(config)
+    assert disabled.value.code == "feature_disabled"
+    incomplete = replace(config, router_enabled=True, agent_enabled=True)
+    assert not incomplete.router_ready
     with pytest.raises(CapabilityError) as no_gateway:
-        ModelRouter(config).complete(model="missing", messages=[{"role":"user", "content":"hi"}])
+        ModelRouter(incomplete).complete(model="missing", messages=[{"role": "user", "content": "hi"}])
     assert no_gateway.value.code == "router_unconfigured"
-    with pytest.raises(CapabilityError):
-        ModelRouter(replace(config, router_enabled=False))
 
 
 @pytest.mark.parametrize("changes", [

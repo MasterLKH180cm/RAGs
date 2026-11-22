@@ -152,7 +152,7 @@ The adapter uses an **operator-controlled LiteLLM Gateway**, which implements an
 export RAGS_ROUTER_ENABLED=true
 export RAGS_ROUTER_GATEWAY_URL=https://litellm.example.com/v1
 export RAGS_ROUTER_API_KEY_FILE=/secrets/rags-gateway-key
-export RAGS_ROUTER_MODELS_JSON='{"main":"openai/gpt-luna-latest","analyst":"anthropic/claude-sonnet-latest","google":"gemini/gemini-2.5-pro","xai":"xai/grok-latest"}'
+export RAGS_ROUTER_MODELS_JSON='{"main":"openai/gpt-4.1-mini","analyst":"anthropic/claude-sonnet-latest","google":"gemini/gemini-2.5-pro","xai":"xai/grok-latest"}'
 export RAGS_AGENT_ENABLED=true
 export RAGS_MEMORY_ENABLED=true
 
