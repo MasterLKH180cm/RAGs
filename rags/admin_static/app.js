@@ -243,6 +243,14 @@
       head.append(el('span','',c.title||c.document_id||'來源文件'));
       if(Number.isFinite(c.score))head.append(el('span','citation-score','Score '+c.score.toFixed(3)));
       card.append(head,el('p','citation-meta',[c.source,c.section].filter(Boolean).join(' · ')));
+      // The answer references exact [chunk_id] values. Expose the same ID on
+      // each evidence card so citations remain auditable even with duplicate titles.
+      if(typeof c.chunk_id==='string'&&c.chunk_id){
+        const reference=el('div','citation-reference');
+        reference.append(el('span','citation-reference-label','引用 ID'),
+          el('code','citation-id','['+c.chunk_id+']'));
+        card.append(reference);
+      }
       card.append(el('div','citation-text',c.text||'沒有可顯示的摘錄。'));root.append(card);
     });
   }

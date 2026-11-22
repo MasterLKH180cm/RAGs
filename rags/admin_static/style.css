@@ -28,3 +28,10 @@ input:not([type="checkbox"]),textarea,select{width:100%;background:var(--surface
   .password-wrap .input-action{top:2px}
   .text-link{display:inline-flex;align-items:center;min-height:44px}
 }
+
+/* Keep generated answer [chunk_id] references discoverable and selectable. */
+.citation-reference{display:flex;align-items:flex-start;gap:9px;flex-wrap:wrap;margin:7px 0 10px}
+.citation-reference-label{font-size:11px;color:var(--muted);flex-shrink:0}
+.citation-id{display:inline-block;max-width:100%;overflow-wrap:anywhere;user-select:text;
+  padding:3px 7px;background:var(--accent-faint);border:1px solid var(--border);
+  border-radius:6px;color:var(--accent);font-size:11px;line-height:1.6}
