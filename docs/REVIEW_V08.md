@@ -47,3 +47,7 @@ tool-call guarantees are inferred from Gateway support.
 Untrusted observations and RAG citations are placed in user-role data blocks
 in the Agent prompt, never as privileged system messages. Existing tenant and
 evidence admission checks continue to apply.
+
+## Runtime deadline and side-effect safety
+
+The Agent Engine propagates a context-local deadline into external chat and embedding network timeouts. Registered read-only, idempotent tools use bounded daemon workers so HTTP requests can return after a time budget without trusting late results; a semaphore limits orphaned workers to eight. The only built-in read-only tool is knowledge retrieval. **This is not a sandbox or a kill switch for arbitrary side effects**: operator-defined state-changing tools execute synchronously, require cooperative cancellation and idempotent downstream operations, and can exceed the configured wall-time budget if their own code ignores the deadline. Never report such handlers as hard-interruptible. See the additional unit/integration deadline regression tests.

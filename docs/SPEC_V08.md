@@ -71,3 +71,7 @@ router_ready=false and inference refuses with 503 router_unconfigured.
 The system never invents a model, key or external endpoint, and partial/unsafe
 gateway configuration fails validation. Tenant, identity, memory and human
 approval permissions remain mandatory.
+
+## Tool-deadline amendment
+
+The operator can designate an idempotent tool `read_only=True`. The engine bounds the request's wait for such handlers, caps outstanding worker slots and rejects late results; the HTTP providers use a request-local deadline to cap outbound network timeouts, including routed embeddings. Side-effecting handlers remain synchronous/cooperative to avoid pretending a cancelled Python thread cannot still mutate an external system. They must enforce their own downstream timeouts and idempotency. There is no hard termination guarantee for arbitrary trusted Python tool code. Unit and integration tests exercise timeouts, fail-closed checkpoints and saturated/slow handlers.
