@@ -1,9 +1,6 @@
 """CLI, installation profile and diagnostic contracts with no live side effects."""
-from contextlib import contextmanager
 import json
 import os
-from pathlib import Path
-import shlex
 import sqlite3
 import stat
 
