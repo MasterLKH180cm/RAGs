@@ -514,3 +514,58 @@ def test_citation_free_followup_after_sourced_answer_remains_valid(components):
     assert next_run.status == "completed"
     assert next_run.state["prior_evidence_ids"] == ["source_10"]
     assert next_run.state["answer"] == "The requested format is a short paragraph."
+
+
+def test_combined_fresh_and_previous_citations_over_eighty_are_persisted(components):
+    """The persisted assistant provenance must handle new+historical IDs.
+
+    15 authorized search tools each return five distinct source IDs, and six
+    verified IDs come from a previous completed answer: 81 IDs total.
+    """
+    state, baseline = components
+    config = replace(baseline, max_steps=5, max_tool_calls=16)
+
+    class GroupArgs(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        index: int = Field(ge=0, le=14)
+
+    def grouped_evidence(_tenant, _session, arguments):
+        return {"citations": [
+            {"chunk_id": f"fresh_{arguments.index}_{i}", "text": "verified"}
+            for i in range(5)
+        ]}
+
+    registry = ToolRegistry()
+    registry.register(ToolSpec(
+        "knowledge_search", GroupArgs, grouped_evidence,
+        permission="rags:query", read_only=True,
+    ))
+    session_id = scoped_session(principal().subject, "mixed_provenance")
+    prior = [f"prior_{i}" for i in range(6)]
+    memory = engine(state, config, FakeRouter(reply("unused")), registry).history
+    memory.append("tenant-a", session_id, "assistant",
+                  "Previous response " + " ".join(f"[{item}]" for item in prior),
+                  evidence_ids=prior)
+
+    new_sources = [f"fresh_{batch}_{i}" for batch in range(15) for i in range(5)]
+    answer = "Authorized evidence " + " ".join(f"[{item}]" for item in prior + new_sources)
+    responses = [
+        reply("", *(call("knowledge_search", {"index":index}, f"call_{index}")
+                    for index in range(8))),
+        reply("", *(call("knowledge_search", {"index":index}, f"call_{index}")
+                    for index in range(8, 15))),
+        reply(answer),
+    ]
+    result = engine(state, config, FakeRouter(*responses), registry).start(
+        principal(), goal="Compile all verified evidence references",
+        model="main", session_id="mixed_provenance",
+    )
+    assert result.status == "completed"
+    assert len(result.state["evidence_ids"]) == 75
+    assert len(result.state["prior_evidence_ids"]) == 6
+    persisted = memory.last("tenant-a", session_id, with_evidence=True)
+    final = persisted[-1]
+    assert final["role"] == "assistant"
+    assert final["content"] == answer
+    assert len(final["evidence_ids"]) == 81
+    assert set(final["evidence_ids"]) == set(prior + new_sources)
