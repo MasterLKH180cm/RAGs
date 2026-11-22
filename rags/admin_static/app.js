@@ -31,11 +31,12 @@
     state.csrf='';state.tenant='';state.permissions=[];state.offset=0;
     state.search='';state.loading=false;state.deleteTarget=null;
     clearTimeout(searchTimer);
-    for(const id of ['#query-output','#query-citations','#documents-body',
+    for(const id of ['#query-citations','#documents-body',
         '#activity-list','#feature-list','#permission-list','#overview-chart','#monitor-chart']){
       $(id).replaceChildren();
     }
     $('#query-output').hidden=true;$('#query-empty').hidden=false;
+    $('#login-error').hidden=true;$('#login-error').textContent='';
     $('#query-form').reset();$('#add-form').reset();$('#delete-form').reset();
     $('#document-search').value='';$('#delete-confirm').value='';
     $('#delete-submit').disabled=true;
