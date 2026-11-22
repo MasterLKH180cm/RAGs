@@ -4,6 +4,7 @@ The Gateway supports >40 upstream providers; this adapter only claims an
 OpenAI-compatible HTTP contract. Exact model aliases are operator-approved.
 """
 import json
+import math
 import time
 import re
 from typing import Any
@@ -67,6 +68,13 @@ class ModelReply(BaseModel):
     usage: dict[str, int] = Field(default_factory=dict)
 
 
+class EmbeddingReply(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    vector: list[float] = Field(min_length=1, max_length=16000)
+    model: str
+    usage: dict[str, int] = Field(default_factory=dict)
+
+
 class ModelRouter:
     def __init__(self, config: AgentPlatformConfig):
         if not config.router_enabled:
@@ -76,6 +84,60 @@ class ModelRouter:
     def _client(self, timeout_seconds: float = 30.) -> httpx.Client:
         return httpx.Client(timeout=httpx.Timeout(timeout_seconds, connect=min(5., timeout_seconds)),
                             follow_redirects=False, trust_env=False)
+
+    def embedding(self, *, model: str, text: str,
+                  timeout_seconds: float = 30.) -> EmbeddingReply:
+        """One OpenAI-compatible embeddings endpoint for approved Gateway models."""
+        if not self.config.router_ready:
+            raise CapabilityError("router_unconfigured", "Model gateway is not configured", 503)
+        selected = self.config.models.get(model)
+        if selected is None:
+            raise CapabilityError("model_not_allowed", "Embedding model alias is not approved", 403)
+        if not isinstance(text, str) or not text or len(text.encode("utf-8")) > MAX_CONTEXT_BYTES:
+            raise ValueError("Embedding input exceeds the configured length limit")
+        if type(timeout_seconds) not in (int, float) or not 0.05 <= timeout_seconds <= 90.:
+            raise ValueError("Embedding timeout must be 0.05..90 seconds")
+        deadline = time.monotonic() + timeout_seconds
+        try:
+            with self._client(timeout_seconds) as client:
+                with client.stream(
+                    "POST", self.config.gateway_url + "/embeddings",
+                    headers={"Authorization": "Bearer " + self.config.gateway_key,
+                             "Accept": "application/json"},
+                    json={"model": selected, "input": text},
+                ) as response:
+                    if response.status_code != 200:
+                        raise CapabilityError("embedding_gateway_failed",
+                                              "Gateway rejected the embedding request", 502)
+                    chunks, size = [], 0
+                    for chunk in response.iter_bytes():
+                        if time.monotonic() >= deadline:
+                            raise CapabilityError("model_timeout", "Embedding deadline exceeded", 504)
+                        size += len(chunk)
+                        if size > MAX_RESPONSE_BYTES:
+                            raise CapabilityError("invalid_embedding", "Embedding response exceeds limit", 502)
+                        chunks.append(chunk)
+            if time.monotonic() >= deadline:
+                raise CapabilityError("model_timeout", "Embedding deadline exceeded", 504)
+            payload = json.loads(b"".join(chunks))
+        except CapabilityError:
+            raise
+        except (httpx.HTTPError, ValueError, UnicodeError) as exc:
+            raise CapabilityError("embedding_gateway_failed",
+                                  "Gateway embedding request failed", 502) from exc
+        try:
+            data = payload["data"]
+            vector = data[0]["embedding"]
+            if not isinstance(vector, list) or not 1 <= len(vector) <= 16000 or any(
+                type(value) not in (int, float) or not math.isfinite(value) for value in vector
+            ):
+                raise ValueError("Invalid embedding vector")
+            usage = payload.get("usage") or {}
+            safe_usage = {key: count for key in ("prompt_tokens", "total_tokens")
+                          if type((count := usage.get(key))) is int and 0 <= count <= 10**9}
+            return EmbeddingReply(vector=vector, model=selected, usage=safe_usage)
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError) as exc:
+            raise CapabilityError("invalid_embedding", "Invalid Gateway embedding result", 502) from exc
 
     def complete(self, *, model: str, messages: list[dict], tools: list[dict] | None = None,
                  max_output_tokens: int | None = None, timeout_seconds: float = 30.) -> ModelReply:
