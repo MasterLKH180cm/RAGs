@@ -1,4 +1,6 @@
 """Real Postgres+pgvector tenant-scoped agent state and memory transaction tests."""
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 import os
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 import uuid
@@ -73,3 +75,35 @@ def test_agent_tables_created_in_tenant_database_schema(pg_database):
         ).fetchall()
     assert {row["table_name"] for row in rows} >= {
         "agent_runs", "agent_messages", "agent_observations"}
+
+
+def test_parallel_postgres_checkpoint_writers_only_one_wins(pg_database):
+    """CAS plus the advisory transaction lock prevents double approval/execution."""
+    store = Store(pg_database)
+    state = StateStore(store)
+    saved = state.create("tenant-a", kind="agent", fingerprint="a" * 64,
+                         status="waiting_for_approval", state={"cursor": 1})
+    synchronizer = Barrier(2)
+
+    def mutate(value):
+        synchronizer.wait(timeout=10)
+        try:
+            updated = state.update(
+                "tenant-a", saved.run_id, expected_revision=0,
+                fingerprint="a" * 64, status="running",
+                state={"cursor": 2, "approved_by": value},
+            )
+            return ("success", updated.revision, value)
+        except CapabilityError as exc:
+            return (exc.code, None, value)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(mutate, name) for name in ("approver-1", "approver-2")]
+        results = [future.result(timeout=20) for future in futures]
+
+    assert {result[0] for result in results} == {"success", "revision_conflict"}
+    checkpoint = state.get("tenant-a", saved.run_id)
+    assert checkpoint.revision == 1 and checkpoint.status == "running"
+    winner = next(value for status, _, value in results if status == "success")
+    assert checkpoint.state["approved_by"] == winner
+    assert state.get("tenant-b", saved.run_id) is None
