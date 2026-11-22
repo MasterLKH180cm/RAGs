@@ -163,6 +163,28 @@ rags serve
 
 The Gateway deployment is independent: see [LiteLLM supported providers](https://docs.litellm.ai/docs/providers) and [Gateway documentation](https://docs.litellm.ai/docs/). Models, API keys and supported tool-call features vary by provider and account. Gateway credentials and cost/rate-limit policies are operator responsibilities. No automatic model fallback, provider-wide feature parity, hidden remote endpoint or unverified output cost claim is made.
 
+### Use the same Gateway for RAG generation and embeddings
+
+Existing RAG endpoints now accept `router` as both `RAGS_MODEL_PROVIDER` and
+`RAGS_EMBEDDING_PROVIDER`. The same configured LiteLLM Gateway handles
+chat completion and the standard `/v1/embeddings` interface; no upstream-specific
+request code is needed. Approved aliases are mandatory and changing the
+resolved embedding model creates a distinct embedding index profile.
+
+```bash
+export RAGS_MODEL_PROVIDER=router
+export RAGS_GENERATION_MODEL=main
+export RAGS_EMBEDDING_PROVIDER=router
+export RAGS_EMBEDDING_MODEL=embed
+export RAGS_ROUTER_MODELS_JSON='{"main":"anthropic/claude-sonnet-latest","embed":"openai/text-embedding-3-small"}'
+# Set RAGS_ROUTER_GATEWAY_URL and RAGS_ROUTER_API_KEY[_FILE] to your own Gateway.
+rags doctor --no-db
+```
+
+Select only actual Gateway model groups that your deployment has registered.
+An embedding model must support `/v1/embeddings`; a chat model must support
+`/v1/chat/completions`. The software rejects malformed or non-finite vectors,
+unknown aliases, partial chat completions and model calls without credentials.
 ### Bounded agents, scopes and APIs
 
 All three platform switches—`RAGS_AGENT_ENABLED`, `RAGS_ROUTER_ENABLED`, and `RAGS_MEMORY_ENABLED`—default to **true**. Set an individual flag to `false` to disable it. The absence of a configured Gateway does **not** crash startup: the service reports `router_ready=false` and returns `503 router_unconfigured` for model inference, without making any external request. The local registered workflow and explicitly authorized memory APIs remain available. `rags agent doctor --json` reports `configuration_required` and exits nonzero until a trusted Gateway is configured.

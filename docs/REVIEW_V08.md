@@ -36,3 +36,15 @@ steps. Workflow API/CLI can start, inspect, approve, deny and recover checkpoint
 Upstream LiteLLM provider coverage does not establish live interoperability or
 feature parity for every upstream account. A user-generated Python workflow editor
 is not exposed; only approved operator-registered steps can run.
+
+## Cross-RAG model routing and prompt trust boundary
+
+Existing RAG generation and embeddings can explicitly select the same Gateway
+using the router provider. Only operator-approved aliases and valid HTTPS
+credentials permit network calls. Gateway embeddings are strictly checked
+for numeric finite vector dimensions before indexing. No vendor-specific
+tool-call guarantees are inferred from Gateway support.
+
+Untrusted observations and RAG citations are placed in user-role data blocks
+in the Agent prompt, never as privileged system messages. Existing tenant and
+evidence admission checks continue to apply.
