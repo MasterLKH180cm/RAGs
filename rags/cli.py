@@ -263,6 +263,28 @@ def build_parser() -> argparse.ArgumentParser:
     verdict.add_argument("--approve", action="store_true")
     verdict.add_argument("--deny", action="store_true")
     agent_review.add_argument("--port", type=int, default=8000)
+    workflow = sub.add_parser("workflow", help="Execute registered, human-reviewed workflow graphs")
+    wf_actions = workflow.add_subparsers(dest="workflow_command", required=True)
+    wf_list = wf_actions.add_parser("list", help="List operator-registered workflow graphs")
+    wf_run = wf_actions.add_parser("run", help="Start an approved workflow template")
+    wf_run.add_argument("--question-file", type=Path, required=True)
+    wf_run.add_argument("--template", default="evidence_review")
+    wf_run.add_argument("--mode", choices=("sparse", "dense", "hybrid"), default="sparse")
+    wf_run.add_argument("--top-k", type=int, choices=tuple(range(1, 11)), default=5)
+    wf_status = wf_actions.add_parser("status", help="Inspect a workflow run")
+    wf_status.add_argument("--run-id", required=True)
+    wf_review = wf_actions.add_parser("review", help="Approve or deny a workflow checkpoint")
+    wf_review.add_argument("--run-id", required=True)
+    wf_review.add_argument("--revision", type=int, required=True)
+    wf_decision = wf_review.add_mutually_exclusive_group(required=True)
+    wf_decision.add_argument("--approve", action="store_true")
+    wf_decision.add_argument("--deny", action="store_true")
+    wf_recover = wf_actions.add_parser("recover", help="Recover interrupted workflow from checkpoint")
+    wf_recover.add_argument("--run-id", required=True)
+    wf_recover.add_argument("--revision", type=int, required=True)
+    for command in (wf_list, wf_run, wf_status, wf_review, wf_recover):
+        command.add_argument("--env-file", type=Path)
+        command.add_argument("--port", type=int, default=8000)
     bench = sub.add_parser("benchmark", help="Synthetic read-path PostgreSQL comparison (temporary tables)")
     bench.add_argument("--env-file", type=Path)
     bench.add_argument("--documents", type=int, default=200)
@@ -293,13 +315,14 @@ def main(argv: list[str] | None = None) -> int:
                           "agent_enabled": settings.agent_enabled,
                           "memory_enabled": settings.memory_enabled,
                           "model_aliases": sorted(settings.models),
-                          "gateway_configured": bool(settings.gateway_url and settings.gateway_key)}
+                          "gateway_configured": settings.router_ready,
+                          "status": ("ready" if settings.router_ready else "configuration_required")}
                 if args.json:
                     print(json.dumps(report, sort_keys=True))
                 else:
-                    print("Agent Platform: " + ("ready" if settings.agent_enabled else "disabled"))
+                    print("Agent Platform: " + report["status"])
                     print("Model aliases: " + ", ".join(sorted(settings.models)))
-                return 0 if settings.agent_enabled else 1
+                return 0 if settings.agent_enabled and settings.router_ready else 1
             if not 1 <= args.port <= 65535:
                 raise ValueError("Agent API port must be 1..65535")
             token = os.getenv("RAGS_API_KEY", "")
@@ -324,6 +347,50 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({key: result.get(key) for key in (
                 "run_id", "status", "revision", "answer", "pending_approval", "stop_reason")},
                 ensure_ascii=False))
+            return 0
+        if args.command == "workflow":
+            from rags.agents.state import _id
+            import httpx
+
+            if not 1 <= args.port <= 65535:
+                raise ValueError("Workflow API port must be 1..65535")
+            token = os.getenv("RAGS_API_KEY", "")
+            if not 1 <= len(token) <= 4096:
+                raise ValueError("Set RAGS_API_KEY to a scoped loopback API token")
+            method = "GET"
+            payload = None
+            if args.workflow_command == "list":
+                route = "/agents/workflows"
+            elif args.workflow_command == "run":
+                filename = args.question_file
+                if filename.is_symlink() or not filename.is_file() or filename.stat().st_size > 8192:
+                    raise ValueError("Workflow question must be a regular file of at most 8 KiB")
+                question = filename.read_text("utf-8").strip()
+                if not 2 <= len(question) <= 2000:
+                    raise ValueError("Workflow question must be 2..2000 chars")
+                from rags.agents.templates import get_template
+                get_template(args.template)
+                route = "/agents/workflows/" + args.template + "/runs"
+                payload = {"question": question, "mode": args.mode, "top_k": args.top_k}
+                method = "POST"
+            else:
+                run_id = _id(args.run_id, "run")
+                route = "/agents/workflows/runs/" + run_id
+                if args.workflow_command == "review":
+                    route += "/resume"
+                    payload = {"expected_revision": args.revision, "approved": args.approve}
+                    method = "POST"
+                elif args.workflow_command == "recover":
+                    route += "/recover"
+                    payload = {"expected_revision": args.revision}
+                    method = "POST"
+            with httpx.Client(timeout=90, follow_redirects=False, trust_env=False) as client:
+                response = client.request(method, f"http://127.0.0.1:{args.port}" + route,
+                    headers={"Authorization": "Bearer " + token},
+                    json=payload)
+                response.raise_for_status()
+                result = response.json()
+            print(json.dumps(result, ensure_ascii=False))
             return 0
         if args.command == "doctor":
             result = diagnose(check_db=not args.no_db)
