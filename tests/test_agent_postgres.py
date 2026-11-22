@@ -71,7 +71,8 @@ def test_agent_tables_created_in_tenant_database_schema(pg_database):
     with state.store.connect() as db:
         rows = db.execute(
             "SELECT table_name FROM information_schema.tables "
-            "WHERE table_schema=current_schema() AND table_name LIKE 'agent_%'"
+            "WHERE table_schema=current_schema() AND table_name LIKE ?",
+            ("agent_%",),
         ).fetchall()
     assert {row["table_name"] for row in rows} >= {
         "agent_runs", "agent_messages", "agent_observations"}
