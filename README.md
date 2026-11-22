@@ -13,6 +13,7 @@ Version 0.6 adds tenant-scoped roles and opt-in OAuth2 introspection with strict
 ## Contents
 
 - [Quick start](#quick-start)
+- [Admin Dashboard and OpenTelemetry (v0.7)](#admin-dashboard-and-opentelemetry-v07)
 - [Tenant authorization and OAuth2](#tenant-authorization-and-oauth2)
 - [Installable CLI](#installable-cli-no-clone-needed)
 - [uv environment workflow](#uv-environment-workflow)
@@ -69,6 +70,71 @@ rags serve
 The authorization server must return an **active** authenticated introspection response with exact `iss`, `aud`, nonempty `sub`, fixed `tenant_id`, future `exp` and a space-delimited `scope`, e.g. `rags:read rags:query`. Ignore unrelated scopes such as `openid`. Additional scopes: `rags:write`, `rags:reindex`, `rags:delete`, `rags:generate`, `rags:original_image` (also requires read), and `rags:mcp`.
 
 The endpoint uses HTTPS, Basic client authentication, rejects redirects/invalid claims, and does not cache introspection. Missing/invalid credentials yield 401; insufficient scope yields 403; unavailable IdP yields 503. **This is resource-server OAuth2, not an OIDC login, JWT signature validator or Authorization Code+PKCE client.** See [security audit](docs/SECURITY_V06.md) for remaining RLS, per-document ACL and production risks.
+
+
+## Admin Dashboard and OpenTelemetry (v0.7)
+
+The optional, self-hosted **RAGs Control Center** provides an accessible, responsive administration UI at [/admin/](http://127.0.0.1:8000/admin/). It includes:
+
+- **Overview:** document, revision, leaf-chunk, and image asset counts for the authenticated tenant; recent document audit events and a 60-minute activity chart.
+- **Knowledge library:** server-side search and pagination, source ingestion, and **revision-checked deletion** using typed ID confirmation (CAS + CSRF).
+- **Retrieval Studio:** compare sparse/dense/hybrid/temporal/structured modes, inspect evidence citations and optionally request a model-generated answer. Model generation is **off by default** in the UI.
+- **Observability:** last-five-minute request count, server 5xx rate, p50/p95 latency, OTLP export/dropped/error indicators. Dashboard metrics are process-local and bounded, **not** whole-cluster telemetry.
+- **Configuration:** effective permissions and feature flags, current auth mode and provider/storage names, without any passwords, tokens, connection strings or raw prompt data.
+
+All HTML/CSS/JavaScript is **included in the Python wheel**. The interface has keyboard-accessible labels, focus states, readable high-contrast colors, dark/light appearance, responsive mobile navigation, loading/empty/error states, and respects `prefers-reduced-motion`. It does not load external scripts, fonts, or analytics, or persist credentials in browser storage. The only localStorage value is the visual theme.
+
+### Secure login, roles and deployment
+
+The dashboard is **disabled by default**, even when API documentation is available. When enabled, access requires `rags:admin` **and** `rags:read`. The existing API key `admin` role grants `rags:admin`; OAuth2 introspection tokens must explicitly include `rags:admin rags:read` (and additional operation scopes for query/write/delete).
+
+```bash
+# Native local development with the generated offline profile:
+rags init --profile offline
+# Set these three values in .env or export them:
+export RAGS_ENV=development
+export RAGS_ADMIN_ENABLED=true
+export RAGS_ADMIN_DEV_HTTP=true
+rags serve --env-file .env
+# Open http://127.0.0.1:8000/admin/ and sign in using your generated admin key.
+```
+
+The browser submits the bearer credential exactly once, receives only a 30-minute opaque `HttpOnly` session cookie, and never stores it as a JavaScript-readable browser secret. The server retains the credential in **bounded process memory** and revalidates it on **each** request (OAuth2 revocation takes effect immediately). Mutating requests require a per-session CSRF nonce and same-origin check. Unknown/non-admin tokens cannot use the dashboard; the public API does **not** accept cookies instead of Bearer credentials.
+
+In production use HTTPS behind a trusted reverse proxy that correctly forwards scheme/Host and restricts upstream access. Cookies use `__Host-rags_admin` with `Secure; HttpOnly; SameSite=Strict; Path=/`. A separate non-Secure cookie is permitted **only** on explicit loopback HTTP in development/test. `RAGS_ADMIN_DEV_HTTP=true` fails startup in production. Default Docker Compose is production-mode; accessing its bare loopback HTTP without HTTPS will show the login page but reject login. A public TLS reverse proxy, secure routing and authentication/abuse protection are production responsibilities.
+
+**Important session limitations:** In-memory sessions are lost on restart and do not synchronize across workers/replicas. Use a single web worker or sticky affinity; add durable, encrypted server-side session storage and an OIDC authorization-code/PKCE browser login for distributed SSO. A TLS reverse proxy is not a substitute for the existing OAuth2/Bearer authorization checks.
+
+In **production API-key mode**, enabling `RAGS_ADMIN_ENABLED=true` also requires a complete, explicit `RAGS_KEY_ROLES_JSON` at startup. This prevents inadvertently exposing the dashboard to all legacy full-access keys. Dashboard exporter success/failure/dropped counters are tenant-scoped; process-global exporter counters are never shown to other tenants.
+
+### OTLP/HTTP traces and metrics
+
+RAGs optionally exports **real OTLP/HTTP JSON** using the existing `httpx` dependency, with a bounded asynchronous queue. This is a minimal OTLP protocol exporter, **not the OpenTelemetry Python SDK's automatic instrumentation**. The service uses standard OpenTelemetry trace/metric JSON envelopes with route-template names and service resource attributes. No query text, source content, original URLs/document IDs, raw tenants, bearer values, headers, cookies, model payloads or stack traces are exported. Export failures never prevent API requests.
+
+```bash
+# External TLS-protected collector:
+export RAGS_OTEL_ENABLED=true
+export RAGS_OTEL_ENDPOINT=https://otel-collector.example.com:4318
+export RAGS_OTEL_SERVICE_NAME=rags-platform
+rags serve --env-file .env
+```
+
+An **optional local OpenTelemetry Collector** profile is supplied for reproducible development. It has no externally published ports, and the debug exporter **prints sanitized telemetry to its container logs**, so retain logs only as needed. It is not a production observability backend.
+
+```bash
+# After running scripts/bootstrap_compose.py, edit .env:
+# RAGS_OTEL_ENABLED=true
+# RAGS_OTEL_ENDPOINT=http://otel-collector:4318
+# RAGS_OTEL_ALLOW_INSECURE=true   # private Compose network only
+docker compose --profile observability up -d --build --wait
+docker compose logs --tail=100 otel-collector
+```
+
+The service collector target is **operator-configured**, never supplied by API callers. HTTP endpoints require an explicit insecure opt-in; production exporters should use TLS and collector-side authentication. The included example Collector routes traces/metrics to its debug exporter; replace its pipelines with your approved secure telemetry backend and retention policy. Refer to [OpenTelemetry Collector docs](https://opentelemetry.io/docs/collector/install/docker/) and the [OTLP specification](https://opentelemetry.io/docs/specs/otlp/) for production Collector setup.
+
+Default `RAGS_OTEL_ENABLED=false` retains existing offline operation and does not initiate exporter network traffic. The dashboard's built-in pulse still works, but its measurements are bounded and process-local. Saturation can truncate the recent-request sample; this is not a billing, SLA, audit or clinical safety reporting system.
+
+See [v0.7 design contract](docs/SPEC_V07.md) and [security/operations review](docs/REVIEW_V07.md) for security boundaries, accessibility notes and known limitations.
 
 
 ## Quick start

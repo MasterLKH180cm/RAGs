@@ -1,6 +1,14 @@
 # PostgreSQL deployment. Generate private .env/config files with scripts/bootstrap_compose.py.
 # PostgreSQL is private to this stack; only localhost HTTP ports are published.
 services:
+  otel-collector:
+    profiles: ["observability"]
+    image: otel/opentelemetry-collector:0.165.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./docker/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    restart: unless-stopped
+
   postgres:
     image: pgvector/pgvector:0.8.7-pg17
     environment:
@@ -28,6 +36,12 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       RAGS_ENV: "${RAGS_ENV:-production}"
+      RAGS_ADMIN_ENABLED: "${RAGS_ADMIN_ENABLED:-false}"
+      RAGS_ADMIN_DEV_HTTP: "${RAGS_ADMIN_DEV_HTTP:-false}"
+      RAGS_OTEL_ENABLED: "${RAGS_OTEL_ENABLED:-false}"
+      RAGS_OTEL_ENDPOINT: "${RAGS_OTEL_ENDPOINT}"
+      RAGS_OTEL_ALLOW_INSECURE: "${RAGS_OTEL_ALLOW_INSECURE:-false}"
+      RAGS_OTEL_SERVICE_NAME: "${RAGS_OTEL_SERVICE_NAME:-rags-platform}"
       RAGS_API_KEY: "${RAGS_API_KEY}"
       RAGS_KEYS_JSON: "${RAGS_KEYS_JSON:-}"
       RAGS_AUTH_MODE: "${RAGS_AUTH_MODE:-api_key}"

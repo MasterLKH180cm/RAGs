@@ -62,6 +62,12 @@ class Settings:
     auth_mode: str = "api_key"
     key_roles: dict[str, tuple[str, ...]] = field(default_factory=dict)
     oauth2: OAuth2Config | None = None
+    admin_enabled: bool = False
+    admin_dev_http: bool = False
+    otel_enabled: bool = False
+    otel_endpoint: str = ""
+    otel_allow_insecure: bool = False
+    otel_service_name: str = "rags-platform"
 
     @property
     def embedding_endpoint(self) -> str:
@@ -93,6 +99,29 @@ class Settings:
             for k, v in keys.items()
         ):
             raise ValueError("RAGS_KEYS_JSON must map non-empty API keys to bounded tenant identifiers")
+        def flag(name: str, default: bool = False) -> bool:
+            raw = os.getenv(name, "true" if default else "false").lower()
+            if raw not in {"true", "false"}:
+                raise ValueError(f"{name} must be true or false")
+            return raw == "true"
+
+        admin_enabled = flag("RAGS_ADMIN_ENABLED")
+        admin_dev_http = flag("RAGS_ADMIN_DEV_HTTP")
+        if admin_enabled and admin_dev_http and env not in {"development", "test"}:
+            raise ValueError("Insecure admin HTTP is only permitted in development/test")
+        otel_enabled = flag("RAGS_OTEL_ENABLED")
+        otel_allow_insecure = flag("RAGS_OTEL_ALLOW_INSECURE")
+        otel_endpoint = os.getenv("RAGS_OTEL_ENDPOINT", "").strip().rstrip("/")
+        otel_service_name = os.getenv("RAGS_OTEL_SERVICE_NAME", "rags-platform")
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", otel_service_name):
+            raise ValueError("Invalid OTLP service name")
+        if otel_enabled:
+            parsed_otel = urlparse(otel_endpoint)
+            if (not parsed_otel.hostname or parsed_otel.scheme not in {"https", "http"}
+                    or parsed_otel.username or parsed_otel.password
+                    or parsed_otel.query or parsed_otel.fragment
+                    or (parsed_otel.scheme == "http" and not otel_allow_insecure)):
+                raise ValueError("OTLP endpoint requires clean HTTPS or explicit insecure HTTP")
         auth_mode = os.getenv("RAGS_AUTH_MODE", "api_key").lower()
         if auth_mode not in {"api_key", "oauth2_introspection"}:
             raise ValueError("RAGS_AUTH_MODE must be api_key or oauth2_introspection")
@@ -129,6 +158,8 @@ class Settings:
                 tenant_claim=os.getenv("RAGS_OAUTH2_TENANT_CLAIM", "tenant_id"),
                 timeout_seconds=float(os.getenv("RAGS_OAUTH2_TIMEOUT_SECONDS", "3")),
             )
+        if admin_enabled and env == "production" and auth_mode == "api_key" and not roles_json:
+            raise ValueError("Production admin dashboard requires explicit RAGS_KEY_ROLES_JSON")
         embedding_provider = os.getenv("RAGS_EMBEDDING_PROVIDER", "local").lower()
         model_provider = os.getenv("RAGS_MODEL_PROVIDER", "extractive").lower()
         if embedding_provider not in {"local", "openai", "fastembed"}:
@@ -230,4 +261,10 @@ class Settings:
             auth_mode=auth_mode,
             key_roles=key_roles,
             oauth2=oauth2,
+            admin_enabled=admin_enabled,
+            admin_dev_http=admin_dev_http,
+            otel_enabled=otel_enabled,
+            otel_endpoint=otel_endpoint,
+            otel_allow_insecure=otel_allow_insecure,
+            otel_service_name=otel_service_name,
         )

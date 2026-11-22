@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="RAGs 控制中心 — 知識庫管理、檢索與服務可觀測性">
+  <title>RAGs · Control Center</title>
+  <link rel="stylesheet" href="/admin/assets/style.css">
+  <script src="/admin/assets/app.js" defer></script>
+</head>
+<body data-theme="dark">
+<a class="skip-link" href="#main-content">跳至主要內容</a>
+<div id="global-notice" class="live-notice" role="status" aria-live="polite"></div>
+
+<section id="auth-screen" class="auth-screen" aria-labelledby="login-title">
+  <div class="auth-orb auth-orb-one" aria-hidden="true"></div>
+  <div class="auth-orb auth-orb-two" aria-hidden="true"></div>
+  <div class="login-card">
+    <div class="brand brand-login"><span class="brand-emblem" aria-hidden="true">R</span>
+      <span><span class="brand-name">RAGs</span><span class="brand-subtitle">CONTROL CENTER</span></span>
+    </div>
+    <div class="eyebrow"><span class="pulse-dot" aria-hidden="true"></span> 安全管理工作區</div>
+    <h1 id="login-title">管理知識，<span class="title-gradient">看清每一步。</span></h1>
+    <p class="auth-description">統一檢視知識庫、檢索品質與服務健康狀態。使用具有 <code>rags:admin</code> 權限的存取權杖登入。</p>
+    <form id="login-form" novalidate>
+      <label for="admin-token">管理員存取權杖</label>
+      <div class="password-wrap">
+        <input id="admin-token" type="password" name="token" minlength="8" required
+               autocomplete="off" spellcheck="false" placeholder="輸入 API Key 或 OAuth2 Access Token">
+        <button id="show-token" type="button" class="input-action" aria-label="顯示或隱藏權杖" aria-pressed="false">顯示</button>
+      </div>
+      <p class="field-hint">權杖僅用於建立伺服器端工作階段，不會儲存在瀏覽器儲存空間。</p>
+      <p id="login-error" class="form-error" role="alert" hidden></p>
+      <button class="button button-primary button-full" type="submit" id="login-submit">
+        <span>安全登入</span><span aria-hidden="true">→</span>
+      </button>
+    </form>
+    <div class="login-footer"><span class="lock-icon" aria-hidden="true">✧</span>
+      具租戶隔離、角色授權與 CSRF 保護<span class="small-version">v0.7</span></div>
+  </div>
+  <p class="auth-bottom">RAGs Platform · Self-hosted & privacy-first</p>
+</section>
+
+<div id="workspace" class="workspace" hidden>
+  <div id="nav-scrim" class="nav-scrim" hidden></div>
+  <aside id="sidebar" class="sidebar" aria-label="主導覽">
+    <div class="sidebar-head">
+      <div class="brand"><span class="brand-emblem" aria-hidden="true">R</span>
+        <span><span class="brand-name">RAGs</span><span class="brand-subtitle">CONTROL CENTER</span></span>
+      </div>
+      <button id="mobile-close" class="icon-button mobile-close" type="button" aria-label="關閉導覽">×</button>
+    </div>
+    <div class="sidebar-menu">
+      <span class="nav-label">工作區</span>
+      <nav aria-label="管理選單" id="primary-nav">
+        <button class="nav-item selected" data-view="overview" aria-current="page" type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>
+          <span>總覽</span>
+        </button>
+        <button class="nav-item" data-view="documents" type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M5 4.5h10l4 4V20H5z"/><path d="M14.5 4.5v4.5H19M8.5 13h7M8.5 16.5h7"/></svg>
+          <span>知識文件</span>
+        </button>
+        <button class="nav-item" data-view="explorer" type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.4 15.4 5 5M8 10.5h5M10.5 8v5"/></svg>
+          <span>檢索探索</span>
+        </button>
+      </nav>
+      <span class="nav-label nav-label-second">平台狀態</span>
+      <nav aria-label="平台狀態選單">
+        <button class="nav-item" data-view="observability" type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M3 17h4l3-9 4 12 3-7h4"/></svg>
+          <span>可觀測性</span>
+        </button>
+        <button class="nav-item" data-view="settings" type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3"/><path d="M9.6 3.3 10.2 2h3.6l.6 1.3 2.1 1 1.4-.5 2.6 2.6-.5 1.4 1 2.1 1.3.6v3.6l-1.3.6-1 2.1.5 1.4-2.6 2.6-1.4-.5-2.1 1-.6 1.3h-3.6l-.6-1.3-2.1-1-1.4.5-2.6-2.6.5-1.4-1-2.1-1.3-.6v-3.6l1.3-.6 1-2.1-.5-1.4 2.6-2.6 1.4.5z"/></svg>
+          <span>設定與權限</span>
+        </button>
+      </nav>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="service-card">
+        <div class="service-eyebrow"><span class="pulse-dot"></span> 當前工作區</div>
+        <div id="tenant-sidebar" class="service-tenant">—</div>
+        <div class="service-caption">所有資料僅限目前租戶</div>
+      </div>
+      <div class="sidebar-account">
+        <span class="avatar" aria-hidden="true">A</span>
+        <div><strong>Workspace Admin</strong><span id="session-expiry">安全工作階段</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main-shell">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button id="menu-toggle" class="icon-button mobile-menu" aria-label="開啟導覽" aria-expanded="false" type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+        <div class="breadcrumbs"><span>控制中心</span><span aria-hidden="true">/</span><strong id="breadcrumb">總覽</strong></div>
+      </div>
+      <div class="topbar-right">
+        <span class="status-chip"><span class="pulse-dot"></span><span>權限已驗證</span></span>
+        <button id="theme-toggle" class="icon-button" type="button" aria-label="切換亮色或深色模式" title="切換外觀">◐</button>
+        <button id="refresh-button" class="icon-button" type="button" aria-label="重新整理目前資料" title="重新整理">↻</button>
+        <button id="logout-button" class="button button-small button-outline" type="button">登出</button>
+      </div>
+    </header>
+
+    <main id="main-content" class="content" tabindex="-1">
+      <section id="view-overview" class="page-view" aria-labelledby="overview-title">
+        <div class="page-heading">
+          <div><span class="eyebrow">WORKSPACE OVERVIEW</span><h1 id="overview-title">工作區總覽</h1>
+            <p>從知識資產到系統表現，快速掌握目前租戶的運作情況。</p></div>
+          <button class="button button-primary quick-add" type="button" data-open-add>＋ 新增文件</button>
+        </div>
+        <div class="hero-banner">
+          <div><span class="hero-kicker"><span class="pulse-dot"></span> 系統控制中心</span>
+          <h2>讓每一份知識，<br>都<span>有跡可循。</span></h2>
+          <p>聚合來源、執行檢索、監控可用性。你掌握的不只是答案，還有它的證據。</p>
+          <button class="text-link" data-go="explorer" type="button">前往檢索探索 <span aria-hidden="true">↗</span></button>
+          </div>
+          <div class="hero-art" aria-hidden="true"><span class="hero-ring hero-ring-a"></span><span class="hero-ring hero-ring-b"></span><span class="hero-core">R</span><span class="hero-spark s1"></span><span class="hero-spark s2"></span></div>
+        </div>
+        <div class="stat-grid" aria-label="知識庫統計">
+          <article class="stat-card"><span class="stat-label">文件總數</span><strong id="stat-documents">—</strong><span class="stat-foot">可用的來源文件</span><span class="stat-symbol" aria-hidden="true">▤</span></article>
+          <article class="stat-card"><span class="stat-label">已索引片段</span><strong id="stat-chunks">—</strong><span class="stat-foot">目前版本的 Leaf chunks</span><span class="stat-symbol" aria-hidden="true">◇</span></article>
+          <article class="stat-card"><span class="stat-label">歷史版本</span><strong id="stat-revisions">—</strong><span class="stat-foot">可追溯的來源修訂</span><span class="stat-symbol" aria-hidden="true">↺</span></article>
+          <article class="stat-card"><span class="stat-label">影像資產</span><strong id="stat-images">—</strong><span class="stat-foot">租戶內多模態素材</span><span class="stat-symbol" aria-hidden="true">▧</span></article>
+        </div>
+        <div class="overview-grid">
+          <article class="panel panel-chart">
+            <div class="panel-heading"><div><h2>流量脈動</h2><p>最近 60 分鐘 · 單一服務程序</p></div><span class="mini-tag">每 5 分鐘</span></div>
+            <div id="overview-chart" class="chart" role="img" aria-label="最近一小時的每五分鐘請求量"></div>
+            <div class="chart-legend"><span><i class="legend-dot"></i> API 請求</span><span><i class="legend-dot legend-error"></i> 伺服器錯誤</span></div>
+          </article>
+          <article class="panel">
+            <div class="panel-heading"><div><h2>最近動態</h2><p>文件更新與刪除紀錄</p></div><button data-go="documents" class="text-link muted" type="button">查看文件 ↗</button></div>
+            <ul id="activity-list" class="activity-list"><li class="empty-state">目前沒有活動紀錄。</li></ul>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-documents" class="page-view" aria-labelledby="documents-title" hidden>
+        <div class="page-heading"><div><span class="eyebrow">KNOWLEDGE LIBRARY</span><h1 id="documents-title">知識文件</h1><p>管理檢索來源，清楚掌握每份文件的版本。</p></div>
+          <button class="button button-primary" type="button" data-open-add>＋ 新增文件</button></div>
+        <div class="panel table-panel">
+          <div class="table-toolbar"><div><h2>文件清單</h2><p id="document-count">—</p></div>
+            <label class="search-wrap"><span class="sr-only">搜尋文件名稱或 ID</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></svg>
+              <input id="document-search" placeholder="搜尋名稱或文件 ID…" maxlength="120" type="search"></label></div>
+          <div class="table-overflow"><table class="data-table"><thead><tr><th scope="col">文件名稱</th><th scope="col">來源</th><th scope="col">最後更新</th><th scope="col" class="right">操作</th></tr></thead>
+            <tbody id="documents-body"><tr><td colspan="4" class="empty-state">正在讀取文件…</td></tr></tbody></table></div>
+          <div class="table-footer"><span id="document-range">—</span>
+            <div class="pager"><button id="page-prev" class="button button-small button-outline" type="button">← 上一頁</button><button id="page-next" class="button button-small button-outline" type="button">下一頁 →</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-explorer" class="page-view" aria-labelledby="explorer-title" hidden>
+        <div class="page-heading"><div><span class="eyebrow">RETRIEVAL STUDIO</span><h1 id="explorer-title">檢索探索</h1><p>測試不同的檢索方式，直接查看支援答案的來源證據。</p></div></div>
+        <div class="explorer-layout">
+          <article class="panel explorer-input-panel">
+            <div class="panel-heading"><div><h2>提出問題</h2><p>從目前租戶的已索引資料檢索</p></div><span class="mini-tag">來源可追溯</span></div>
+            <form id="query-form">
+              <label for="query-question" class="form-label">你想了解什麼？</label>
+              <textarea id="query-question" rows="6" minlength="2" maxlength="2000" required placeholder="例如：這份文件中，保留資料的期限是多久？"></textarea>
+              <div class="form-row"><div><label for="query-mode" class="form-label">檢索策略</label><select id="query-mode"><option value="hybrid">Hybrid · 融合檢索</option><option value="sparse">Sparse · 全文檢索</option><option value="dense">Dense · 向量檢索</option><option value="temporal">Temporal · 時序檢索</option><option value="structured">Structured · 結構查詢</option></select></div>
+              <div><label for="query-topk" class="form-label">來源數量</label><select id="query-topk"><option value="3">3 段</option><option value="5" selected>5 段</option><option value="10">10 段</option></select></div></div>
+              <label class="toggle-line" for="query-generate"><input id="query-generate" type="checkbox"><span>產生回答 <small>需要模型使用權限，可能產生費用</small></span></label>
+              <button id="query-submit" class="button button-primary button-full" type="submit">開始檢索 <span aria-hidden="true">↗</span></button>
+            </form>
+          </article>
+          <article class="panel explorer-output-panel">
+            <div class="panel-heading"><div><h2>檢索結果</h2><p>包含引用來源與評估結果</p></div><span id="query-status" class="mini-tag">準備就緒</span></div>
+            <div id="query-empty" class="illustrated-empty"><div class="empty-illustration" aria-hidden="true">⌕</div><h3>從一個問題開始</h3><p>在左側輸入問題並選擇檢索策略，結果會顯示在這裡。</p></div>
+            <div id="query-output" hidden><h3 class="result-heading">回答與評估</h3><p id="query-answer" class="result-answer"></p>
+              <div class="citations-heading"><h3>來源證據</h3><span id="citation-count" class="mini-tag">—</span></div>
+              <div id="query-citations" class="citations-list"></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-observability" class="page-view" aria-labelledby="observability-title" hidden>
+        <div class="page-heading"><div><span class="eyebrow">OBSERVABILITY</span><h1 id="observability-title">可觀測性</h1><p>請求、延遲與錯誤趨勢。每一項數據都有清楚的統計範圍。</p></div><span id="collector-status" class="status-chip subdued">載入中</span></div>
+        <div class="stat-grid monitoring-cards">
+          <article class="stat-card"><span class="stat-label">請求量 · 5 分鐘</span><strong id="monitor-requests">—</strong><span class="stat-foot">目前租戶的 API 請求</span></article>
+          <article class="stat-card"><span class="stat-label">伺服器錯誤率</span><strong id="monitor-errors">—</strong><span class="stat-foot">HTTP 5xx · 5 分鐘</span></article>
+          <article class="stat-card"><span class="stat-label">延遲 P50</span><strong id="monitor-p50">—</strong><span class="stat-foot">單位：毫秒</span></article>
+          <article class="stat-card"><span class="stat-label">延遲 P95</span><strong id="monitor-p95">—</strong><span class="stat-foot">單位：毫秒</span></article>
+        </div>
+        <div class="overview-grid">
+          <article class="panel panel-chart"><div class="panel-heading"><div><h2>請求趨勢</h2><p>最近 60 分鐘 · 每五分鐘聚合</p></div></div><div id="monitor-chart" class="chart" role="img" aria-label="最近一小時請求趨勢"></div><div class="chart-legend"><span><i class="legend-dot"></i> 請求</span><span><i class="legend-dot legend-error"></i> 5xx</span></div></article>
+          <article class="panel"><div class="panel-heading"><div><h2>OTLP Exporter</h2><p>匯出健康狀況</p></div></div>
+            <dl class="metric-list"><div><dt>已匯出 Spans</dt><dd id="exported-spans">—</dd></div><div><dt>佇列丟棄</dt><dd id="dropped-spans">—</dd></div><div><dt>匯出失敗批次</dt><dd id="failed-exports">—</dd></div><div><dt>統計範圍</dt><dd>單一服務程序</dd></div></dl>
+            <div class="info-callout"><strong>隱私優先</strong><p>僅匯出路由樣板、HTTP 方法、狀態與延遲，不包含租戶識別、Token 或文件內容。</p></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-settings" class="page-view" aria-labelledby="settings-title" hidden>
+        <div class="page-heading"><div><span class="eyebrow">PLATFORM CONFIGURATION</span><h1 id="settings-title">設定與權限</h1><p>了解目前服務的執行環境及允許的操作。此頁不暴露機密設定。</p></div></div>
+        <div class="overview-grid settings-layout">
+          <article class="panel"><div class="panel-heading"><div><h2>平台組態</h2><p>目前有效的執行模式</p></div></div>
+            <dl class="metric-list"><div><dt>身分驗證</dt><dd id="setting-auth">—</dd></div><div><dt>儲存後端</dt><dd id="setting-storage">—</dd></div><div><dt>Embedding Provider</dt><dd id="setting-embedding">—</dd></div><div><dt>Generation Provider</dt><dd id="setting-generation">—</dd></div><div><dt>租戶</dt><dd id="setting-tenant">—</dd></div></dl>
+          </article>
+          <article class="panel"><div class="panel-heading"><div><h2>有效權限</h2><p>以登入憑證的實際 Scopes 為準</p></div></div>
+            <div id="permission-list" class="chip-grid"></div><div class="info-callout"><strong>最小權限</strong><p>本頁的管理員權限，不會繞過 API 的租戶隔離、模型授權或功能開關。</p></div></article>
+        </div>
+        <article class="panel feature-panel"><div class="panel-heading"><div><h2>功能開關</h2><p>目前部署的有效啟用狀態（唯讀）</p></div></div><div id="feature-list" class="feature-grid"></div></article>
+      </section>
+      <footer class="main-footer"><span>RAGs Control Center <span class="tiny-dot">·</span> v0.7</span><span>Self-hosted · Tenant isolated · Designed for clarity</span></footer>
+    </main>
+  </div>
+</div>
+
+<dialog id="add-dialog" class="modal" aria-labelledby="add-dialog-title">
+  <form id="add-form" class="modal-body">
+    <div class="modal-heading"><div><span class="eyebrow">KNOWLEDGE LIBRARY</span><h2 id="add-dialog-title">新增來源文件</h2><p>建立新文件後，系統將依目前設定進行分段與索引。</p></div><button type="button" class="icon-button" data-close-dialog="add-dialog" aria-label="關閉">×</button></div>
+    <label for="add-title">文件名稱 <span class="required">*</span></label><input id="add-title" maxlength="200" required placeholder="例如：內部知識管理規範">
+    <label for="add-source">來源識別</label><input id="add-source" maxlength="500" value="dashboard" required>
+    <label for="add-id">文件 ID <span class="optional">(選填)</span></label><input id="add-id" maxlength="128" pattern="[A-Za-z0-9_.:-]+" placeholder="不填則自動建立">
+    <label for="add-content">文件內容 <span class="required">*</span></label><textarea id="add-content" rows="8" maxlength="200000" required placeholder="貼上 Markdown 或純文字內容…"></textarea>
+    <p class="field-hint">支援文字與 Markdown，內容由伺服器依租戶權限管理。</p>
+    <div class="modal-actions"><button type="button" class="button button-outline" data-close-dialog="add-dialog">取消</button><button id="add-submit" type="submit" class="button button-primary">建立並索引</button></div>
+  </form>
+</dialog>
+
+<dialog id="delete-dialog" class="modal modal-danger" aria-labelledby="delete-dialog-title">
+  <form id="delete-form" class="modal-body">
+    <div class="modal-heading"><div><span class="eyebrow eyebrow-danger">DANGER ZONE</span><h2 id="delete-dialog-title">刪除文件</h2><p>此操作會移除目前租戶的文件、版本與索引，無法復原。</p></div><button type="button" class="icon-button" data-close-dialog="delete-dialog" aria-label="關閉">×</button></div>
+    <p class="confirm-label">請輸入完整文件 ID 以確認：</p><code id="delete-target" class="delete-target">—</code>
+    <label for="delete-confirm" class="sr-only">輸入欲刪除的文件 ID</label><input id="delete-confirm" spellcheck="false" autocomplete="off" placeholder="輸入文件 ID" required>
+    <div class="modal-actions"><button type="button" class="button button-outline" data-close-dialog="delete-dialog">保留文件</button><button id="delete-submit" class="button button-danger" type="submit" disabled>確認刪除</button></div>
+  </form>
+</dialog>
+</body>
+</html>

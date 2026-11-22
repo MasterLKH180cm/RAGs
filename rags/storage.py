@@ -239,14 +239,19 @@ class Store:
         conn.execute("DELETE FROM edges WHERE tenant=? AND document_id=?", (tenant, doc_id))
         conn.execute("DELETE FROM graph_relations WHERE tenant=? AND document_id=?", (tenant, doc_id))
 
-    def delete(self, tenant: str, doc_id: str, now: str) -> bool:
+    def delete(self, tenant: str, doc_id: str, now: str,
+               expected_revision: str | None = None) -> bool:
         with self.connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             if self.is_postgres:
                 postgres.lock_mutation(conn, "document", tenant, doc_id)
-            row = conn.execute("SELECT id FROM documents WHERE tenant=? AND id=?", (tenant, doc_id)).fetchone()
+            row = conn.execute("SELECT id,revision FROM documents WHERE tenant=? AND id=?",
+                               (tenant, doc_id)).fetchone()
             if not row:
                 return False
+            if expected_revision is not None and row["revision"] != expected_revision:
+                raise CapabilityError("revision_conflict",
+                                      "Document changed since it was selected; refresh and retry", 409)
             self.remove_chunks(conn, tenant, doc_id)
             conn.execute("DELETE FROM document_revisions WHERE tenant=? AND id=?", (tenant, doc_id))
             conn.execute("DELETE FROM documents WHERE tenant=? AND id=?", (tenant, doc_id))

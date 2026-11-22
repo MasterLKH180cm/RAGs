@@ -19,7 +19,7 @@ from fastapi import HTTPException
 
 PERMISSIONS = frozenset({
     "rags:read", "rags:query", "rags:write", "rags:reindex",
-    "rags:delete", "rags:generate", "rags:original_image", "rags:mcp",
+    "rags:delete", "rags:generate", "rags:original_image", "rags:mcp", "rags:admin",
 })
 ROLES = {
     "reader": frozenset(("rags:read", "rags:query")),
