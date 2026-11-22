@@ -85,6 +85,7 @@ def test_static_dashboard_is_bundled_accessible_and_csp_protected(config):
         assert "@media(max-width:650px)" in css
         assert "prefers-reduced-motion" in css
         assert "focus-visible" in css
+        assert "Mobile touch targets follow 44px" in css
 
 
 def test_login_requires_origin_https_and_admin_scope(config):
