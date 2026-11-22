@@ -411,7 +411,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/query")
     def query(data: QueryIn, request: Request, tenant: Annotated[str, Depends(auth)]) -> dict:
-        if (data.generate and config.model_provider != "extractive"
+        if ((data.generate and config.model_provider != "extractive")
                 or "model_generation" in strategy_features(data.mode)):
             request.state.principal.require("rags:generate")
         try:
