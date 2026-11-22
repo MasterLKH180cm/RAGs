@@ -206,5 +206,8 @@ await hanging;
 await microtasks();
 assertNoOldTenant();
 assert.equal(element("#query-output").hidden, true);
+assert.equal(element("#query-submit").disabled, false);
+assert.equal(element("#add-submit").disabled, false);
+assert.equal(element("#query-submit").textContent, "開始檢索 ↗");
 assert.ok(queryRequests >= 2);
 console.log("Admin UI identity switch, DOM reset and stale request isolation: passed");
