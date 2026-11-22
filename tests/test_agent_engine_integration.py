@@ -305,3 +305,49 @@ def test_all_delivered_citations_remain_valid_across_multiple_search_batches(com
     assert finished.state["calls"] == 9
     assert len(finished.state["evidence_ids"]) == 45
     assert "chunk-44" in finished.state["evidence_ids"]
+
+
+def test_capability_error_from_tool_persists_terminal_checkpoint(components):
+    state, config = components
+    router = FakeRouter(
+        reply("", call("knowledge_search", {"question": "Find the policy"}, "search_1")),
+        reply("This answer must never be generated"),
+    )
+    service = engine(state, config, router,
+                     features=FeatureFlags((("query", False),)))
+    run = service.start(principal(), goal="Review the query policy",
+                        model="main", session_id="query_denied")
+    assert run.status == "failed"
+    assert run.state["stop_reason"] == "feature_disabled"
+    assert run.state["answer"] is None
+    stored = StateStore(Store(state.store.path)).get("tenant-a", run.run_id)
+    assert stored is not None and stored.status == "failed"
+    assert stored.state["stop_reason"] == "feature_disabled"
+    assert len(router.calls) == 1
+    with pytest.raises(CapabilityError) as invalid:
+        service.resume(principal(), run.run_id,
+                       expected_revision=run.revision, approved=True)
+    assert invalid.value.code == "invalid_state"
+
+
+def test_capability_error_from_trusted_tool_cannot_leak_exception_details(components):
+    state, config = components
+    registry = ToolRegistry()
+
+    def failed(_tenant, _session, _args):
+        raise CapabilityError("private_api_key_value",
+                              "Example private data from upstream", 503)
+
+    registry.register(ToolSpec("custom_lookup", Args, failed,
+                               permission="rags:query"))
+    router = FakeRouter(reply("", call("custom_lookup", {"amount": 1})))
+    run = engine(state, config, router, registry).start(
+        principal(), goal="Check external source",
+        model="main", session_id="protected_failure",
+    )
+    assert run.status == "failed"
+    assert run.state["stop_reason"] == "tool_execution_failed"
+    saved = state.get("tenant-a", run.run_id)
+    assert saved is not None
+    assert "private_api_key_value" not in repr(saved.state)
+    assert "Example private data" not in repr(saved.state)

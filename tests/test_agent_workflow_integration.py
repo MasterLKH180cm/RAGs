@@ -195,3 +195,85 @@ def test_interrupted_workflow_will_not_replay_non_idempotent_step(state):
         graph.recover(state, "tenant", row["run_id"], expected_revision=row["revision"])
     assert failure.value.code == "unsafe_replay"
     assert calls == ["side_effect_started"]
+
+
+def test_interrupted_branch_non_idempotent_by_default_refuses_replay(state):
+    calls = []
+
+    def unsafe_action(ctx):
+        calls.append(ctx.run_id)
+        raise SystemExit("simulated crash following external write")
+
+    flow = Workflow("dangerous_branch").branch(
+        "branch_action", lambda ctx: True,
+        if_true=unsafe_action, if_false=lambda ctx: False,
+    )
+    with pytest.raises(SystemExit, match="simulated crash"):
+        flow.start(state, "tenant", {"request": "write once"})
+
+    with state.store.connect() as conn:
+        row = conn.execute(
+            "SELECT run_id, revision, status FROM agent_runs "
+            "WHERE tenant=? AND kind=?", ("tenant", "workflow"),
+        ).fetchone()
+    assert row["status"] == "running"
+    with pytest.raises(CapabilityError) as refusal:
+        flow.recover(state, "tenant", row["run_id"],
+                     expected_revision=row["revision"])
+    assert refusal.value.code == "unsafe_replay"
+    assert calls == [row["run_id"]]
+
+
+def test_explicit_idempotent_branch_can_recover_and_complete(state):
+    attempts, writes = [], []
+
+    def predicate(ctx):
+        attempts.append(ctx.run_id)
+        if len(attempts) == 1:
+            raise SystemExit("interrupted during registered idempotent predicate")
+        return True
+
+    def on_true(ctx):
+        writes.append(ctx.run_id)
+        return {"done": True}
+
+    flow = Workflow("safe_branch").branch(
+        "route", predicate, if_true=on_true, if_false=lambda ctx: None,
+        idempotent=True,
+    )
+    with pytest.raises(SystemExit):
+        flow.start(state, "tenant", {"case": "valid"})
+
+    with state.store.connect() as conn:
+        row = conn.execute(
+            "SELECT run_id,revision FROM agent_runs WHERE tenant=? AND kind=?",
+            ("tenant", "workflow"),
+        ).fetchone()
+
+    result = flow.recover(StateStore(Store(state.store.path)), "tenant",
+                          row["run_id"], expected_revision=row["revision"])
+    assert result.status == "completed"
+    assert result.state["outputs"]["route"] == {
+        "selected": "true", "result": {"done": True},
+    }
+    assert attempts == [row["run_id"], row["run_id"]]
+    assert writes == [row["run_id"]]
+
+
+def test_branch_idempotency_is_part_of_definition_fingerprint():
+    default = Workflow("idempotency").branch(
+        "decision", lambda ctx: True,
+        if_true=lambda ctx: "a", if_false=lambda ctx: "b",
+    )
+    explicit = Workflow("idempotency").branch(
+        "decision", lambda ctx: True,
+        if_true=lambda ctx: "a", if_false=lambda ctx: "b",
+        idempotent=True,
+    )
+    assert default._nodes[0].idempotent is False
+    assert explicit._nodes[0].idempotent is True
+    assert default.fingerprint != explicit.fingerprint
+    with pytest.raises(ValueError, match="idempotency"):
+        Workflow("bad").branch("choice", lambda ctx: True,
+                               if_true=lambda ctx: True,
+                               if_false=lambda ctx: False, idempotent="true")
