@@ -45,7 +45,7 @@ class ConversationStore:
         if (not isinstance(citations, list) or len(citations) > 80
                 or (role != "assistant" and citations) or any(
                     not isinstance(value, str) or not 1 <= len(value) <= 128
-                    or any(ord(ch) < 33 or ord(ch) > 126 for ch in value)
+                    or any(ch.isspace() or ord(ch) < 32 or ch in "[]" for ch in value)
                     for value in citations
                 ) or len(set(citations)) != len(citations)):
             raise ValueError("Verified citation IDs must be bounded, unique assistant provenance")
