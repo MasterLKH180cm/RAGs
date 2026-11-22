@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 import hashlib
 import json
+import re
 import time
 from typing import Callable
 
@@ -142,7 +143,7 @@ class AgentEngine:
         state = {"subject": principal.subject, "session_id": session_id,
                  "model": model, "goal": goal.strip(), "messages": messages,
                  "steps": 0, "calls": 0, "pending": [], "approval": None,
-                 "seen": [], "answer": None, "stop_reason": None}
+                 "seen": [], "evidence_ids": [], "answer": None, "stop_reason": None}
         cp = self.state.create(principal.tenant, kind="agent", fingerprint=self._fingerprint, state=state)
         return self._advance(cp, principal)
 
@@ -217,8 +218,15 @@ class AgentEngine:
                     return self._step(cp, status="failed", stop_reason="tool_execution_failed")
             messages = [*cp.state["messages"], {"role": "tool", "tool_call_id": call.id,
                        "content": json.dumps(result, ensure_ascii=False, allow_nan=False)}]
+            evidence = list(cp.state.get("evidence_ids", []))
+            if call.name == "knowledge_search" and isinstance(result, dict):
+                for row in result.get("citations", [])[:5]:
+                    if isinstance(row, dict) and isinstance(row.get("chunk_id"), str):
+                        if row["chunk_id"] not in evidence and len(evidence) < 40:
+                            evidence.append(row["chunk_id"])
             cp = self._step(cp, status="running", pending=cp.state["pending"][1:],
-                            approval=None, messages=messages, calls=cp.state["calls"] + 1)
+                            approval=None, messages=messages, calls=cp.state["calls"] + 1,
+                            evidence_ids=evidence)
         return cp
 
     def _advance(self, cp: Checkpoint, principal: Principal) -> Checkpoint:
@@ -238,9 +246,12 @@ class AgentEngine:
                 reply = self.router.complete(
                     model=cp.state["model"], messages=cp.state["messages"],
                     tools=self.tools.declarations(principal),
+                    timeout_seconds=max(0.05, deadline - time.monotonic()),
                 )
             except CapabilityError:
                 return self._step(cp, status="failed", stop_reason="model_gateway_failed")
+            if time.monotonic() >= deadline:
+                return self._step(cp, status="stopped", stop_reason="wall_time_budget")
             steps = cp.state["steps"] + 1
             if reply.tool_calls:
                 if cp.state["calls"] + len(reply.tool_calls) > self.config.max_tool_calls:
@@ -279,8 +290,18 @@ class AgentEngine:
             if not answer:
                 return self._step(cp, status="failed", steps=steps,
                                   stop_reason="empty_model_answer")
+            from rags.retrieval import _answer_citations
+
+            evidence = set(cp.state.get("evidence_ids", []))
+            if evidence:
+                try:
+                    _answer_citations(answer, evidence)
+                except CapabilityError as error:
+                    return self._step(cp, status="failed", steps=steps, stop_reason=error.code)
+            elif re.search(r"\[([^\]\n]+)\]", answer):
+                return self._step(cp, status="failed", steps=steps, stop_reason="invalid_citation")
             cp = self._step(cp, status="completed", steps=steps, answer=answer)
-            if self.config.memory_enabled:
+            if self.config.memory_enabled and "rags:memory" in principal.permissions:
                 self.history.append(cp.tenant, cp.state["session_id"], "user", cp.state["goal"])
                 self.history.append(cp.tenant, cp.state["session_id"], "assistant", answer[:4000])
             return cp

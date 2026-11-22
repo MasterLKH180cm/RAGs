@@ -4,6 +4,7 @@ The Gateway supports >40 upstream providers; this adapter only claims an
 OpenAI-compatible HTTP contract. Exact model aliases are operator-approved.
 """
 import json
+import time
 import re
 from typing import Any
 
@@ -72,12 +73,12 @@ class ModelRouter:
             raise CapabilityError("feature_disabled", "Model router is disabled", 403)
         self.config = config
 
-    def _client(self) -> httpx.Client:
-        return httpx.Client(timeout=httpx.Timeout(30., connect=5.), follow_redirects=False,
-                            trust_env=False)
+    def _client(self, timeout_seconds: float = 30.) -> httpx.Client:
+        return httpx.Client(timeout=httpx.Timeout(timeout_seconds, connect=min(5., timeout_seconds)),
+                            follow_redirects=False, trust_env=False)
 
     def complete(self, *, model: str, messages: list[dict], tools: list[dict] | None = None,
-                 max_output_tokens: int | None = None) -> ModelReply:
+                 max_output_tokens: int | None = None, timeout_seconds: float = 30.) -> ModelReply:
         if not self.config.router_ready:
             raise CapabilityError("router_unconfigured",
                                   "Model gateway is not yet configured; use agent doctor", 503)
@@ -106,8 +107,11 @@ class ModelRouter:
         if tools:
             request["tools"] = tools
             request["tool_choice"] = "auto"
+        if type(timeout_seconds) not in (int, float) or not 0.05 <= timeout_seconds <= 90.:
+            raise ValueError("Model request timeout must be 0.05..90 seconds")
+        deadline = time.monotonic() + timeout_seconds
         try:
-            with self._client() as client:
+            with self._client(timeout_seconds) as client:
                 with client.stream(
                     "POST", self.config.gateway_url + "/chat/completions",
                     headers={"Authorization": "Bearer " + self.config.gateway_key,
@@ -119,10 +123,14 @@ class ModelRouter:
                                               "Model gateway did not complete the request", 502)
                     payload, size = [], 0
                     for chunk in response.iter_bytes():
+                        if time.monotonic() >= deadline:
+                            raise CapabilityError("model_timeout", "Model deadline exceeded", 504)
                         size += len(chunk)
                         if size > MAX_RESPONSE_BYTES:
                             raise CapabilityError("invalid_model_output", "Model response exceeds limit", 502)
                         payload.append(chunk)
+            if time.monotonic() >= deadline:
+                raise CapabilityError("model_timeout", "Model deadline exceeded", 504)
             data = json.loads(b"".join(payload))
         except CapabilityError:
             raise

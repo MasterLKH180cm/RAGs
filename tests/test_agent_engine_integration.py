@@ -27,7 +27,7 @@ class FakeRouter:
         self.replies = deque(messages)
         self.calls = []
 
-    def complete(self, *, model, messages, tools):
+    def complete(self, *, model, messages, tools, timeout_seconds=None):
         self.calls.append((model, messages, tools))
         if not self.replies:
             raise AssertionError("Agent exceeded scripted model responses")
@@ -199,3 +199,31 @@ def test_agent_tool_registry_enforces_pydantic_extra_forbid():
         amount: int
     with pytest.raises(ValueError, match="forbid"):
         ToolSpec("weak", WeakArgs, lambda *_: None, permission="rags:query")
+
+
+def test_memory_scope_required_to_read_or_store_agent_history(components):
+    state, config = components
+    from rags.agents.memory import ConversationStore
+    memory = ConversationStore(state)
+    memory.append("tenant-a", "shared", "user", "Private prior question")
+    fake = FakeRouter(reply("Generic answer"))
+    service = engine(state, config, fake)
+    permissions = {"rags:agent", "rags:generate", "rags:query"}
+    result = service.start(principal(permissions=permissions), goal="Respond without history",
+                           model="main", session_id="shared")
+    assert result.status == "completed"
+    assert "Private prior question" not in repr(fake.calls)
+    assert len(memory.last("tenant-a", "shared")) == 1
+
+
+def test_gateway_hallucinated_citation_does_not_complete_agent(components):
+    state, config = components
+    registry = ToolRegistry()
+    registry.register(ToolSpec("knowledge_search", Args,
+        lambda *_: {"citations": [{"chunk_id": "authorized-id", "text": "source"}]},
+        permission="rags:query"))
+    fake = FakeRouter(reply("", call("knowledge_search", {"amount": 1})),
+                      reply("Fabricated evidence [not-authorized]"))
+    result = engine(state, config, fake, registry).start(
+        principal(), goal="Cite the authorized evidence", model="main", session_id="evidence")
+    assert result.status == "failed" and result.state["stop_reason"] == "invalid_citation"

@@ -57,7 +57,7 @@ def test_one_router_contract_accepts_four_provider_aliases(config, monkeypatch, 
     router = ModelRouter(config)
     real_client = httpx.Client
     monkeypatch.setattr(router, "_client",
-                        lambda: real_client(transport=httpx.MockTransport(handler)))
+                        lambda *_args: real_client(transport=httpx.MockTransport(handler)))
     result = router.complete(model=alias, messages=[{"role": "user", "content": "Hello"}])
     assert result.model == target and result.content == "A normalized answer"
     assert result.usage == {"prompt_tokens": 4, "completion_tokens": 3}
@@ -77,7 +77,7 @@ def test_router_parses_typed_tool_call_and_forbids_provider_argument_trust(confi
     router = ModelRouter(config)
     real_client = httpx.Client
     monkeypatch.setattr(router, "_client",
-                        lambda: real_client(transport=httpx.MockTransport(handler)))
+                        lambda *_args: real_client(transport=httpx.MockTransport(handler)))
     reply = router.complete(model="openai", messages=[{"role": "user", "content": "Search"}],
                             tools=[{"type": "function", "function": {
                                 "name": "knowledge_search", "parameters": {"type": "object"}}}])
@@ -98,7 +98,7 @@ def test_router_parses_typed_tool_call_and_forbids_provider_argument_trust(confi
 def test_router_rejects_malformed_tool_envelopes_without_leaking_payload(config, monkeypatch, response):
     router = ModelRouter(config)
     real_client = httpx.Client
-    monkeypatch.setattr(router, "_client", lambda: real_client(
+    monkeypatch.setattr(router, "_client", lambda *_args: real_client(
         transport=httpx.MockTransport(lambda _: httpx.Response(200, json=response))))
     with pytest.raises(CapabilityError) as err:
         router.complete(model="openai", messages=[{"role": "user", "content": "test"}])
@@ -107,7 +107,7 @@ def test_router_rejects_malformed_tool_envelopes_without_leaking_payload(config,
 
 def test_router_unknown_model_does_not_make_network_request(config, monkeypatch):
     router = ModelRouter(config)
-    monkeypatch.setattr(router, "_client", lambda: pytest.fail("No unauthorized outbound call"))
+    monkeypatch.setattr(router, "_client", lambda *_args: pytest.fail("No unauthorized outbound call"))
     with pytest.raises(CapabilityError) as err:
         router.complete(model="untrusted_url", messages=[{"role": "user", "content": "hi"}])
     assert err.value.status_code == 403
@@ -117,7 +117,7 @@ def test_gateway_redirect_and_errors_fail_closed(config, monkeypatch):
     router = ModelRouter(config)
     real_client = httpx.Client
     for status in (302, 401, 429, 500):
-        monkeypatch.setattr(router, "_client", lambda: real_client(
+        monkeypatch.setattr(router, "_client", lambda *_args: real_client(
             transport=httpx.MockTransport(lambda _: httpx.Response(
                 status, text="PRIVATE credentials must not be surfaced"))))
         with pytest.raises(CapabilityError) as error:

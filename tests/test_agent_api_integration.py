@@ -45,7 +45,7 @@ def settings(tmp_path, monkeypatch):
 
 def test_agent_api_returns_tenant_scoped_checkpoint_and_history(settings, monkeypatch):
     calls = []
-    def response(self, *, model, messages, tools):
+    def response(self, *, model, messages, tools, timeout_seconds=None):
         calls.append((model, messages, tools))
         return ModelReply(content="Confirmed answer", model="openai/mock", finish_reason="stop")
     monkeypatch.setattr(ModelRouter, "complete", response)
