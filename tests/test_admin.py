@@ -282,3 +282,25 @@ def test_oauth2_admin_session_revalidates_revocation_on_every_request(config, mo
         assert client.get("/admin/api/overview").status_code == 401
         assert client.get("/admin/api/session").status_code == 401
         assert len(requests) == before + 1  # Revoked session removed after first failure.
+
+
+def test_light_theme_foreground_tokens_retain_well_above_aa_contrast():
+    """Readable small labels on white, tinted surfaces, and light canvas."""
+    import re
+    from importlib import resources
+
+    css = resources.files("rags").joinpath("admin_static", "style.css").read_text()
+    light = css.split('body[data-theme="light"]{', 1)[1].split("}", 1)[0]
+    swatches = dict(re.findall(r"--([a-z-]+):(#(?:[0-9a-f]{6}))", light))
+
+    def luminance(color: str) -> float:
+        rgb = [int(color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        channels = [x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4 for x in rgb]
+        return sum(a * b for a, b in zip(channels, (0.2126, 0.7152, 0.0722)))
+
+    for name in ("text", "muted", "subtle", "accent"):
+        foreground = luminance(swatches[name])
+        for background in ("#ffffff", "#f7f9fd", "#ecf1f8"):
+            back = luminance(background)
+            ratio = (max(foreground, back) + .05) / (min(foreground, back) + .05)
+            assert ratio >= 4.5, (name, background, ratio)
