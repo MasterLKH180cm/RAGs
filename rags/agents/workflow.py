@@ -123,6 +123,26 @@ class Workflow:
                           })
         return self._advance(state, cp)
 
+    def recover(self, state: StateStore, tenant: str, run_id: str, *,
+                expected_revision: int) -> Checkpoint:
+        """Resume only nonterminal interrupted checkpoints, never replay saved nodes.
+
+        Operators must keep side-effecting callbacks idempotent: a crash during
+        the current step can require replay, but earlier committed steps cannot.
+        """
+        cp = state.get(tenant, run_id)
+        if cp is None:
+            raise CapabilityError("not_found", "Workflow not found", 404)
+        if cp.kind != "workflow" or cp.fingerprint != self.fingerprint:
+            raise CapabilityError("definition_mismatch", "Workflow definition changed", 409)
+        if cp.revision != expected_revision:
+            raise CapabilityError("revision_conflict", "Run checkpoint changed", 409)
+        if cp.status not in {"running", "needs_resume"}:
+            raise CapabilityError("invalid_state", "Workflow is not recoverable", 409)
+        cp = state.update(tenant, run_id, expected_revision=cp.revision,
+                          fingerprint=self.fingerprint, status="running", state=cp.state)
+        return self._advance(state, cp)
+
     def _advance(self, state: StateStore, cp: Checkpoint) -> Checkpoint:
         steps = 0
         while cp.state["cursor"] < len(self._nodes):

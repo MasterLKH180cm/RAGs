@@ -155,3 +155,20 @@ def test_observation_memory_deduplicates_expires_and_marks_untrusted(state):
     assert obs.recent("tenant", "session") == []
     with pytest.raises(ValueError):
         obs.observe("tenant", "session", fact="", source_id="confirmed")
+
+
+def test_interrupted_workflow_recovers_from_saved_cursor_not_replaying_first(state):
+    actions = []
+    graph = (Workflow("recoverable", "v1")
+             .then("first", lambda ctx: actions.append("first") or True)
+             .then("second", lambda ctx: actions.append("second") or True))
+    cp = state.create("tenant-a", kind="workflow", fingerprint=graph.fingerprint,
+                      state={"cursor": 1, "input": {}, "outputs": {"first": True},
+                             "approved": None}, status="running")
+    fresh = StateStore(Store(state.store.path))
+    done = graph.recover(fresh, "tenant-a", cp.run_id, expected_revision=cp.revision)
+    assert done.status == "completed"
+    assert actions == ["second"]
+    with pytest.raises(CapabilityError) as invalid:
+        graph.recover(fresh, "tenant-a", cp.run_id, expected_revision=cp.revision)
+    assert invalid.value.status_code == 409
