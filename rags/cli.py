@@ -83,6 +83,7 @@ def init_config(directory: Path, profile: str) -> tuple[Path, Path]:
     template = resources.files("rags").joinpath("templates", profile + ".env").read_text(encoding="utf-8")
     token = secrets.token_urlsafe(32)
     env_body = template.replace("__FEATURES_PATH__", shlex.quote(str(flags_path.absolute())))
+    env_body = env_body.replace("__DB_PATH__", shlex.quote(str((directory / "data" / "rags.db").absolute())))
     if "__FEATURES_PATH__" not in template or "RAGS_KEYS_JSON" in template or "RAGS_API_KEY" in template:
         raise ValueError("Packaged configuration template is invalid")
     env_body += "\nRAGS_KEYS_JSON=" + shlex.quote(json.dumps({token: "local"})) + "\n"
@@ -176,18 +177,29 @@ def diagnose(*, check_db: bool = True) -> dict:
                          str(len([x for x in settings.features.as_dict().values() if x])) +
                          " enabled / " +
                          str(len([x for x in settings.features.as_dict().values() if not x])) + " disabled"))
-    for name, provider, credential in (
+    from urllib.parse import urlsplit
+
+    providers = (
         ("embedding", settings.embedding_provider,
+         "offline-hash-v1" if settings.embedding_provider == "local" else
+         settings.fastembed_model if settings.embedding_provider == "fastembed" else settings.embedding_model,
+         settings.embedding_endpoint,
          settings.embedding_credential if settings.embedding_provider == "openai" else ""),
         ("generation", settings.model_provider,
+         settings.anthropic_model if settings.model_provider == "anthropic" else
+         settings.chat_model if settings.model_provider == "openai" else "extractive",
+         settings.generation_endpoint if settings.model_provider != "extractive" else "local",
          settings.generation_credential if settings.model_provider != "extractive" else ""),
-    ):
-        if (provider == "openai" or name == "generation" and provider == "anthropic") and (
+    )
+    for name, provider, model, url, credential in providers:
+        host = urlsplit(url).hostname or "local"
+        details = f"{provider}; model={model}; endpoint_host={host}"
+        if (provider == "openai" or provider == "anthropic") and (
             not credential or credential == "REPLACE_ME"
         ):
-            checks.append(_check(name, "warning", provider + " credentials are not configured"))
+            checks.append(_check(name, "warning", details + "; credentials missing"))
         else:
-            checks.append(_check(name, "ok", provider + " selected"))
+            checks.append(_check(name, "ok", details))
     if check_db:
         checks.append(database_check(settings))
     status = ("error" if any(check["status"] == "error" for check in checks)
