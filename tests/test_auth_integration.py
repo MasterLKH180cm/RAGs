@@ -1,6 +1,5 @@
 """Real ASGI request authorization: no role, tenant or token scope bypass."""
 from dataclasses import replace
-import json
 import os
 import time
 
@@ -87,6 +86,8 @@ def test_oauth2_tenant_claims_enforce_data_isolation_and_authentication(base_set
         calls.append(token)
         if token == "revoked":
             return httpx.Response(200, json={"active": False})
+        if token not in raw:
+            return httpx.Response(200, json={"active": False})
         tenant, scope = raw[token]
         return httpx.Response(200, json={
             "active": True, "iss": "https://idp.example/", "aud": "rags-api",
@@ -110,7 +111,7 @@ def test_oauth2_tenant_claims_enforce_data_isolation_and_authentication(base_set
         assert client.get("/documents", headers=headers("no-scope")).status_code == 403
         assert client.get("/documents", headers=headers("revoked")).status_code == 401
         assert client.get("/documents").status_code == 401
-        assert client.get("/documents", headers=headers("any-static-key")).status_code == 503 or True
+        assert client.get("/documents", headers=headers("any-static-key")).status_code == 401
     assert "admin-a" in calls and "reader-b" in calls and "revoked" in calls
 
 

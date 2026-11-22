@@ -4,10 +4,9 @@ The application is an OAuth2 resource server, *not* a token issuer, OIDC
 client, or JWT decoder. Token metadata is accepted only from the configured,
 authenticated HTTPS introspection endpoint.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import hmac
-import ipaddress
 import json
 import math
 import re
@@ -75,7 +74,7 @@ class OAuth2Config:
     issuer: str
     audience: str
     client_id: str
-    client_secret: str
+    client_secret: str = field(repr=False)
     tenant_claim: str = "tenant_id"
     timeout_seconds: float = 3.0
 
@@ -89,7 +88,7 @@ class OAuth2Config:
                 not self.client_secret or len(self.client_secret) > 4096):
             raise ValueError("OAuth2 issuer, audience and client credentials are required")
         if not CLAIM.fullmatch(self.tenant_claim) or self.tenant_claim in {
-            "scope", "active", "aud", "iss", "exp", "nbf", "cnf"
+            "scope", "active", "aud", "iss", "exp", "nbf", "cnf", "sub", "client_id"
         }:
             raise ValueError("OAuth2 tenant claim must be a dedicated top-level name")
         if (type(self.timeout_seconds) not in (float, int) or
@@ -100,9 +99,9 @@ class OAuth2Config:
 def _validate_introspection(raw: object, config: OAuth2Config, now: float) -> Principal:
     if not isinstance(raw, dict) or raw.get("active") is not True:
         raise _invalid_token()
+    token_type = raw.get("token_type", "Bearer")
     if (raw.get("iss") != config.issuer or "cnf" in raw or
-            raw.get("token_type", "Bearer").lower() != "bearer"
-            if isinstance(raw.get("token_type", "Bearer"), str) else True):
+            not isinstance(token_type, str) or token_type.lower() != "bearer"):
         raise _invalid_token()
     audience = raw.get("aud")
     if (not isinstance(audience, (str, list)) or
@@ -130,11 +129,15 @@ def _validate_introspection(raw: object, config: OAuth2Config, now: float) -> Pr
     return Principal(tenant, subject, selected, "oauth2_introspection")
 
 
+def _client(config: OAuth2Config) -> httpx.Client:
+    """Construct a fresh, non-proxying client per request; no revoked-token cache."""
+    return httpx.Client(timeout=config.timeout_seconds, follow_redirects=False, trust_env=False)
+
+
 def _introspect(token: str, config: OAuth2Config) -> Principal:
     try:
         # No redirects, ambient proxies, token logging or introspection caching.
-        with httpx.Client(timeout=config.timeout_seconds, follow_redirects=False,
-                          trust_env=False) as client:
+        with _client(config) as client:
             with client.stream(
                 "POST", config.introspection_url,
                 data={"token": token, "token_type_hint": "access_token"},
