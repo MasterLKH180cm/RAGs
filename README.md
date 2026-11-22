@@ -8,11 +8,12 @@
 
 RAGs provides an authenticated FastAPI knowledge service and a read-only MCP bridge. Use it directly or connect [agentic-system](https://github.com/MasterLKH180cm/agentic-system) for durable workflows. The default runs without paid model credentials, using clearly identified hashing embeddings and extractive evidence output.
 
-Version 0.4 adds operator feature permissions, dedicated model endpoint configuration, and a PostgreSQL/pgvector deployment; see the [v0.4 specification](docs/SPEC_V04.md). Version 0.3 adds typed evidence decisions, separately calibrated relevance and answerability profiles, and isolated services executing pinned RAPTOR and LightRAG code. It builds on v0.2's six chunking strategies, token budgets, parent/summary indexes, graph traversal, structured queries, temporal revisions, federation, and pretrained encoders. The [twenty-family coverage table](#twenty-family-coverage) distinguishes native mechanisms, tested upstream execution, and remaining external requirements. An unavailable capability returns an explicit error instead of silently running another strategy.
+Version 0.5 adds the installable CLI, five operator profiles, read-only doctor, and measured revision-scoped PostgreSQL reads; see the [synthetic performance report](docs/PERFORMANCE_V05.md) and [v0.5 specification](docs/SPEC_V05.md). Version 0.4 adds operator feature permissions, dedicated model endpoint configuration, and a PostgreSQL/pgvector deployment; see the [v0.4 specification](docs/SPEC_V04.md). Version 0.3 adds typed evidence decisions, separately calibrated relevance and answerability profiles, and isolated services executing pinned RAPTOR and LightRAG code. It builds on v0.2's six chunking strategies, token budgets, parent/summary indexes, graph traversal, structured queries, temporal revisions, federation, and pretrained encoders. The [twenty-family coverage table](#twenty-family-coverage) distinguishes native mechanisms, tested upstream execution, and remaining external requirements. An unavailable capability returns an explicit error instead of silently running another strategy.
 
 ## Contents
 
 - [Quick start](#quick-start)
+- [Installable CLI](#installable-cli-no-clone-needed)
 - [uv environment workflow](#uv-environment-workflow)
 - [Ingest and query](#ingest-and-query)
 - [Architecture and flows](#architecture-and-flows)
@@ -30,6 +31,81 @@ Version 0.4 adds operator feature permissions, dedicated model endpoint configur
 - [Deployment and project map](#deployment-and-project-map)
 
 ## Quick start
+
+### Installable CLI (no clone needed)
+
+The Hatch wheel publishes the `rags` console command. The package has **not**
+been published on PyPI; install directly from the repository until a release
+artifact is published.
+
+```bash
+# One-off, cached execution of the command from GitHub:
+uvx --from git+https://github.com/MasterLKH180cm/RAGs.git rags --help
+
+# Persistent install into a dedicated uv tool environment:
+uv tool install git+https://github.com/MasterLKH180cm/RAGs.git
+
+# Equivalent Python/pip install:
+python -m pip install "rags-platform @ git+https://github.com/MasterLKH180cm/RAGs.git"
+
+# The default is 100% offline, SQLite + deterministic hashing + extractive output.
+mkdir my-rags && cd my-rags
+rags init --profile offline
+rags doctor --env-file .env --no-db
+rags serve --env-file .env
+# Open http://127.0.0.1:8000/docs after serving.
+```
+
+The CLI also runs as `python -m rags` from an installed package. `rags init`
+generates a private 0600 `.env` with a distinct random token-to-tenant mapping
+and a nonsecret `rags.features.json`; it never overwrites either file. The
+service uses the same FastAPI application and typed configuration validation.
+Use the generated `RAGS_API_KEY` from your private `.env` in bearer requests,
+but do not put `.env` in version control. Keep native `rags serve` behind a
+trusted reverse proxy and an auth gateway before permitting non-loopback binding:
+`--allow-public` is explicit.
+
+| Profile | Storage | Embeddings | Answer mode | Operator action |
+| --- | --- | --- | --- | --- |
+| `offline` | SQLite | Deterministic local hash | Extractive | No model credentials |
+| `postgres` | PostgreSQL/pgvector | Deterministic local hash | Extractive | Pre-install `vector`, replace the DSN placeholder, install `postgres` extra |
+| `openai` | SQLite | OpenAI API | OpenAI-compatible chat | Set `RAGS_EMBEDDING_API_KEY` and `RAGS_GENERATION_API_KEY` in a secret environment |
+| `ollama` | SQLite | Ollama OpenAI-compatible API | Ollama local chat | Run Ollama and fetch matching embedding/chat models separately |
+| `anthropic` | SQLite | Deterministic local hash | Anthropic chat | Set `ANTHROPIC_API_KEY` in a secret environment |
+
+Choose with `rags init --profile postgres --directory /path/to/existing/dir`.
+For optional PostgreSQL support, install with:
+
+```bash
+uv tool install "rags-platform[postgres] @ git+https://github.com/MasterLKH180cm/RAGs.git"
+# Or from a clone: uv sync --locked --extra postgres
+rags doctor --env-file .env --json  # Read-only SELECTs, no schema mutations.
+rags doctor --env-file .env --no-db  # Offline configuration-only check.
+```
+
+External environment variables override settings from `--env-file`. The
+parser reads shell-quoted assignments without executing shell commands.
+Doctor reports provider choices, model identifiers, hostnames, feature flag
+counts, storage backend, extension and vector type; it never prints secret
+values or contacts model endpoints. An uninitialized SQLite/PostgreSQL schema
+is reported as a warning, not initialized by the diagnostic.
+
+For repeatable, **synthetic** PostgreSQL comparisons, run the opt-in benchmark
+on a disposable database or one with `TEMP` privileges. It creates and drops
+temporary tables only, and reports p50/p95 plus EXPLAIN buffer observations.
+The `unfiltered_tenant_scan` baseline includes client-side filtering; the new
+`scoped_revision_join` pushes authorized revision keys into PostgreSQL,
+retaining exact pgvector ranking and tenant boundaries.
+
+```bash
+# Requires a valid host-reachable RAGS_DATABASE_URL from the selected env profile.
+rags benchmark --env-file .env --documents 200 --chunks-per-document 8 --iterations 20 --json
+```
+
+These timings characterize the selected synthetic data and single connection;
+they cannot establish production capacity, p99, or a connection-pooling gain.
+See [v0.5 scope and acceptance criteria](docs/SPEC_V05.md).
+
 
 ### PostgreSQL and pgvector with Docker
 
