@@ -402,3 +402,41 @@ def test_import_rejects_unsupported_read_only_source_before_target_schema_change
     from rags.postgres import connect
     with connect(database) as connection:
         assert connection.execute("SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema=current_schema()").fetchone()["count"] == 0
+
+
+def test_scope_pushes_revision_filters_to_postgres_without_loading_unauthorized_chunks(database, monkeypatch):
+    """Only allowed document revisions are selected in SQL within one read snapshot."""
+    from rags import postgres
+
+    store = Store(database)
+    _, visible = add_document(store, identifier="allowed", source="manual",
+                              metadata={"active": True, "category": "ok"})
+    add_document(store, identifier="hidden", source="manual",
+                 metadata={"active": False}, vector=(0.1, 0.8, 0.1))
+    add_document(store, tenant="other", identifier="foreign", source="manual")
+    calls = []
+    execute = postgres.Connection.execute
+
+    def inspect(self, statement, parameters=()):
+        calls.append((statement, parameters))
+        return execute(self, statement, parameters)
+
+    monkeypatch.setattr(postgres.Connection, "execute", inspect)
+    subset = store.scope("tenant", filters={"metadata": {"active": True}, "source": "manual"},
+                         include_embeddings=False)
+    assert [chunk["id"] for chunk in subset] == [visible["id"]]
+    assert "embedding" not in subset[0]
+    assert len([sql for sql, _ in calls if "FROM document_revisions WHERE" in sql]) == 1
+    scoped = [(sql, params) for sql, params in calls if "FROM chunks c" in sql]
+    assert len(scoped) == 1
+    query, args = scoped[0]
+    assert "jsonb_to_recordset(?::jsonb)" in query
+    assert "c.embedding" not in query and "c.*" not in query
+    assert args[-1] == "tenant"
+    keys = json.loads(args[0])
+    assert keys == [{"document_id": "allowed", "revision": subset[0]["revision"]}]
+    assert any("REPEATABLE READ, READ ONLY" in sql for sql, _ in calls)
+    before = len(scoped)
+    assert store.scope("tenant", filters={"metadata": {"active": "True"}}) == []
+    after = len([sql for sql, _ in calls if "FROM chunks c" in sql])
+    assert before == after

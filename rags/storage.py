@@ -255,34 +255,61 @@ class Store:
 
     def scope(self, tenant: str, *, as_of: str | None = None, filters: dict | None = None,
               include_embeddings: bool = True) -> list[dict]:
-        """Choose one valid revision per document before retrieval or expansion."""
+        """Choose one valid revision per document before retrieval or expansion.
+
+        Read revisions and chunks from one transaction snapshot. PostgreSQL pushes
+        the authorized revision pairs into the chunk query; tenant-wide chunk
+        scans must not spill unrelated content or vectors into the client.
+        """
         at = timestamp(as_of)
         filters = filters or {}
         order_column = "revision_order" if self.is_postgres else "rowid"
         with self.connect() as conn:
+            if self.is_postgres:
+                conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
             rows = conn.execute(
                 "SELECT * FROM document_revisions WHERE tenant=? AND valid_from<=? "
-                f"AND (valid_to IS NULL OR valid_to>?) ORDER BY recorded_at DESC,{order_column} DESC", (tenant, at, at)
+                f"AND (valid_to IS NULL OR valid_to>?) ORDER BY recorded_at DESC,{order_column} DESC",
+                (tenant, at, at),
             ).fetchall()
-        docs = {}
-        for row in rows:
-            doc = self.decode_document(row)
-            if doc["id"] not in docs:
-                docs[doc["id"]] = doc
-        selected = {}
-        for doc_id, doc in docs.items():
-            if filters.get("source") is not None and doc["source"] != filters["source"]:
-                continue
-            if any(k not in doc["metadata"] or not equal_value(doc["metadata"][k], v) for k, v in filters.get("metadata", {}).items()):
-                continue
-            if filters.get("valid_after") and doc["valid_from"] < timestamp(filters["valid_after"]):
-                continue
-            if filters.get("valid_before") and doc["valid_from"] >= timestamp(filters["valid_before"]):
-                continue
-            selected[(doc_id, doc["revision"])] = doc
-        with self.connect() as conn:
-            fields = "*" if include_embeddings else ",".join(field for field in CHUNK_FIELDS if field != "embedding")
-            chunk_rows = conn.execute(f"SELECT {fields} FROM chunks WHERE tenant=?", (tenant,)).fetchall()
+            docs = {}
+            for row in rows:
+                doc = self.decode_document(row)
+                if doc["id"] not in docs:
+                    docs[doc["id"]] = doc
+            selected = {}
+            for doc_id, doc in docs.items():
+                if filters.get("source") is not None and doc["source"] != filters["source"]:
+                    continue
+                if any(k not in doc["metadata"] or not equal_value(doc["metadata"][k], v)
+                       for k, v in filters.get("metadata", {}).items()):
+                    continue
+                if filters.get("valid_after") and doc["valid_from"] < timestamp(filters["valid_after"]):
+                    continue
+                if filters.get("valid_before") and doc["valid_from"] >= timestamp(filters["valid_before"]):
+                    continue
+                selected[(doc_id, doc["revision"])] = doc
+            if not selected:
+                return []
+            fields = "c.*" if include_embeddings else ",".join(
+                "c." + field for field in CHUNK_FIELDS if field != "embedding"
+            )
+            if self.is_postgres:
+                revision_keys = json.dumps(
+                    [{"document_id": doc_id, "revision": revision}
+                     for doc_id, revision in selected], separators=(",", ":")
+                )
+                chunk_rows = conn.execute(
+                    f"SELECT {fields} FROM chunks c "
+                    "JOIN jsonb_to_recordset(?::jsonb) AS scope(document_id text, revision text) "
+                    "ON scope.document_id=c.document_id AND scope.revision=c.revision "
+                    "WHERE c.tenant=? ORDER BY c.id",
+                    (revision_keys, tenant),
+                ).fetchall()
+            else:
+                chunk_rows = conn.execute(
+                    f"SELECT {fields} FROM chunks c WHERE c.tenant=?", (tenant,)
+                ).fetchall()
         result = []
         for row in chunk_rows:
             chunk = dict(row)
