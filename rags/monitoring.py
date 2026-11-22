@@ -11,7 +11,6 @@ import math
 import queue
 import re
 import secrets
-from statistics import median
 from threading import Event, Lock, Thread
 import time
 

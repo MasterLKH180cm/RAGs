@@ -1,7 +1,5 @@
 """Telemetry and HTTP OTLP privacy, bounds and protocol unit contracts."""
 import json
-import math
-import os
 from types import SimpleNamespace
 
 import httpx

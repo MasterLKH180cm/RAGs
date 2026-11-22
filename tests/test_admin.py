@@ -2,13 +2,11 @@
 from dataclasses import replace
 import json
 import os
-from pathlib import Path
-from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 import pytest
 
-from rags.admin import AdminSession, SessionStore
+from rags.admin import SessionStore
 from rags.api import create_app
 from rags.auth import Principal
 from rags.config import Settings
