@@ -76,7 +76,18 @@ def test_router_embedding_validation_never_accepts_malformed_vectors(settings, m
 
 
 def test_unconfigured_gateway_does_not_fallback_to_another_vendor(settings, monkeypatch):
+    from rags.agents.config import AgentPlatformConfig
+
+    # A partial endpoint configuration must fail startup instead of accepting a
+    # request or silently swapping to a different model provider.
     monkeypatch.setenv("RAGS_ROUTER_API_KEY", "")
+    with pytest.raises(ValueError, match="gateway credentials"):
+        AgentPlatformConfig.from_env()
+
+    # A *completely* unconfigured Gateway remains safe to run locally,
+    # reports unavailable generation, and cannot make a network request.
+    monkeypatch.delenv("RAGS_ROUTER_GATEWAY_URL")
+    monkeypatch.delenv("RAGS_ROUTER_MODELS_JSON")
     provider = Providers(settings)
     assert not provider.has_generation
     with pytest.raises(CapabilityError) as error:
