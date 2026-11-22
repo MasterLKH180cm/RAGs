@@ -308,11 +308,6 @@ def test_light_theme_foreground_tokens_retain_well_above_aa_contrast():
 
 def test_dashboard_workflow_graph_lifecycle_and_csrf_scope(config):
     """The visual workflow uses the same tenant model and an exact CSRF boundary."""
-    from rags.agents.config import AgentPlatformConfig
-    import os
-
-    for name in ("RAGS_ROUTER_ENABLED", "RAGS_AGENT_ENABLED", "RAGS_MEMORY_ENABLED"):
-        os.environ.pop(name, None)
     app = create_app(config)
     with TestClient(app, base_url=ORIGIN) as client:
         assert sign_in(client).status_code == 200
