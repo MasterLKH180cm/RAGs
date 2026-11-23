@@ -1,0 +1,14 @@
+{
+  "schema": "crag-public-fetch-readiness-v1",
+  "checked_at": "2026-11-23T16:15:02.426661+00:00",
+  "url": "https://en.wikipedia.org/wiki/Retrieval-augmented_generation",
+  "trust_env": false,
+  "tls_verification": true,
+  "complete": false,
+  "model_calls": 0,
+  "search_calls": 0,
+  "error_type": "gaierror",
+  "error_code": -3,
+  "reason": "Public fetch did not complete under the required direct, verified transport; no proxy or private-address exception was applied.",
+  "elapsed_seconds": 0.0018879149999975198
+}

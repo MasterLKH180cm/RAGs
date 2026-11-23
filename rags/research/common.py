@@ -133,7 +133,7 @@ class ProviderBridge:
         self.embedding_model = getattr(provider, "embedding_model", "")
         self.generation_provider = getattr(provider, "model_identity", "")
         embedding_provider = getattr(settings, "embedding_provider", "local")
-        if (embedding_provider not in {"fastembed", "openai"}
+        if (embedding_provider not in {"fastembed", "openai", "router"}
                 or not isinstance(self.embedding_model, str) or not self.embedding_model
                 or len(self.embedding_model) > 200 or "hash" in self.embedding_model.lower()):
             raise CapabilityError("requires_provider", "Research requires a configured trained embedding provider")
@@ -181,6 +181,12 @@ class ProviderBridge:
         else:
             self.features.require("tokenizer.tiktoken")
             name = getattr(self.provider.settings, "embedding_model", None)
+            if self.provider.settings.embedding_provider == "router":
+                router = self.provider.model_router
+                resolved = router.config.models.get(name, "")
+                # The operator's explicit provider/model mapping is the token
+                # window contract. Generic gateway aliases cannot establish it.
+                name = resolved.removeprefix("openai/") if resolved.startswith("openai/") else ""
             if name not in {"text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"}:
                 raise CapabilityError("requires_provider", "Research needs an exact token counter for this embedding model")
             tokenizer = resolve_tokenizer({"backend": "tiktoken", "model": name})

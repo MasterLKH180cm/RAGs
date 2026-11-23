@@ -1,0 +1,385 @@
+{
+  "schema": "selfrag-main-phase-diagnostic-v10",
+  "http_status": 502,
+  "elapsed_seconds": 19.676907990000018,
+  "sidecar_deadline_seconds": 300,
+  "backend_deadline_seconds": 330,
+  "client_deadline_seconds": 350,
+  "response": {
+    "detail": {
+      "code": "invalid_worker_output",
+      "reason": "Research execution returned invalid output"
+    }
+  },
+  "phase_profile": [
+    {
+      "stage": "python_boot",
+      "pid": 7,
+      "time": 3724.644521483,
+      "cpu_seconds": 0.053183999999999995,
+      "max_rss_bytes": 30998528,
+      "major_faults": 0,
+      "native_threads": "4",
+      "omp_threads": "2"
+    },
+    {
+      "stage": "python_boot",
+      "pid": 9,
+      "time": 3725.223148628,
+      "cpu_seconds": 0.053019,
+      "max_rss_bytes": 34668544,
+      "major_faults": 0,
+      "native_threads": "4",
+      "omp_threads": "2"
+    },
+    {
+      "stage": "python_boot",
+      "pid": 11,
+      "time": 3726.007002567,
+      "cpu_seconds": 0.06513,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "native_threads": "4",
+      "omp_threads": "2"
+    },
+    {
+      "stage": "model_init_start",
+      "pid": 11,
+      "time": 3726.154528575,
+      "cpu_seconds": 0.21237899999999998,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3726.154613539,
+      "cpu_seconds": 0.21248299999999998,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "selfrag_llama2_7b.Q4_K_M.gguf"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.419562007,
+      "cpu_seconds": 8.354942999999999,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "selfrag_llama2_7b.Q4_K_M.gguf"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.420240185,
+      "cpu_seconds": 8.356017,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libllama.so.1.0.0"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.432273833,
+      "cpu_seconds": 8.368013,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libllama.so.1.0.0"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.432390587,
+      "cpu_seconds": 8.368175,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml.so.1.0.0"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.432838638,
+      "cpu_seconds": 8.368395,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml.so.1.0.0"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.432907914,
+      "cpu_seconds": 8.368489,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-base.so.1.0.0"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.435987841,
+      "cpu_seconds": 8.371233,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-base.so.1.0.0"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.436115981,
+      "cpu_seconds": 8.37139,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-alderlake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.440510498,
+      "cpu_seconds": 8.375491,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-alderlake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.440592149,
+      "cpu_seconds": 8.375603,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cannonlake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.448402512,
+      "cpu_seconds": 8.383008,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cannonlake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.448506028,
+      "cpu_seconds": 8.383139,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cascadelake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.455074054,
+      "cpu_seconds": 8.389403000000001,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cascadelake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.45516065,
+      "cpu_seconds": 8.389513,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cooperlake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.462351869,
+      "cpu_seconds": 8.396521,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cooperlake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.462423759,
+      "cpu_seconds": 8.396619999999999,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-haswell.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.467285057,
+      "cpu_seconds": 8.401276,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-haswell.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.467377036,
+      "cpu_seconds": 8.401391,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-icelake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.473851164,
+      "cpu_seconds": 8.40775,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-icelake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.474021546,
+      "cpu_seconds": 8.40794,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-ivybridge.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.478924167,
+      "cpu_seconds": 8.412662000000001,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-ivybridge.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.479010896,
+      "cpu_seconds": 8.412783000000001,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-piledriver.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.484567104,
+      "cpu_seconds": 8.418151,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-piledriver.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.484666946,
+      "cpu_seconds": 8.418272,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sandybridge.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.490077126,
+      "cpu_seconds": 8.423496,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sandybridge.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.490155013,
+      "cpu_seconds": 8.423596,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sapphirerapids.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.49838408,
+      "cpu_seconds": 8.431681,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sapphirerapids.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.49848817,
+      "cpu_seconds": 8.431804,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-skylakex.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.505312627,
+      "cpu_seconds": 8.438362999999999,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-skylakex.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.505376593,
+      "cpu_seconds": 8.438451,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sse42.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.508836368,
+      "cpu_seconds": 8.441692999999999,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sse42.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.508917404,
+      "cpu_seconds": 8.441794999999999,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-x64.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.512520297,
+      "cpu_seconds": 8.445377,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-x64.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3734.512582472,
+      "cpu_seconds": 8.445462,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-zen4.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3734.519608509,
+      "cpu_seconds": 8.452009,
+      "max_rss_bytes": 46026752,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-zen4.so"
+    }
+  ],
+  "evidence_kind": "temporary_phase_instrumentation_on_the_actual_pinned_native_runtime",
+  "no_checkpoint_or_inference_policy_changes": true,
+  "comparison_role": "first eager-buffer attempt; initialization did not complete",
+  "native_parameters": {
+    "load_mode": "NONE (0)",
+    "lazy_mode": "OFF (0)"
+  }
+}

@@ -143,6 +143,9 @@ jobs:
               assert len(root.joinpath(name).read_bytes()) > 1000
           package = resources.files("rags")
           for name in ("model_benchmark.py", "model_profiles.py", "provider_transport.py",
+                       "research/graphrag_adapter.py", "research/hipporag_adapter.py",
+                       "research/selfrag_adapter.py", "research/selfrag_runtime.py",
+                       "research/crag_adapter.py", "research/crag_web.py",
                        "templates/inkling.env", "templates/inkling-local.env", "templates/litellm.env"):
               assert package.joinpath(name).is_file()
           print("Installed wheel contains the dashboard, Inkling profile and benchmark")
@@ -324,7 +327,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        engine: [raptor, lightrag]
+        include:
+          - engine: raptor
+            resource: research_raptor
+            tests: tests/test_research_upstreams.py
+          - engine: lightrag
+            resource: research_lightrag
+            tests: tests/test_research_upstreams.py
+          - engine: full_graphrag
+            resource: research_graphrag
+            tests: tests/test_graphrag_actual.py
+          - engine: hipporag
+            resource: research_hipporag
+            tests: tests/test_hipporag_upstream.py
     env:
       RAGS_ENV: test
       ORT_DISABLE_TELEMETRY: "1"
@@ -332,6 +347,8 @@ jobs:
       NUMBA_NUM_THREADS: "1"
       OMP_NUM_THREADS: "1"
       RAGS_MODEL_CACHE: /tmp/rags-research-models
+      TIKTOKEN_CACHE_DIR: /tmp/rags-research-tokenizers
+      LITELLM_LOCAL_MODEL_COST_MAP: "True"
       RAGS_TEST_RESEARCH_UPSTREAMS: ${{ matrix.engine }}
       RAGS_RESEARCH_REPORT_PATH: reports/ci-research-${{ matrix.engine }}.json
     steps:
@@ -349,14 +366,16 @@ jobs:
             requirements/*.txt
       - uses: actions/cache@v4
         with:
-          path: /tmp/rags-research-models
+          path: |
+            /tmp/rags-research-models
+            /tmp/rags-research-tokenizers
           key: rags-research-bge-v03-${{ runner.os }}
       - name: Install isolated pinned CPU dependencies
         run: bash scripts/install_research.sh "${{ matrix.engine }}" "$RUNNER_TEMP/research-venv"
       - name: Execute actual upstream algorithm and trained BGE
         run: >-
-          "$RUNNER_TEMP/research-venv/bin/python" -m pytest -q tests/test_research_upstreams.py
-          -m "research_${{ matrix.engine }}" --require-no-skips
+          "$RUNNER_TEMP/research-venv/bin/python" -m pytest -q "${{ matrix.tests }}"
+          -m "${{ matrix.resource }}" --require-no-skips
           --test-inventory "reports/testing/inventory-${{ matrix.engine }}.json"
           --junitxml "reports/testing/junit-${{ matrix.engine }}.xml"
       - name: Real sidecar and RAG HTTP lifecycle
@@ -538,3 +557,216 @@ jobs:
         with:
           name: full-frozen-admission-benchmark
           path: reports/ci-full-admission-verification-qwen.json
+
+  crag-trained:
+    name: Actual CRAG evaluator and HTTP lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      RAGS_ENV: test
+      RAGS_TEST_RESEARCH_UPSTREAMS: crag
+      RAGS_CRAG_MODEL_PATH: /tmp/rags-crag-evaluator
+      RAGS_RESEARCH_REPORT_PATH: reports/ci-research-crag.json
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TOKENIZERS_PARALLELISM: "false"
+      OMP_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+        with:
+          version: "0.13.9"
+          enable-cache: true
+          cache-suffix: research-crag
+          cache-dependency-glob: requirements/research-crag.txt
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/rags-crag-evaluator
+          key: crag-evaluator-cec06c4520a5-${{ runner.os }}
+      - name: Install isolated hash-locked evaluator runtime
+        run: bash scripts/install_research.sh crag "$RUNNER_TEMP/crag-venv"
+      - name: Provision and hash-verify the authors' actual evaluator
+        run: >-
+          "$RUNNER_TEMP/crag-venv/bin/python" scripts/crag_local.py download
+          --directory "$RAGS_CRAG_MODEL_PATH"
+      - name: Execute all three real evaluator branches and reference numerics
+        run: >-
+          "$RUNNER_TEMP/crag-venv/bin/python" -m pytest -q tests/test_crag_actual.py
+          --require-no-skips --junitxml reports/ci-crag.junit.xml
+      - name: Real CRAG worker, answer preservation and tenant lifecycle
+        run: >-
+          "$RUNNER_TEMP/crag-venv/bin/python" scripts/e2e_crag_v10.py
+          --report reports/ci-crag-http.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: actual-trained-crag-evidence
+          path: |
+            reports/ci-research-crag.json
+            reports/ci-crag.junit.xml
+            reports/ci-crag-http.json
+          if-no-files-found: error
+
+  selfrag-trained:
+    name: Actual trained Self-RAG CPU and HTTP lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RAGS_ENV: test
+      RAGS_TEST_SELFRAG: "1"
+      RAGS_SELFRAG_MODEL_PATH: /tmp/rags-selfrag/selfrag_llama2_7b.Q4_K_M.gguf
+      RAGS_SELFRAG_LLAMA_DIR: /tmp/rags-selfrag-runtime/llama-b12631
+      RAGS_SELFRAG_THREADS: "2"
+      RAGS_SELFRAG_REPORT_PATH: reports/ci-selfrag.json
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TOKENIZERS_PARALLELISM: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+        with:
+          version: "0.13.9"
+          enable-cache: true
+          cache-suffix: research-selfrag
+          cache-dependency-glob: |
+            uv.lock
+            requirements/research-selfrag-convert.txt
+      - uses: actions/cache@v4
+        id: selfrag-cache
+        with:
+          path: |
+            /tmp/rags-selfrag/selfrag_llama2_7b.Q4_K_M.gguf
+            /tmp/rags-selfrag/selfrag-manifest.json
+          key: selfrag-official-q4-e6bcabadccb9-${{ runner.os }}
+      - name: Install the ordinary offline-capable application
+        run: uv sync --locked --extra dev
+      - name: Provision the verified native CPU runtime
+        run: |
+          mkdir -p /tmp/rags-selfrag-runtime
+          curl --fail --location --proto '=https' --proto-redir '=https' --max-time 120 \
+            https://github.com/ggml-org/llama.cpp/releases/download/b12631/llama-b12631-bin-ubuntu-x64.tar.gz \
+            --output /tmp/rags-selfrag-runtime/runtime.tar.gz
+          printf '%s  %s\n' \
+            26fbc713d49bea58c826160f3ce0e75bff1d8df8df544823fd40ff329db6155e \
+            /tmp/rags-selfrag-runtime/runtime.tar.gz | sha256sum --check -
+          tar -xzf /tmp/rags-selfrag-runtime/runtime.tar.gz -C /tmp/rags-selfrag-runtime
+      - name: Prepare isolated official-checkpoint conversion environment
+        if: steps.selfrag-cache.outputs.cache-hit != 'true'
+        run: |
+          # This job does not use the hosted image's mobile/.NET SDKs. Removing
+          # those disposable runner-owned tools leaves space for the source,
+          # F16 intermediate and verified Q4 artifact; no repository data is removed.
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet
+          uv venv --python python3.12 "$RUNNER_TEMP/selfrag-convert"
+          uv pip install --python "$RUNNER_TEMP/selfrag-convert/bin/python" --torch-backend cpu \
+            -r requirements/research-selfrag-convert.txt
+      - name: Measure cold-conversion storage and archive headroom
+        if: steps.selfrag-cache.outputs.cache-hit != 'true'
+        run: |
+          uv run --no-sync python - <<'PY'
+          import json
+          import os
+          import shutil
+          from datetime import UTC, datetime
+          from pathlib import Path
+          from scripts.selfrag_local import F16_BYTES, F16_FILENAME, MODEL_BYTES, SOURCE_FILES
+
+          cache = Path(os.environ["RAGS_SELFRAG_MODEL_PATH"]).parent
+          if cache != Path("/tmp/rags-selfrag") or cache.is_symlink():
+              raise SystemExit("Unexpected Self-RAG CI scratch directory")
+          cache.mkdir(parents=True, exist_ok=True)
+          source_bytes = sum(size for name, (size, _) in SOURCE_FILES.items()
+                             if not (cache / name).exists())
+          intermediate_bytes = 0 if (cache / F16_FILENAME).exists() else F16_BYTES
+          required_conversion = source_bytes + intermediate_bytes + MODEL_BYTES + 1024 ** 3
+          # Conversion inputs are removed before the cache archive is staged.
+          # Bound these separate peaks; archive size includes metadata overhead.
+          archive_headroom = MODEL_BYTES + 256 * 1024 ** 2
+          required_cache_save = MODEL_BYTES + archive_headroom
+          required = max(required_conversion, required_cache_save)
+          available = shutil.disk_usage(cache).free
+          evidence = {
+              "schema": "selfrag-ci-storage-v1", "measured_at": datetime.now(UTC).isoformat(),
+              "source_download_bytes": source_bytes, "f16_intermediate_bytes": intermediate_bytes,
+              "q4_model_bytes": MODEL_BYTES, "required_conversion_bytes": required_conversion,
+              "required_cache_save_bytes": required_cache_save,
+              "cache_archive_headroom_bytes": archive_headroom,
+              "required_free_bytes": required, "available_free_bytes": available,
+              "status": "ready" if available >= required else "blocked",
+              "model_inference_executed": False,
+          }
+          destination = Path("reports/ci-selfrag-storage-preflight.json")
+          destination.parent.mkdir(parents=True, exist_ok=True)
+          destination.write_text(json.dumps(evidence, indent=2) + "\n")
+          print(json.dumps(evidence))
+          if available < required:
+              raise SystemExit("Insufficient measured runner storage for verified Self-RAG conversion and cache archive")
+          PY
+      - name: Reproduce or verify the exact trained quantized checkpoint
+        run: >-
+          uv run --no-sync python scripts/selfrag_local.py prepare
+          --cache-dir /tmp/rags-selfrag --llama-dir "$RAGS_SELFRAG_LLAMA_DIR"
+          --python "$RUNNER_TEMP/selfrag-convert/bin/python"
+      - name: Reclaim verified job-owned conversion inputs
+        run: |
+          uv run --no-sync python - <<'PY'
+          import json
+          import os
+          import shutil
+          from pathlib import Path
+          from scripts.selfrag_local import (
+              F16_BYTES, F16_FILENAME, F16_SHA256, SOURCE_ARCHIVE_BYTES,
+              SOURCE_ARCHIVE_SHA256, SOURCE_FILES, manifest, verified,
+          )
+
+          cache = Path(os.environ["RAGS_SELFRAG_MODEL_PATH"]).parent
+          if cache != Path("/tmp/rags-selfrag") or cache.is_symlink():
+              raise SystemExit("Unexpected Self-RAG CI scratch directory")
+          expected = manifest(cache)
+          recorded = json.loads((cache / "selfrag-manifest.json").read_text())
+          if not expected["model"]["verified"] or recorded != expected:
+              raise SystemExit("Final Self-RAG model and manifest must verify before input cleanup")
+          allowed = {name: identity for name, identity in SOURCE_FILES.items() if name.endswith(".bin")}
+          allowed.update({F16_FILENAME: (F16_BYTES, F16_SHA256),
+                          "llama-source.tar.gz": (SOURCE_ARCHIVE_BYTES, SOURCE_ARCHIVE_SHA256)})
+          removed = []
+          for name, (size, digest) in allowed.items():
+              target = cache / name
+              if not target.exists() and not target.is_symlink():
+                  continue
+              if not verified(target, size, digest):
+                  raise SystemExit("Refusing to remove an unverified Self-RAG conversion input")
+              target.unlink()
+              removed.append({"filename": name, "bytes": size})
+          evidence = {"schema": "selfrag-ci-input-cleanup-v1", "final_model_verified": True,
+                      "manifest_verified": True, "removed": removed,
+                      "available_free_bytes": shutil.disk_usage(cache).free}
+          destination = Path("reports/ci-selfrag-storage-cleanup.json")
+          destination.parent.mkdir(parents=True, exist_ok=True)
+          destination.write_text(json.dumps(evidence, indent=2) + "\n")
+          print(json.dumps(evidence))
+          PY
+      - name: Execute actual trained reflection and complete-answer abstention
+        run: >-
+          uv run --no-sync python -m pytest -q tests/test_selfrag_runtime_integration.py
+          --require-no-skips --junitxml reports/ci-selfrag.junit.xml
+      - name: Real trained worker and source lifecycle
+        run: >-
+          uv run --no-sync python scripts/e2e_selfrag_v10.py
+          --report reports/ci-selfrag-http.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: actual-trained-selfrag-evidence
+          path: |
+            reports/ci-selfrag.json
+            reports/ci-selfrag.junit.xml
+            reports/ci-selfrag-http.json
+            reports/ci-selfrag-storage-preflight.json
+            reports/ci-selfrag-storage-cleanup.json
+            /tmp/rags-selfrag/selfrag-manifest.json
+          if-no-files-found: error

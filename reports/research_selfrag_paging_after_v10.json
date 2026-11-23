@@ -1,0 +1,1004 @@
+{
+  "schema": "selfrag-main-phase-diagnostic-v10",
+  "http_status": 200,
+  "elapsed_seconds": 14.156176546000097,
+  "sidecar_deadline_seconds": 300,
+  "backend_deadline_seconds": 330,
+  "client_deadline_seconds": 350,
+  "response": {
+    "question": "What is the refund period?",
+    "mode_requested": "self_rag",
+    "answer": "The refund period is 14 days after purchase.\n\n[bbb3234fadc1199ba8f783a34d23693b]",
+    "citations": [
+      {
+        "chunk_id": "bbb3234fadc1199ba8f783a34d23693b",
+        "document_id": "refund",
+        "title": "Synthetic refund",
+        "source": "fixture:refund",
+        "section": "Document",
+        "score": 2.21177989,
+        "text": "The refund period is 14 days after purchase.",
+        "revision": "b0c691989e954852bfa8ac02e5c432a0",
+        "profile_id": "dcd8e49aeb257c0940e1a46a3ac86ece3bd1aa2819b4820590df29488828559e",
+        "start_char": 0,
+        "end_char": 44,
+        "origin_source": "local",
+        "origin_chunk_id": "bbb3234fadc1199ba8f783a34d23693b"
+      }
+    ],
+    "retrieval_diagnostics": {
+      "candidate_count": 1,
+      "candidate_ids": [
+        "bbb3234fadc1199ba8f783a34d23693b"
+      ],
+      "candidate_document_ids": [
+        "refund"
+      ],
+      "usable_as_evidence": false
+    },
+    "budget": {
+      "input_units": 339,
+      "unit": "unicode_codepoints",
+      "count_kind": "fallback_units",
+      "tokenizer": "unicode-codepoints-v1",
+      "included_ids": [
+        "bbb3234fadc1199ba8f783a34d23693b"
+      ],
+      "dropped_ids": [],
+      "truncated_ids": [],
+      "context_budget": 16000,
+      "output_reserve": 1024,
+      "envelope_reserve": 256
+    },
+    "usage": {
+      "calls": 0,
+      "provider_reports": [],
+      "token_usage": "unavailable",
+      "cost": null,
+      "cost_reason": "No operator pricing schedule configured"
+    },
+    "mode_used": "self_rag",
+    "engine": "self_rag:authorized-evidence-v2",
+    "score_kind": "backend_score",
+    "trace": [
+      {
+        "action": "retrieve",
+        "mode": "self_rag",
+        "candidates": 1,
+        "encoder": "offline-hash-v1"
+      },
+      {
+        "operation": "external_backend",
+        "backend": "self_rag",
+        "evidence_level": "pinned_upstream_reported",
+        "implementation": {
+          "library": "self-rag",
+          "version": "git-1fcdc42",
+          "source_commit": "1fcdc420e48f50a7d7ab1ece5494221b93252e99",
+          "adapter_version": "v10"
+        },
+        "diagnostics": {
+          "source_count": 1,
+          "engine_executed": true,
+          "reflection_calls": 1,
+          "generated_tokens": 16,
+          "reflection_relevance_tokens": 1,
+          "reflection_support_tokens": 1,
+          "reflection_utility_tokens": 1,
+          "reflection_abstentions": 0,
+          "checkpoint_sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+          "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+          "runtime": "llama.cpp-b12631-cpu-owned-buffers",
+          "checkpoint_revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+          "checkpoint_quantization": "Q4_K_M",
+          "inference_mode": "always_retrieve_short_form",
+          "score_kind": "conditional_reflection_reward"
+        }
+      }
+    ],
+    "backend_usage": {
+      "reported": {
+        "input_tokens": 37,
+        "output_tokens": 16
+      }
+    },
+    "admission": {
+      "policy_version": "evidence-admission-v1",
+      "decision": "unassessed",
+      "basis": "ranked_unassessed",
+      "profile_id": null,
+      "score": null,
+      "threshold": null,
+      "candidate_count": 1,
+      "accepted_count": 1
+    },
+    "supported": null,
+    "outcome": "success",
+    "refusal_reason": null
+  },
+  "phase_profile": [
+    {
+      "stage": "python_boot",
+      "pid": 7,
+      "time": 4317.340375178,
+      "cpu_seconds": 0.065137,
+      "max_rss_bytes": 30670848,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "native_threads": "4",
+      "omp_threads": "2"
+    },
+    {
+      "stage": "python_boot",
+      "pid": 9,
+      "time": 4318.011842173,
+      "cpu_seconds": 0.054605,
+      "max_rss_bytes": 34340864,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "native_threads": "4",
+      "omp_threads": "2"
+    },
+    {
+      "stage": "worker_spawn",
+      "pid": 7,
+      "time": 4318.517011191,
+      "cpu_seconds": 0.550456,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "child_pid": 11
+    },
+    {
+      "stage": "python_boot",
+      "pid": 11,
+      "time": 4318.575414854,
+      "cpu_seconds": 0.05893799999999999,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "native_threads": "4",
+      "omp_threads": "2"
+    },
+    {
+      "stage": "model_init_start",
+      "pid": 11,
+      "time": 4318.727014178,
+      "cpu_seconds": 0.21056899999999998,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4318.727190677,
+      "cpu_seconds": 0.21076599999999998,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "selfrag_llama2_7b.Q4_K_M.gguf"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.324799143,
+      "cpu_seconds": 3.805541,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "selfrag_llama2_7b.Q4_K_M.gguf"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.325186867,
+      "cpu_seconds": 3.806237,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libllama.so.1.0.0"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.346895246,
+      "cpu_seconds": 3.827267,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libllama.so.1.0.0"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.347158212,
+      "cpu_seconds": 3.8275319999999997,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml.so.1.0.0"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.347594259,
+      "cpu_seconds": 3.827782,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml.so.1.0.0"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.347690385,
+      "cpu_seconds": 3.8278839999999996,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-base.so.1.0.0"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.349814984,
+      "cpu_seconds": 3.8291049999999998,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-base.so.1.0.0"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.349983486,
+      "cpu_seconds": 3.829312,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-alderlake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.359837922,
+      "cpu_seconds": 3.8385029999999998,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-alderlake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.360392975,
+      "cpu_seconds": 3.8390839999999997,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-cannonlake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.369818747,
+      "cpu_seconds": 3.847759,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-cannonlake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.370088266,
+      "cpu_seconds": 3.848063,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-cascadelake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.378623259,
+      "cpu_seconds": 3.85562,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-cascadelake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.378813576,
+      "cpu_seconds": 3.855844,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-cooperlake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.385087664,
+      "cpu_seconds": 3.861369,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-cooperlake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.385253104,
+      "cpu_seconds": 3.861576,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-haswell.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.388836491,
+      "cpu_seconds": 3.864292,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-haswell.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.388996956,
+      "cpu_seconds": 3.864624,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-icelake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.39483075,
+      "cpu_seconds": 3.8696089999999996,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-icelake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.394969107,
+      "cpu_seconds": 3.86978,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-ivybridge.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.398364443,
+      "cpu_seconds": 3.872578,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-ivybridge.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.39853052,
+      "cpu_seconds": 3.87277,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-piledriver.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.401784313,
+      "cpu_seconds": 3.875403,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-piledriver.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.401995956,
+      "cpu_seconds": 3.875676,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-sandybridge.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.405993155,
+      "cpu_seconds": 3.878886,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-sandybridge.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.40614822,
+      "cpu_seconds": 3.87907,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-sapphirerapids.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.411966074,
+      "cpu_seconds": 3.8841919999999996,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-sapphirerapids.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.412186007,
+      "cpu_seconds": 3.884435,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-skylakex.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.418633074,
+      "cpu_seconds": 3.890229,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-skylakex.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.418784099,
+      "cpu_seconds": 3.890409,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-sse42.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.421605496,
+      "cpu_seconds": 3.892676,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-sse42.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.421730888,
+      "cpu_seconds": 3.892829,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-x64.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.42579008,
+      "cpu_seconds": 3.8964079999999996,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-x64.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 4322.425963157,
+      "cpu_seconds": 3.8966069999999995,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-zen4.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 4322.434153336,
+      "cpu_seconds": 3.9041129999999997,
+      "max_rss_bytes": 45846528,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "artifact": "libggml-cpu-zen4.so"
+    },
+    {
+      "stage": "model_init_end",
+      "pid": 11,
+      "time": 4327.639529626,
+      "cpu_seconds": 8.363725,
+      "max_rss_bytes": 4121755648,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "cpu_backend": "libggml-cpu-zen4.so"
+    },
+    {
+      "stage": "context_prepare_start",
+      "pid": 11,
+      "time": 4327.640350417,
+      "cpu_seconds": 8.36434,
+      "max_rss_bytes": 4121886720,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "input_tokens": 37
+    },
+    {
+      "stage": "context_prepare_end",
+      "pid": 11,
+      "time": 4327.713641658,
+      "cpu_seconds": 8.436437,
+      "max_rss_bytes": 4257611776,
+      "major_faults": 6,
+      "oom_kill_counter": 2,
+      "input_tokens": 37,
+      "context_tokens": 256
+    },
+    {
+      "stage": "generate_start",
+      "pid": 11,
+      "time": 4327.713779948,
+      "cpu_seconds": 8.436644,
+      "max_rss_bytes": 4257611776,
+      "major_faults": 6,
+      "oom_kill_counter": 2
+    },
+    {
+      "stage": "context_prepare_start",
+      "pid": 11,
+      "time": 4327.714005308,
+      "cpu_seconds": 8.436867,
+      "max_rss_bytes": 4257611776,
+      "major_faults": 6,
+      "oom_kill_counter": 2,
+      "input_tokens": 37
+    },
+    {
+      "stage": "context_prepare_end",
+      "pid": 11,
+      "time": 4327.714071719,
+      "cpu_seconds": 8.436939,
+      "max_rss_bytes": 4257611776,
+      "major_faults": 6,
+      "oom_kill_counter": 2,
+      "input_tokens": 37,
+      "context_tokens": 256
+    },
+    {
+      "stage": "decode_start",
+      "pid": 11,
+      "time": 4327.727360429,
+      "cpu_seconds": 8.450085,
+      "max_rss_bytes": 4257611776,
+      "major_faults": 6,
+      "oom_kill_counter": 2,
+      "input_count": 37,
+      "position": 0
+    },
+    {
+      "stage": "decode_end",
+      "pid": 11,
+      "time": 4329.090340987,
+      "cpu_seconds": 13.883486999999999,
+      "max_rss_bytes": 4268572672,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 37,
+      "position": 0
+    },
+    {
+      "stage": "decode_start",
+      "pid": 11,
+      "time": 4329.093591455,
+      "cpu_seconds": 13.898829,
+      "max_rss_bytes": 4270145536,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 37
+    },
+    {
+      "stage": "decode_end",
+      "pid": 11,
+      "time": 4329.334353999,
+      "cpu_seconds": 14.855356,
+      "max_rss_bytes": 4270145536,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 37
+    },
+    {
+      "stage": "decode_start",
+      "pid": 11,
+      "time": 4329.338673841,
+      "cpu_seconds": 14.872551000000001,
+      "max_rss_bytes": 4271325184,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 38
+    },
+    {
+      "stage": "decode_end",
+      "pid": 11,
+      "time": 4329.538389471,
+      "cpu_seconds": 15.661538,
+      "max_rss_bytes": 4271325184,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 38
+    },
+    {
+      "stage": "decode_start",
+      "pid": 11,
+      "time": 4329.541208546,
+      "cpu_seconds": 15.676292,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 39
+    },
+    {
+      "stage": "decode_end",
+      "pid": 11,
+      "time": 4329.724980849,
+      "cpu_seconds": 16.411883,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 39
+    },
+    {
+      "stage": "decode_start",
+      "pid": 11,
+      "time": 4329.727634969,
+      "cpu_seconds": 16.414566,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 40
+    },
+    {
+      "stage": "decode_end",
+      "pid": 11,
+      "time": 4329.919976154,
+      "cpu_seconds": 17.182613,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 40
+    },
+    {
+      "stage": "decode_start",
+      "pid": 11,
+      "time": 4329.922605896,
+      "cpu_seconds": 17.197366,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 41
+    },
+    {
+      "stage": "decode_end",
+      "pid": 11,
+      "time": 4330.109658051,
+      "cpu_seconds": 17.948113,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 41
+    },
+    {
+      "stage": "decode_start",
+      "pid": 11,
+      "time": 4330.112576436,
+      "cpu_seconds": 17.963051,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 42
+    },
+    {
+      "stage": "decode_end",
+      "pid": 11,
+      "time": 4330.310307556,
+      "cpu_seconds": 18.748276,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 42
+    },
+    {
+      "stage": "decode_start",
+      "pid": 11,
+      "time": 4330.312544777,
+      "cpu_seconds": 18.762515,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 43
+    },
+    {
+      "stage": "decode_end",
+      "pid": 11,
+      "time": 4330.517481122,
+      "cpu_seconds": 19.579193,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 43
+    },
+    {
+      "stage": "decode_start",
+      "pid": 11,
+      "time": 4330.519902837,
+      "cpu_seconds": 19.581685,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 44
+    },
+    {
+      "stage": "decode_end",
+      "pid": 11,
+      "time": 4330.747698633,
+      "cpu_seconds": 20.491109,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 44
+    },
+    {
+      "stage": "decode_start",
+      "pid": 11,
+      "time": 4330.750239368,
+      "cpu_seconds": 20.505646,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 45
+    },
+    {
+      "stage": "decode_end",
+      "pid": 11,
+      "time": 4330.960387396,
+      "cpu_seconds": 21.351581,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 45
+    },
+    {
+      "stage": "decode_start",
+      "pid": 11,
+      "time": 4330.962900213,
+      "cpu_seconds": 21.354121,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 46
+    },
+    {
+      "stage": "decode_end",
+      "pid": 11,
+      "time": 4331.179070048,
+      "cpu_seconds": 22.214660000000002,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 46
+    },
+    {
+      "stage": "decode_start",
+      "pid": 11,
+      "time": 4331.182025751,
+      "cpu_seconds": 22.229605999999997,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 47
+    },
+    {
+      "stage": "decode_end",
+      "pid": 11,
+      "time": 4331.427753193,
+      "cpu_seconds": 23.202254,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 47
+    },
+    {
+      "stage": "decode_start",
+      "pid": 11,
+      "time": 4331.430448846,
+      "cpu_seconds": 23.217033,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 48
+    },
+    {
+      "stage": "decode_end",
+      "pid": 11,
+      "time": 4331.643666412,
+      "cpu_seconds": 24.06589,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 48
+    },
+    {
+      "stage": "decode_start",
+      "pid": 11,
+      "time": 4331.64621741,
+      "cpu_seconds": 24.080462,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 49
+    },
+    {
+      "stage": "decode_end",
+      "pid": 11,
+      "time": 4331.939669848,
+      "cpu_seconds": 25.229771,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 49
+    },
+    {
+      "stage": "decode_start",
+      "pid": 11,
+      "time": 4331.943002462,
+      "cpu_seconds": 25.245101000000002,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 50
+    },
+    {
+      "stage": "decode_end",
+      "pid": 11,
+      "time": 4332.250826985,
+      "cpu_seconds": 26.416897000000002,
+      "max_rss_bytes": 4271849472,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 50
+    },
+    {
+      "stage": "decode_start",
+      "pid": 11,
+      "time": 4332.255006059,
+      "cpu_seconds": 26.432931,
+      "max_rss_bytes": 4272111616,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 51
+    },
+    {
+      "stage": "decode_end",
+      "pid": 11,
+      "time": 4332.493097446,
+      "cpu_seconds": 27.385132,
+      "max_rss_bytes": 4272111616,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_count": 1,
+      "position": 51
+    },
+    {
+      "stage": "generate_end",
+      "pid": 11,
+      "time": 4332.495489626,
+      "cpu_seconds": 27.387533,
+      "max_rss_bytes": 4272111616,
+      "major_faults": 11,
+      "oom_kill_counter": 2,
+      "input_tokens": 37,
+      "output_tokens": 16,
+      "ended": true,
+      "token_ids": [
+        32004,
+        1576,
+        2143,
+        870,
+        3785,
+        338,
+        29871,
+        29896,
+        29946,
+        3841,
+        1156,
+        20590,
+        29889,
+        32012,
+        32011,
+        2
+      ],
+      "control_ids": [
+        32004,
+        32012,
+        32011,
+        2
+      ]
+    },
+    {
+      "stage": "worker_exit",
+      "pid": 7,
+      "time": 4332.641858893,
+      "cpu_seconds": 0.607462,
+      "max_rss_bytes": 45977600,
+      "major_faults": 0,
+      "oom_kill_counter": 2,
+      "child_pid": 11,
+      "returncode": 0,
+      "child_peak_rss_bytes": 4272111616
+    }
+  ],
+  "evidence_kind": "temporary_phase_instrumentation_on_the_actual_pinned_native_runtime",
+  "no_checkpoint_or_inference_policy_changes": true,
+  "native_parameters": {
+    "load_mode": "NONE (0)",
+    "lazy_mode": "OFF (0)",
+    "context_tokens": 256,
+    "threads": 4,
+    "kv_precision": "unchanged native F16 keys and values"
+  },
+  "comparison_role": "after owned CPU buffers and prompt-sized KV allocation"
+}

@@ -17,7 +17,9 @@ from urllib.parse import urlparse
 import httpx
 
 from rags.features import FeatureFlags, strategy_features
-from rags.research_protocol import ResearchRequest, UPSTREAMS, validate_result
+from rags.registry import CapabilityError
+from rags.research_protocol import ANSWER_ENGINES, ResearchRequest, UPSTREAMS, validate_external_hosts, validate_result
+from rags.model_profiles import strict_json
 
 
 PAPER_BACKENDS = {
@@ -29,6 +31,48 @@ PAPER_BACKENDS = {
 
 class BackendUnavailable(ValueError):
     """A configured capability cannot run, without a silent substitute."""
+
+
+class _PinnedBackendError(CapabilityError):
+    """Only locally mapped pinned-service failures cross the HTTP boundary."""
+
+
+_PINNED_RESEARCH_ERRORS = {
+    (422, "context_budget_exceeded"): "Research model input exceeds the configured context budget",
+    (422, "research_limit_exceeded"): "Research request exceeds a supported execution limit",
+    (422, "insufficient_graph_evidence"): "Research graph has insufficient source evidence",
+    (422, "invalid_research_input"): "Research input contains invalid text or reserved model control tokens",
+    (504, "upstream_timeout"): "Research execution exceeded its configured deadline",
+    (504, "external_source_timeout"): "External research source acquisition exceeded its deadline",
+    (429, "research_capacity"): "Research service capacity is exhausted",
+    (403, "feature_disabled"): "A required research feature is disabled",
+    (403, "external_source_forbidden"): "External research source acquisition is not authorized",
+    (503, "requires_provider"): "Research execution requires a configured model provider",
+    (503, "requires_dependency"): "Research execution requires an installed dependency",
+    (503, "requires_source"): "Research execution requires the pinned upstream source",
+    (503, "requires_external_source"): "Research execution requires an available external source",
+    (503, "requires_search_credentials"): "Research execution requires configured search credentials",
+    (502, "upstream_failed"): "Research execution failed",
+    (502, "invalid_worker_output"): "Research execution returned invalid output",
+}
+
+
+def _pinned_backend_error(status: int, body: bytes) -> _PinnedBackendError | None:
+    """Accept the service's small error envelope, never its free-form message."""
+    try:
+        data = strict_json(body)
+    except (ValueError, TypeError, RecursionError):
+        return None
+    if not isinstance(data, dict) or set(data) != {"detail"}:
+        return None
+    detail = data["detail"]
+    if not isinstance(detail, dict) or set(detail) - {"code", "reason"}:
+        return None
+    code = detail.get("code")
+    if not isinstance(code, str) or ("reason" in detail and not isinstance(detail["reason"], str)):
+        return None
+    reason = _PINNED_RESEARCH_ERRORS.get((status, code))
+    return _PinnedBackendError(code, reason, status) if reason is not None else None
 
 
 def maxsim(query, document, query_mask=None, document_mask=None) -> float:
@@ -97,7 +141,12 @@ class BackendManager:
                 raise ValueError("Research backend timeout_seconds must be finite and between 1 and 360")
             required = config.get("require_pinned_upstream", False)
             if type(required) is not bool or (required and name not in UPSTREAMS):
-                raise ValueError("Pinned upstream identity is supported only for RAPTOR and LightRAG")
+                raise ValueError("Pinned upstream identity requires a supplied research adapter")
+            hosts = validate_external_hosts(config.get("external_hosts", []))
+            if hosts and (name != "crag" or not required):
+                raise ValueError("External sources require the pinned CRAG adapter and explicit hosts")
+            if name in ANSWER_ENGINES and not required:
+                raise ValueError("Trained/corrective answer engines require pinned upstream validation")
             model = config.get("model")
             if model is not None and (not isinstance(model, str) or not 1 <= len(model) <= 200):
                 raise ValueError("Research backend model must be a bounded operator label")
@@ -125,7 +174,8 @@ class BackendManager:
                 observed = self._observed.get((tenant, name)) if tenant is not None else None
             entries.append({
                 "id": name, "family": PAPER_BACKENDS.get(name, "Multi-vector retrieval"),
-                "implementation": "fastembed_colbert_maxsim" if local else "authorized_evidence_http_v1",
+                "implementation": ("fastembed_colbert_maxsim" if local else
+                                   "authorized_evidence_http_v2" if name in ANSWER_ENGINES else "authorized_evidence_http_v1"),
                 "requirements": ["encoders extra and checkpoint"] if local else ["operator research backend"],
                 "status": "available" if available else "requires_backend",
                 "reason": ("Checkpoint loads on first query; availability is not a quality verification"
@@ -177,7 +227,14 @@ class BackendManager:
                 async with client.stream("POST", config["url"], headers={"Authorization": "Bearer " + token,
                                          "Accept-Encoding": "identity", "Content-Type": "application/json"},
                                          content=encoded) as response:
-                    response.raise_for_status()
+                    # Only the operator's pinned service may return typed
+                    # operational errors. Redirects never reach body parsing or
+                    # forward credentials, and unpinned failures retain the
+                    # existing sanitized unavailable response.
+                    if not response.is_success and (
+                        config.get("require_pinned_upstream") is not True or not response.is_error
+                    ):
+                        response.raise_for_status()
                     if response.headers.get("content-encoding", "identity").lower() != "identity":
                         raise BackendUnavailable("Compressed research responses are not accepted")
                     if int(response.headers.get("content-length", "0")) > 1_000_000:
@@ -191,6 +248,11 @@ class BackendManager:
                         body.extend(part)
                     if time.monotonic() > deadline:
                         raise BackendUnavailable("Research backend response deadline exceeded")
+                    if response.is_error:
+                        failure = _pinned_backend_error(response.status_code, bytes(body))
+                        if failure is not None:
+                            raise failure
+                        response.raise_for_status()
                     return bytes(body)
 
     def search(self, mode, *, tenant, question, chunks, top_k, options=None) -> dict:
@@ -223,29 +285,40 @@ class BackendManager:
         token = config.get("tenant_tokens", {}).get(tenant)
         if not token:
             raise BackendUnavailable("No tenant credential is configured for this research backend")
+        if (mode == "crag" and config.get("external_hosts") and options
+                and (options.get("filters") or options.get("as_of") is not None)):
+            raise CapabilityError("external_scope_unsupported",
+                                  "CRAG web acquisition cannot satisfy source filters or historical queries", 422)
         authorized = {c["id"] for c in chunks}
         payload = {
-            "protocol": "authorized-evidence-v1", "question": question, "top_k": top_k,
+            "protocol": "authorized-evidence-v2" if mode in ANSWER_ENGINES else "authorized-evidence-v1",
+            "question": question, "top_k": top_k,
             "namespace": tenant, "engine": mode, "model": config.get("model"),
             "passages": [{"id": c["id"], "text": c["content"]} for c in chunks],
             "options": {k: v for k, v in (options or {}).items() if k in {"max_iterations"}},
         }
+        if mode == "crag":
+            payload["external_hosts"] = config.get("external_hosts", [])
         encoded = json.dumps(payload, allow_nan=False).encode()
         if len(encoded) > 3_000_000:
             raise BackendUnavailable("Research backend request exceeds 3MB")
         try:
             request_contract = ResearchRequest.model_validate(payload) if mode in UPSTREAMS else None
             body = asyncio.run(self._request(config, token, encoded))
-            data = json.loads(body)
+            data = strict_json(body)
             if not isinstance(data, dict):
                 raise ValueError("Invalid backend response")
             provenance = None
             diagnostics = None
+            answer = None
+            external_sources = []
             if "implementation" in data or "diagnostics" in data or config.get("require_pinned_upstream"):
                 if request_contract is None:
                     raise ValueError("Unsupported pinned upstream identity")
                 verified = validate_result(data, request_contract)
                 provenance, diagnostics = verified["implementation"], verified["diagnostics"]
+                answer, external_sources = verified.get("grounded_answer"), verified.get("external_sources", [])
+                authorized.update(source["id"] for source in external_sources)
             raw = data.get("hits")
             if not isinstance(raw, list) or len(raw) > 100:
                 raise ValueError("Invalid backend hits")
@@ -274,9 +347,14 @@ class BackendManager:
                 if diagnostics.get("engine_executed"):
                     with self._lock:
                         self._observed[tenant, mode] = dict(provenance)
-            return {"hits": hits[:top_k], "trace": [event],
-                    "engine": mode + ":authorized-evidence-v1", "usage": {"reported": usage}}
-        except BackendUnavailable:
+            result = {"hits": hits[:top_k], "trace": [event],
+                      "engine": mode + ":" + payload["protocol"], "usage": {"reported": usage}}
+            if mode in ANSWER_ENGINES:
+                result.update(grounded_answer=answer, external_sources=external_sources,
+                              external_hosts=list(request_contract.external_hosts),
+                              implementation=provenance)
+            return result
+        except (BackendUnavailable, _PinnedBackendError):
             raise
         except TimeoutError as exc:
             raise BackendUnavailable("Research backend response deadline exceeded") from exc

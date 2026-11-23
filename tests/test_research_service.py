@@ -150,6 +150,7 @@ def test_child_environment_does_not_receive_service_keys_or_unrelated_secrets(mo
     for key in ("RAGS_KEYS_JSON", "RAGS_RESEARCH_KEYS_JSON", "AGENT_KEYS_JSON", "UNRELATED_SECRET", "RAGS_ADMISSION_PROFILE"):
         monkeypatch.setenv(key, "credential-sentinel")
     monkeypatch.setenv("RAGS_MODEL_CACHE", "relative-cache")
+    monkeypatch.setenv("RAGS_MODEL_PROVIDER", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "explicit-generation-credential")
     environment = worker_environment(ResearchSettings("raptor", {"key": "a"}, raptor_source=str(tmp_path)))
     assert not any("credential-sentinel" in value for value in environment.values())

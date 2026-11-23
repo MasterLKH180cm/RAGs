@@ -1,0 +1,204 @@
+{
+  "schema": "crag-http-e2e-v10",
+  "verified_at": "2026-11-23T16:22:59.519736+00:00",
+  "engine": "crag",
+  "implementation": {
+    "library": "crag",
+    "version": "git-de7c296",
+    "source_commit": "de7c2961ae624a1483a138c5798e1f6d0c4fb0e0",
+    "adapter_version": "v10"
+  },
+  "runtime_versions": {
+    "torch": "2.5.1+cpu",
+    "transformers": "4.45.2",
+    "sentencepiece": "0.2.1",
+    "safetensors": "0.8.0"
+  },
+  "generation": "explicit_local_openai_protocol_deterministic_fixture",
+  "trained_evaluator_executed": true,
+  "trained_generation_quality_verified": false,
+  "live_external_acquisition_executed": false,
+  "fixture_http_calls": 4,
+  "checks": {
+    "authorization_before_inference": {
+      "invalid_token": 401,
+      "tenant_mismatch": 403,
+      "protocol_mismatch": 422,
+      "unapproved_external_hosts": 403,
+      "no_model_calls": true
+    },
+    "actual_evaluator_and_preserved_answer": {
+      "implementation": {
+        "library": "crag",
+        "version": "git-de7c296",
+        "source_commit": "de7c2961ae624a1483a138c5798e1f6d0c4fb0e0",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "source_count": 1,
+        "engine_executed": true,
+        "evaluator_calls": 2,
+        "refined_strips": 1,
+        "external_sources": 0,
+        "search_calls": 0,
+        "generation_calls": 1,
+        "correction_branch": "correct",
+        "threshold_profile": "popqa_reference_0.592_-0.995",
+        "evaluator_sha256": "cec06c4520a5c3c114f1bbc0e64c40e8375eee61e5bb0a56a38131cf91860af1",
+        "execution_path": "bounded_crag_port",
+        "score_kind": "t5_refined_strip_logit",
+        "generation_provider": "openai:fixture-crag-generation-v1"
+      },
+      "cited_chunk_ids": [
+        "1fdf5a0ba1e8b1b8f777a1194d3a1a89"
+      ],
+      "outcome": "success",
+      "answer_preserved": true,
+      "request_index_removed": true,
+      "elapsed_seconds": 6.340471938000064,
+      "fixture_http_calls": 1
+    },
+    "observed_capability": {
+      "evidence_level": "pinned_upstream_reported"
+    },
+    "updated_snapshot": {
+      "implementation": {
+        "library": "crag",
+        "version": "git-de7c296",
+        "source_commit": "de7c2961ae624a1483a138c5798e1f6d0c4fb0e0",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "source_count": 1,
+        "engine_executed": true,
+        "evaluator_calls": 2,
+        "refined_strips": 1,
+        "external_sources": 0,
+        "search_calls": 0,
+        "generation_calls": 1,
+        "correction_branch": "correct",
+        "threshold_profile": "popqa_reference_0.592_-0.995",
+        "evaluator_sha256": "cec06c4520a5c3c114f1bbc0e64c40e8375eee61e5bb0a56a38131cf91860af1",
+        "execution_path": "bounded_crag_port",
+        "score_kind": "t5_refined_strip_logit",
+        "generation_provider": "openai:fixture-crag-generation-v1"
+      },
+      "cited_chunk_ids": [
+        "76bc1f8bed3ae20d589040c86cfdde5a"
+      ],
+      "outcome": "success",
+      "answer_preserved": true,
+      "request_index_removed": true,
+      "elapsed_seconds": 6.445408079999879,
+      "fixture_http_calls": 1
+    },
+    "historical_snapshot": {
+      "implementation": {
+        "library": "crag",
+        "version": "git-de7c296",
+        "source_commit": "de7c2961ae624a1483a138c5798e1f6d0c4fb0e0",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "source_count": 1,
+        "engine_executed": true,
+        "evaluator_calls": 2,
+        "refined_strips": 1,
+        "external_sources": 0,
+        "search_calls": 0,
+        "generation_calls": 1,
+        "correction_branch": "correct",
+        "threshold_profile": "popqa_reference_0.592_-0.995",
+        "evaluator_sha256": "cec06c4520a5c3c114f1bbc0e64c40e8375eee61e5bb0a56a38131cf91860af1",
+        "execution_path": "bounded_crag_port",
+        "score_kind": "t5_refined_strip_logit",
+        "generation_provider": "openai:fixture-crag-generation-v1"
+      },
+      "cited_chunk_ids": [
+        "1fdf5a0ba1e8b1b8f777a1194d3a1a89"
+      ],
+      "outcome": "success",
+      "answer_preserved": true,
+      "request_index_removed": true,
+      "elapsed_seconds": 6.558128301999886,
+      "fixture_http_calls": 1
+    },
+    "tenant_source_isolation": {
+      "implementation": {
+        "library": "crag",
+        "version": "git-de7c296",
+        "source_commit": "de7c2961ae624a1483a138c5798e1f6d0c4fb0e0",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "source_count": 1,
+        "engine_executed": true,
+        "evaluator_calls": 2,
+        "refined_strips": 1,
+        "external_sources": 0,
+        "search_calls": 0,
+        "generation_calls": 1,
+        "correction_branch": "correct",
+        "threshold_profile": "popqa_reference_0.592_-0.995",
+        "evaluator_sha256": "cec06c4520a5c3c114f1bbc0e64c40e8375eee61e5bb0a56a38131cf91860af1",
+        "execution_path": "bounded_crag_port",
+        "score_kind": "t5_refined_strip_logit",
+        "generation_provider": "openai:fixture-crag-generation-v1"
+      },
+      "cited_chunk_ids": [
+        "05ec53c197674cf517afc2640346a8a7"
+      ],
+      "outcome": "success",
+      "answer_preserved": true,
+      "request_index_removed": true,
+      "elapsed_seconds": 6.156918737000069,
+      "fixture_http_calls": 1
+    },
+    "deleted_current_snapshot": {
+      "implementation": {
+        "library": "crag",
+        "version": "git-de7c296",
+        "source_commit": "de7c2961ae624a1483a138c5798e1f6d0c4fb0e0",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "source_count": 0,
+        "engine_executed": false
+      },
+      "cited_chunk_ids": [],
+      "outcome": "insufficient_evidence",
+      "answer_preserved": false,
+      "request_index_removed": true,
+      "elapsed_seconds": 0.20293144399988705,
+      "fixture_http_calls": 0
+    },
+    "deleted_historical_snapshot": {
+      "implementation": {
+        "library": "crag",
+        "version": "git-de7c296",
+        "source_commit": "de7c2961ae624a1483a138c5798e1f6d0c4fb0e0",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "source_count": 0,
+        "engine_executed": false
+      },
+      "cited_chunk_ids": [],
+      "outcome": "insufficient_evidence",
+      "answer_preserved": false,
+      "request_index_removed": true,
+      "elapsed_seconds": 0.253110955000011,
+      "fixture_http_calls": 0
+    },
+    "other_tenant_retained_after_delete": {
+      "retained": true
+    },
+    "deadline_cleanup": {
+      "http_status": 504,
+      "code": "upstream_timeout",
+      "request_index_removed": true
+    }
+  },
+  "passed": true,
+  "elapsed_seconds": 29.060962883000002
+}

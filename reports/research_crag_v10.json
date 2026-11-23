@@ -1,0 +1,263 @@
+{
+  "schema": "actual-crag-evaluator-verification-v1",
+  "engine": "crag",
+  "verified_at": "2026-11-23T16:22:27.529777+00:00",
+  "python": "3.12.14",
+  "verification": "official_trained_evaluator_cpu_all_three_branches_synthetic_generation_and_external_sources",
+  "runtime_versions": {
+    "torch": "2.5.1+cpu",
+    "transformers": "4.45.2",
+    "sentencepiece": "0.2.1",
+    "safetensors": "0.8.0"
+  },
+  "artifact_manifest": {
+    "added_tokens.json": {
+      "bytes": 2593,
+      "sha256": "ea5a91a3234f66ea642c8e672d67f0f493759a9bee6910ae304ea9b9492118b5"
+    },
+    "config.json": {
+      "bytes": 1640,
+      "sha256": "461ccb7bcf02bd80e57086fa943a2466a10df28891aea1923d64f29ac3f87a64"
+    },
+    "model.safetensors": {
+      "bytes": 2954943548,
+      "sha256": "cec06c4520a5c3c114f1bbc0e64c40e8375eee61e5bb0a56a38131cf91860af1"
+    },
+    "special_tokens_map.json": {
+      "bytes": 2543,
+      "sha256": "7a1985a994c41886db38c719d2a3d2f40606663cc19d7c5d6a85d349320e06d2"
+    },
+    "spiece.model": {
+      "bytes": 791656,
+      "sha256": "d60acb128cf7b7f2536e8f38a5b18a05535c9e14c7a355904270e15b0945ea86"
+    },
+    "tokenizer_config.json": {
+      "bytes": 20817,
+      "sha256": "294d5c94534a121446dbe873dc6d3e736e31c3e71ac628fd6105d1d3f73b7eac"
+    }
+  },
+  "thresholds": {
+    "upper": 0.592,
+    "lower": -0.995,
+    "profile": "popqa_reference"
+  },
+  "cases": [
+    {
+      "branch": "correct",
+      "result": {
+        "hits": [
+          {
+            "chunk_id": "authorized-original",
+            "score": 0.8540734648704529
+          }
+        ],
+        "grounded_answer": {
+          "text": "William Shakespeare wrote Hamlet.",
+          "cited_ids": [
+            "authorized-original"
+          ]
+        },
+        "external_sources": [],
+        "implementation": {
+          "library": "crag",
+          "version": "git-de7c296",
+          "source_commit": "de7c2961ae624a1483a138c5798e1f6d0c4fb0e0",
+          "adapter_version": "v10"
+        },
+        "diagnostics": {
+          "source_count": 1,
+          "engine_executed": true,
+          "evaluator_calls": 2,
+          "refined_strips": 1,
+          "external_sources": 0,
+          "search_calls": 0,
+          "generation_calls": 1,
+          "correction_branch": "correct",
+          "threshold_profile": "popqa_reference_0.592_-0.995",
+          "evaluator_sha256": "cec06c4520a5c3c114f1bbc0e64c40e8375eee61e5bb0a56a38131cf91860af1",
+          "execution_path": "bounded_crag_port",
+          "score_kind": "t5_refined_strip_logit",
+          "generation_provider": "fixture:crag-deterministic-generation-v1"
+        },
+        "usage": null
+      },
+      "score_observations": [
+        {
+          "question": "Who wrote Hamlet?",
+          "source_sha256": "fcd0b0c2a5fe89b090bd6b024d647eee67253726fc5826efe34f235df79db4f3",
+          "logit": 0.8540734648704529,
+          "input_tokens": 21
+        },
+        {
+          "question": "Who wrote Hamlet?",
+          "source_sha256": "fcd0b0c2a5fe89b090bd6b024d647eee67253726fc5826efe34f235df79db4f3",
+          "logit": 0.8540734648704529,
+          "input_tokens": 21
+        }
+      ],
+      "elapsed_seconds": 0.831386430000066,
+      "source_snapshot_removed": true,
+      "external_acquisition": "not_required",
+      "live_search_executed": false
+    },
+    {
+      "branch": "ambiguous",
+      "result": {
+        "hits": [
+          {
+            "chunk_id": "authorized-original",
+            "score": 0.28496795892715454
+          },
+          {
+            "chunk_id": "web:274aa0a52c198365498fd66ec93f7dfede62eb5efbac7f4068ae28800cab65fc",
+            "score": 0.28496795892715454
+          }
+        ],
+        "grounded_answer": {
+          "text": "Paris is the capital of France.",
+          "cited_ids": [
+            "authorized-original",
+            "web:274aa0a52c198365498fd66ec93f7dfede62eb5efbac7f4068ae28800cab65fc"
+          ]
+        },
+        "external_sources": [
+          {
+            "id": "web:274aa0a52c198365498fd66ec93f7dfede62eb5efbac7f4068ae28800cab65fc",
+            "url": "https://reference.example.org/france",
+            "title": "Synthetic France reference",
+            "text": "The capital of France is Paris.",
+            "content_sha256": "a1b7eb2ee7a6aded8dda4e6cf30826f5afffb28a5597ee9389e91eb326d4e319",
+            "fetched_at": "2026-11-23T00:00:00+00:00"
+          }
+        ],
+        "implementation": {
+          "library": "crag",
+          "version": "git-de7c296",
+          "source_commit": "de7c2961ae624a1483a138c5798e1f6d0c4fb0e0",
+          "adapter_version": "v10"
+        },
+        "diagnostics": {
+          "source_count": 1,
+          "engine_executed": true,
+          "evaluator_calls": 3,
+          "refined_strips": 2,
+          "external_sources": 1,
+          "search_calls": 1,
+          "generation_calls": 2,
+          "correction_branch": "ambiguous",
+          "threshold_profile": "popqa_reference_0.592_-0.995",
+          "evaluator_sha256": "cec06c4520a5c3c114f1bbc0e64c40e8375eee61e5bb0a56a38131cf91860af1",
+          "execution_path": "bounded_crag_port",
+          "score_kind": "t5_refined_strip_logit",
+          "generation_provider": "fixture:crag-deterministic-generation-v1"
+        },
+        "usage": null
+      },
+      "score_observations": [
+        {
+          "question": "What is the capital of France?",
+          "source_sha256": "a1b7eb2ee7a6aded8dda4e6cf30826f5afffb28a5597ee9389e91eb326d4e319",
+          "logit": 0.28496795892715454,
+          "input_tokens": 19
+        },
+        {
+          "question": "What is the capital of France?",
+          "source_sha256": "a1b7eb2ee7a6aded8dda4e6cf30826f5afffb28a5597ee9389e91eb326d4e319",
+          "logit": 0.28496795892715454,
+          "input_tokens": 19
+        },
+        {
+          "question": "What is the capital of France?",
+          "source_sha256": "a1b7eb2ee7a6aded8dda4e6cf30826f5afffb28a5597ee9389e91eb326d4e319",
+          "logit": 0.28496795892715454,
+          "input_tokens": 19
+        }
+      ],
+      "elapsed_seconds": 1.0221733129999393,
+      "source_snapshot_removed": true,
+      "external_acquisition": "explicit_synthetic_snapshot_fixture",
+      "live_search_executed": false
+    },
+    {
+      "branch": "incorrect",
+      "result": {
+        "hits": [
+          {
+            "chunk_id": "web:274aa0a52c198365498fd66ec93f7dfede62eb5efbac7f4068ae28800cab65fc",
+            "score": 0.28496795892715454
+          }
+        ],
+        "grounded_answer": {
+          "text": "Paris is the capital of France.",
+          "cited_ids": [
+            "web:274aa0a52c198365498fd66ec93f7dfede62eb5efbac7f4068ae28800cab65fc"
+          ]
+        },
+        "external_sources": [
+          {
+            "id": "web:274aa0a52c198365498fd66ec93f7dfede62eb5efbac7f4068ae28800cab65fc",
+            "url": "https://reference.example.org/france",
+            "title": "Synthetic France reference",
+            "text": "The capital of France is Paris.",
+            "content_sha256": "a1b7eb2ee7a6aded8dda4e6cf30826f5afffb28a5597ee9389e91eb326d4e319",
+            "fetched_at": "2026-11-23T00:00:00+00:00"
+          }
+        ],
+        "implementation": {
+          "library": "crag",
+          "version": "git-de7c296",
+          "source_commit": "de7c2961ae624a1483a138c5798e1f6d0c4fb0e0",
+          "adapter_version": "v10"
+        },
+        "diagnostics": {
+          "source_count": 1,
+          "engine_executed": true,
+          "evaluator_calls": 2,
+          "refined_strips": 1,
+          "external_sources": 1,
+          "search_calls": 1,
+          "generation_calls": 2,
+          "correction_branch": "incorrect",
+          "threshold_profile": "popqa_reference_0.592_-0.995",
+          "evaluator_sha256": "cec06c4520a5c3c114f1bbc0e64c40e8375eee61e5bb0a56a38131cf91860af1",
+          "execution_path": "bounded_crag_port",
+          "score_kind": "t5_refined_strip_logit",
+          "generation_provider": "fixture:crag-deterministic-generation-v1"
+        },
+        "usage": null
+      },
+      "score_observations": [
+        {
+          "question": "What is the capital of France?",
+          "source_sha256": "2ab8d757fd3cbf27f31f21f054e2bf01547119225d4ef7d8dd447fa480ba1ee6",
+          "logit": -1.054129958152771,
+          "input_tokens": 20
+        },
+        {
+          "question": "What is the capital of France?",
+          "source_sha256": "a1b7eb2ee7a6aded8dda4e6cf30826f5afffb28a5597ee9389e91eb326d4e319",
+          "logit": 0.28496795892715454,
+          "input_tokens": 19
+        }
+      ],
+      "elapsed_seconds": 0.6490830950001509,
+      "source_snapshot_removed": true,
+      "external_acquisition": "explicit_synthetic_snapshot_fixture",
+      "live_search_executed": false
+    }
+  ],
+  "reference_padding_comparison": {
+    "reference_tokens": 512,
+    "reference_fp32_logit": 0.8540734648704529,
+    "dynamic_fp32_logit": 0.8540734648704529,
+    "absolute_difference": 0.0,
+    "absolute_tolerance": 1e-05
+  },
+  "elapsed_seconds_excluding_model_load": 6.715473820999932,
+  "process_peak_rss_bytes": 3552092160,
+  "not_verified": [
+    "live_serper_acquisition",
+    "trained_generation_quality",
+    "paper_benchmark_reproduction"
+  ]
+}

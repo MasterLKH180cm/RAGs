@@ -9,8 +9,11 @@ Companion baseline: `7d1616e1d696d74733343e53135f5bc9e11b9e6a`.
 Make unit, integration and end-to-end verification independently runnable and
 auditable; add meaningful missing contracts and fix defects exposed by them.
 Coverage measures executed code, not correctness or model quality. Do not claim
-100% behavioral completeness or invent support for the four remaining upstream
-research engines. Frozen admission data, profiles, prompts and quality targets
+100% behavioral completeness or invent support for unexecuted upstream
+research engines. The subsequent four-engine implementation follows its own
+[committed specification](RESEARCH_COMPLETION_SPEC.md), with separate actual
+algorithm, trained-checkpoint and HTTP gates described in
+[the execution ledger](RESEARCH_COMPLETION.md). Frozen admission data, profiles, prompts and quality targets
 remain unchanged. A valid-provider response must preserve existing behavior.
 
 The baseline ordinary suite is 280 passed and 5 optional model tests skipped.

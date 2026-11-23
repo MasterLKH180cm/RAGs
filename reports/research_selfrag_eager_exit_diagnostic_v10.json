@@ -1,0 +1,455 @@
+{
+  "schema": "selfrag-main-phase-diagnostic-v10",
+  "http_status": 502,
+  "elapsed_seconds": 23.406144511000093,
+  "sidecar_deadline_seconds": 300,
+  "backend_deadline_seconds": 330,
+  "client_deadline_seconds": 350,
+  "response": {
+    "detail": {
+      "code": "invalid_worker_output",
+      "reason": "Research execution returned invalid output"
+    }
+  },
+  "phase_profile": [
+    {
+      "stage": "python_boot",
+      "pid": 7,
+      "time": 3902.584690867,
+      "cpu_seconds": 0.087503,
+      "max_rss_bytes": 30863360,
+      "major_faults": 0,
+      "native_threads": "4",
+      "omp_threads": "2"
+    },
+    {
+      "stage": "python_boot",
+      "pid": 9,
+      "time": 3903.281365126,
+      "cpu_seconds": 0.084717,
+      "max_rss_bytes": 34676736,
+      "major_faults": 0,
+      "native_threads": "4",
+      "omp_threads": "2"
+    },
+    {
+      "stage": "worker_spawn",
+      "pid": 7,
+      "time": 3904.21538082,
+      "cpu_seconds": 0.577499,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "child_pid": 11
+    },
+    {
+      "stage": "python_boot",
+      "pid": 11,
+      "time": 3904.276867804,
+      "cpu_seconds": 0.062485,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "native_threads": "4",
+      "omp_threads": "2"
+    },
+    {
+      "stage": "model_init_start",
+      "pid": 11,
+      "time": 3904.422137562,
+      "cpu_seconds": 0.207016,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3904.422229568,
+      "cpu_seconds": 0.207129,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "selfrag_llama2_7b.Q4_K_M.gguf"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.069685284,
+      "cpu_seconds": 9.555603,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "selfrag_llama2_7b.Q4_K_M.gguf"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.070250897,
+      "cpu_seconds": 9.556797,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libllama.so.1.0.0"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.092091808,
+      "cpu_seconds": 9.577908,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libllama.so.1.0.0"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.0922974,
+      "cpu_seconds": 9.578174,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml.so.1.0.0"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.092683263,
+      "cpu_seconds": 9.578322,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml.so.1.0.0"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.092756365,
+      "cpu_seconds": 9.578408,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-base.so.1.0.0"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.094723597,
+      "cpu_seconds": 9.579578999999999,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-base.so.1.0.0"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.094830925,
+      "cpu_seconds": 9.579715,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-alderlake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.102485794,
+      "cpu_seconds": 9.58682,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-alderlake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.102570306,
+      "cpu_seconds": 9.586929,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cannonlake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.111233466,
+      "cpu_seconds": 9.594885999999999,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cannonlake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.111304885,
+      "cpu_seconds": 9.594982,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cascadelake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.118789981,
+      "cpu_seconds": 9.601727,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cascadelake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.118888829,
+      "cpu_seconds": 9.601849,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cooperlake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.125733416,
+      "cpu_seconds": 9.608056000000001,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cooperlake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.125869841,
+      "cpu_seconds": 9.608214,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-haswell.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.131604153,
+      "cpu_seconds": 9.61344,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-haswell.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.131672236,
+      "cpu_seconds": 9.613534000000001,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-icelake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.139507793,
+      "cpu_seconds": 9.620477,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-icelake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.139657641,
+      "cpu_seconds": 9.62065,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-ivybridge.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.145466933,
+      "cpu_seconds": 9.62586,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-ivybridge.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.145554535,
+      "cpu_seconds": 9.626006,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-piledriver.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.151711838,
+      "cpu_seconds": 9.631661000000001,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-piledriver.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.151777773,
+      "cpu_seconds": 9.631751,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sandybridge.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.162324587,
+      "cpu_seconds": 9.641193000000001,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sandybridge.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.162617281,
+      "cpu_seconds": 9.642018,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sapphirerapids.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.171928933,
+      "cpu_seconds": 9.650518,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sapphirerapids.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.1720336,
+      "cpu_seconds": 9.650625,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-skylakex.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.178252811,
+      "cpu_seconds": 9.656205,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-skylakex.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.178330323,
+      "cpu_seconds": 9.656309,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sse42.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.181349201,
+      "cpu_seconds": 9.658401,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sse42.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.181543426,
+      "cpu_seconds": 9.658614,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-x64.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.187510302,
+      "cpu_seconds": 9.664057,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-x64.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 11,
+      "time": 3918.191334104,
+      "cpu_seconds": 9.667525,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-zen4.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 11,
+      "time": 3918.201036025,
+      "cpu_seconds": 9.676433,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-zen4.so"
+    },
+    {
+      "stage": "worker_exit",
+      "pid": 7,
+      "time": 3927.526503914,
+      "cpu_seconds": 1.5633659999999998,
+      "max_rss_bytes": 45993984,
+      "major_faults": 0,
+      "child_pid": 11,
+      "returncode": -9
+    }
+  ],
+  "evidence_kind": "temporary_phase_instrumentation_on_the_actual_pinned_native_runtime",
+  "no_checkpoint_or_inference_policy_changes": true,
+  "native_parameters": {
+    "load_mode": "NONE (0)",
+    "lazy_mode": "OFF (0)",
+    "context_tokens": 1792
+  },
+  "native_signal": "SIGKILL",
+  "native_stderr_tail": [
+    "llama_context: n_ctx_seq             = 1792",
+    "llama_context: n_batch               = 256",
+    "llama_context: n_ubatch              = 256",
+    "llama_context: causal_attn           = 1",
+    "llama_context: flash_attn            = auto",
+    "llama_context: kv_unified            = false",
+    "llama_context: freq_base             = 10000.0",
+    "llama_context: freq_scale            = 1",
+    "llama_context: n_rs_seq              = 0",
+    "llama_context: n_outputs_max         = 256",
+    "llama_context: n_outputs_max_per_seq = 1",
+    "llama_context: n_ctx_seq (1792) < n_ctx_train (4096) -- the full capacity of the model will not be utilized",
+    "set_abort_callback: call",
+    "llama_context:        CPU  output buffer size =     0.12 MiB",
+    "llama_kv_cache: layer   0: dev = CPU",
+    "llama_kv_cache: layer   1: dev = CPU",
+    "llama_kv_cache: layer   2: dev = CPU",
+    "llama_kv_cache: layer   3: dev = CPU",
+    "llama_kv_cache: layer   4: dev = CPU",
+    "llama_kv_cache: layer   5: dev = CPU",
+    "llama_kv_cache: layer   6: dev = CPU",
+    "llama_kv_cache: layer   7: dev = CPU",
+    "llama_kv_cache: layer   8: dev = CPU",
+    "llama_kv_cache: layer   9: dev = CPU",
+    "llama_kv_cache: layer  10: dev = CPU",
+    "llama_kv_cache: layer  11: dev = CPU",
+    "llama_kv_cache: layer  12: dev = CPU",
+    "llama_kv_cache: layer  13: dev = CPU",
+    "llama_kv_cache: layer  14: dev = CPU",
+    "llama_kv_cache: layer  15: dev = CPU",
+    "llama_kv_cache: layer  16: dev = CPU",
+    "llama_kv_cache: layer  17: dev = CPU",
+    "llama_kv_cache: layer  18: dev = CPU",
+    "llama_kv_cache: layer  19: dev = CPU",
+    "llama_kv_cache: layer  20: dev = CPU",
+    "llama_kv_cache: layer  21: dev = CPU",
+    "llama_kv_cache: layer  22: dev = CPU",
+    "llama_kv_cache: layer  23: dev = CPU",
+    "llama_kv_cache: layer  24: dev = CPU",
+    "llama_kv_cache: layer  25: dev = CPU",
+    "llama_kv_cache: layer  26: dev = CPU",
+    "llama_kv_cache: layer  27: dev = CPU",
+    "llama_kv_cache: layer  28: dev = CPU",
+    "llama_kv_cache: layer  29: dev = CPU",
+    "llama_kv_cache: layer  30: dev = CPU",
+    "llama_kv_cache: layer  31: dev = CPU"
+  ],
+  "interpretation": "The actual worker exited -9 while allocating the full-size KV cache, after loading weights. This is consistent with a memory ceiling; exact per-process kernel OOM attribution was unavailable.",
+  "paths_normalized_for_public_report": true
+}

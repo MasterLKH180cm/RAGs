@@ -22,6 +22,7 @@ from rags.features import strategy_features
 from rags.native import aggregate_rows, cluster_vectors, graph_search, row_matches, rrf
 from rags.providers import Providers
 from rags.registry import CapabilityError, MODEL_MODES, MODES, NATIVE, UPSTREAM_IDS, strategy
+from rags.research_protocol import ANSWER_ENGINES, GroundedAnswer, ResearchRequest, validate_external_sources
 from rags.storage import Store, timestamp
 from rags.tokenization import ContextItem, pack_context, resolve_tokenizer
 
@@ -431,6 +432,29 @@ class RAGService:
                 raise CapabilityError("requires_backend", "Backend unavailable: " + type(exc).__name__) from exc
             hits = backend.get("hits", [])
             authorized_leaf_ids = {c["id"] for c in leaves}
+            external = backend.get("external_sources", [])
+            if external:
+                config = self._backend().config.get(mode, {})
+                try:
+                    if mode != "crag" or not config.get("require_pinned_upstream"):
+                        raise ValueError("External sources require the pinned CRAG contract")
+                    request = ResearchRequest(
+                        protocol="authorized-evidence-v2", engine="crag", namespace=tenant,
+                        question=question, top_k=top_k,
+                        passages=[{"id": c["id"], "text": c["content"]} for c in leaves],
+                        external_hosts=config.get("external_hosts", []),
+                    )
+                    for source in validate_external_sources(external, request):
+                        lookup[source["id"]] = {
+                            "id": source["id"], "document_id": "web:" + hashlib.sha256(source["url"].encode()).hexdigest(),
+                            "title": source["title"], "source": source["url"], "section": "external web evidence",
+                            "content": source["text"], "revision": source["content_sha256"],
+                            "profile_id": "crag-web-snapshot-v1", "start_char": 0, "end_char": len(source["text"]),
+                            "origin_source": "crag_web", "origin_chunk_id": source["id"], "metadata": {},
+                        }
+                        authorized_leaf_ids.add(source["id"])
+                except (ValueError, TypeError, KeyError) as exc:
+                    raise CapabilityError("invalid_backend_evidence", "Invalid external source provenance", 502) from exc
             if not isinstance(hits, list) or len(hits) > 100 or any(not isinstance(h, dict) or h.get("chunk_id") not in authorized_leaf_ids for h in hits):
                 raise CapabilityError("invalid_backend_evidence", "Backend returned source IDs outside the authorized corpus", 502)
             try:
@@ -444,6 +468,23 @@ class RAGService:
             trace.extend(backend.get("trace", []))
             engine = backend.get("engine", mode)
             extra["backend_usage"] = backend.get("usage")
+            grounded = backend.get("grounded_answer")
+            if grounded is not None:
+                try:
+                    if mode not in ANSWER_ENGINES:
+                        raise ValueError("This engine cannot supply an upstream grounded answer")
+                    answer = GroundedAnswer.model_validate(grounded)
+                    if not set(answer.cited_ids) <= {hit["chunk_id"] for hit in hits[:top_k]}:
+                        raise ValueError("Upstream answer cites missing evidence")
+                    # Preserve the selected model text. References are appended
+                    # from the engine's explicit source selection, never guessed.
+                    draft = answer.text + "\n\n" + " ".join("[" + identifier + "]" for identifier in answer.cited_ids)
+                    _answer_citations(draft, set(answer.cited_ids))
+                except (ValueError, TypeError) as exc:
+                    raise CapabilityError("invalid_backend_evidence", "Invalid upstream grounded answer", 502) from exc
+                extra.update(draft_answer=draft, grounded_ids=answer.cited_ids)
+            elif mode in ANSWER_ENGINES and hits:
+                raise CapabilityError("invalid_backend_evidence", "Upstream engine omitted its selected answer", 502)
         elif mode == "sparse":
             scored = [(key, 1 / (i + 1)) for i, key in enumerate(self._sparse(tenant, question, leaves, limit))]
         elif mode in {"dense", "naive"}:
@@ -726,11 +767,16 @@ class RAGService:
         elif generate and exact:
             answer = f"Structured {aggregate['operation']} result: {aggregate['value']}."
         elif generate:
-            answer, budget, packed_ids = self._generate_answer(question, chunks, result.get("draft_answer"))
+            if "grounded_ids" in result:
+                answer, budget, packed_ids = self._generate_answer(
+                    question, chunks, result.get("draft_answer"), grounded_ids=result["grounded_ids"])
+            else:
+                answer, budget, packed_ids = self._generate_answer(question, chunks, result.get("draft_answer"))
             if not packed_ids:
                 result.update(self.admission.refuse("context_budget_exhausted", "context_budget", len(chunks)))
                 chunks = []
         result.pop("draft_answer", None)
+        result.pop("grounded_ids", None)
         return {"question": question, "mode_requested": mode, "answer": answer,
                 "citations": [self._citation(c) for c in chunks], "retrieval_diagnostics": diagnostics,
                 "budget": budget, "usage": self.provider.usage(), **result}
@@ -743,15 +789,19 @@ class RAGService:
                 "start_char": chunk.get("start_char"), "end_char": chunk.get("end_char"),
                 "origin_source": chunk.get("origin_source", "local"), "origin_chunk_id": chunk.get("origin_chunk_id", chunk["id"])}
 
-    def _generate_answer(self, question: str, chunks: list[dict], draft: str | None) -> tuple:
+    def _generate_answer(self, question: str, chunks: list[dict], draft: str | None,
+                         *, grounded_ids: list[str] | None = None) -> tuple:
         packed = self._evidence(question, chunks)
         budget = {"input_units": packed.token_count, "unit": packed.unit, "count_kind": packed.count_kind,
                   "tokenizer": packed.tokenizer_id, "included_ids": packed.included_ids,
                   "dropped_ids": packed.dropped_ids, "truncated_ids": packed.truncated_ids,
                   "context_budget": self.settings.context_budget, "output_reserve": self.settings.output_budget,
                   "envelope_reserve": self.settings.envelope_budget}
-        if not packed.included_ids:
+        if (not packed.included_ids or (grounded_ids is not None
+                and not set(grounded_ids) <= set(packed.included_ids) - set(packed.truncated_ids))):
             return "Insufficient evidence within the configured context budget.", budget, []
+        if grounded_ids is not None and (not draft or self.tokenizer.count(draft) > self.settings.output_budget):
+            raise CapabilityError("context_budget_exceeded", "Upstream grounded answer exceeds the configured output budget", 422)
         # Keep the counted instructions in their system role; framing has its own reserve.
         answer = draft or self.provider.complete(SYSTEM, packed.text[len(SYSTEM):])
         if answer is None:

@@ -1,0 +1,428 @@
+{
+  "schema": "selfrag-http-e2e-v10",
+  "verified_at": "2026-11-23T17:07:36.774356+00:00",
+  "engine": "self_rag",
+  "implementation": {
+    "library": "self-rag",
+    "version": "git-1fcdc42",
+    "source_commit": "1fcdc420e48f50a7d7ab1ece5494221b93252e99",
+    "adapter_version": "v10"
+  },
+  "checkpoint_revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+  "checkpoint_sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+  "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+  "native_threads": 4,
+  "trained_checkpoint_executed": true,
+  "ordinary_generation_provider": "extractive",
+  "evidence_kind": "actual_trained_checkpoint_with_synthetic_source_lifecycle",
+  "limitations": [
+    "No paper benchmark, domain quality or full-precision equivalence claim.",
+    "Latency includes checkpoint verification, fresh model load and complete request lifecycle."
+  ],
+  "checks": {
+    "authorization_and_protocol": {
+      "invalid_token": 401,
+      "tenant_mismatch": 403,
+      "protocol_mismatch": 422
+    },
+    "trained_answer_preserved": {
+      "implementation": {
+        "library": "self-rag",
+        "version": "git-1fcdc42",
+        "source_commit": "1fcdc420e48f50a7d7ab1ece5494221b93252e99",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "source_count": 1,
+        "engine_executed": true,
+        "reflection_calls": 1,
+        "generated_tokens": 16,
+        "reflection_relevance_tokens": 1,
+        "reflection_support_tokens": 1,
+        "reflection_utility_tokens": 1,
+        "reflection_abstentions": 0,
+        "checkpoint_sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+        "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+        "runtime": "llama.cpp-b12631-cpu-owned-buffers",
+        "checkpoint_revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+        "checkpoint_quantization": "Q4_K_M",
+        "inference_mode": "always_retrieve_short_form",
+        "score_kind": "conditional_reflection_reward"
+      },
+      "cited_chunk_ids": [
+        "3638276e2b4874ad90b3ea01d72afd22"
+      ],
+      "outcome": "success",
+      "answer": "The refund period is 14 days after purchase.\n\n[3638276e2b4874ad90b3ea01d72afd22]",
+      "ordinary_provider_calls": 0,
+      "request_index_removed": true,
+      "elapsed_seconds": 13.120203016999767
+    },
+    "observed_capability": {
+      "evidence_level": "pinned_upstream_reported"
+    },
+    "updated_source_content": {
+      "implementation": {
+        "library": "self-rag",
+        "version": "git-1fcdc42",
+        "source_commit": "1fcdc420e48f50a7d7ab1ece5494221b93252e99",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "source_count": 1,
+        "engine_executed": true,
+        "reflection_calls": 1,
+        "generated_tokens": 16,
+        "reflection_relevance_tokens": 1,
+        "reflection_support_tokens": 1,
+        "reflection_utility_tokens": 1,
+        "reflection_abstentions": 0,
+        "checkpoint_sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+        "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+        "runtime": "llama.cpp-b12631-cpu-owned-buffers",
+        "checkpoint_revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+        "checkpoint_quantization": "Q4_K_M",
+        "inference_mode": "always_retrieve_short_form",
+        "score_kind": "conditional_reflection_reward"
+      },
+      "cited_chunk_ids": [
+        "6a38742fa2ce3a08a4b4dcbad6514542"
+      ],
+      "outcome": "success",
+      "answer": "The refund period is 30 days after purchase.\n\n[6a38742fa2ce3a08a4b4dcbad6514542]",
+      "ordinary_provider_calls": 0,
+      "request_index_removed": true,
+      "elapsed_seconds": 15.51938021299975
+    },
+    "historical_source_content": {
+      "implementation": {
+        "library": "self-rag",
+        "version": "git-1fcdc42",
+        "source_commit": "1fcdc420e48f50a7d7ab1ece5494221b93252e99",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "source_count": 1,
+        "engine_executed": true,
+        "reflection_calls": 1,
+        "generated_tokens": 16,
+        "reflection_relevance_tokens": 1,
+        "reflection_support_tokens": 1,
+        "reflection_utility_tokens": 1,
+        "reflection_abstentions": 0,
+        "checkpoint_sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+        "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+        "runtime": "llama.cpp-b12631-cpu-owned-buffers",
+        "checkpoint_revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+        "checkpoint_quantization": "Q4_K_M",
+        "inference_mode": "always_retrieve_short_form",
+        "score_kind": "conditional_reflection_reward"
+      },
+      "cited_chunk_ids": [
+        "3638276e2b4874ad90b3ea01d72afd22"
+      ],
+      "outcome": "success",
+      "answer": "The refund period is 14 days after purchase.\n\n[3638276e2b4874ad90b3ea01d72afd22]",
+      "ordinary_provider_calls": 0,
+      "request_index_removed": true,
+      "elapsed_seconds": 16.113463527999556
+    },
+    "tenant_source_isolation": {
+      "implementation": {
+        "library": "self-rag",
+        "version": "git-1fcdc42",
+        "source_commit": "1fcdc420e48f50a7d7ab1ece5494221b93252e99",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "source_count": 1,
+        "engine_executed": true,
+        "reflection_calls": 1,
+        "generated_tokens": 16,
+        "reflection_relevance_tokens": 1,
+        "reflection_support_tokens": 1,
+        "reflection_utility_tokens": 1,
+        "reflection_abstentions": 0,
+        "checkpoint_sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+        "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+        "runtime": "llama.cpp-b12631-cpu-owned-buffers",
+        "checkpoint_revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+        "checkpoint_quantization": "Q4_K_M",
+        "inference_mode": "always_retrieve_short_form",
+        "score_kind": "conditional_reflection_reward"
+      },
+      "cited_chunk_ids": [
+        "95b1b39e05fb1fd0e1db0b5fb7c55b5d"
+      ],
+      "outcome": "success",
+      "answer": "The refund period is 60 days after purchase.\n\n[95b1b39e05fb1fd0e1db0b5fb7c55b5d]",
+      "ordinary_provider_calls": 0,
+      "request_index_removed": true,
+      "elapsed_seconds": 13.146733675000178
+    },
+    "trained_refusal_no_fallback": {
+      "implementation": {
+        "library": "self-rag",
+        "version": "git-1fcdc42",
+        "source_commit": "1fcdc420e48f50a7d7ab1ece5494221b93252e99",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "source_count": 1,
+        "engine_executed": true,
+        "reflection_calls": 1,
+        "generated_tokens": 31,
+        "reflection_relevance_tokens": 1,
+        "reflection_support_tokens": 0,
+        "reflection_utility_tokens": 1,
+        "reflection_abstentions": 1,
+        "checkpoint_sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+        "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+        "runtime": "llama.cpp-b12631-cpu-owned-buffers",
+        "checkpoint_revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+        "checkpoint_quantization": "Q4_K_M",
+        "inference_mode": "always_retrieve_short_form",
+        "score_kind": "conditional_reflection_reward"
+      },
+      "cited_chunk_ids": [],
+      "outcome": "insufficient_evidence",
+      "answer": "Insufficient evidence in the authorized knowledge base.",
+      "ordinary_provider_calls": 0,
+      "request_index_removed": true
+    },
+    "deleted_current_snapshot": {
+      "implementation": {
+        "library": "self-rag",
+        "version": "git-1fcdc42",
+        "source_commit": "1fcdc420e48f50a7d7ab1ece5494221b93252e99",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "source_count": 0,
+        "engine_executed": false
+      },
+      "cited_chunk_ids": [],
+      "outcome": "insufficient_evidence",
+      "answer": "Insufficient evidence in the authorized knowledge base.",
+      "ordinary_provider_calls": 0,
+      "request_index_removed": true,
+      "elapsed_seconds": 0.25399065500005236
+    },
+    "deleted_historical_snapshot": {
+      "implementation": {
+        "library": "self-rag",
+        "version": "git-1fcdc42",
+        "source_commit": "1fcdc420e48f50a7d7ab1ece5494221b93252e99",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "source_count": 0,
+        "engine_executed": false
+      },
+      "cited_chunk_ids": [],
+      "outcome": "insufficient_evidence",
+      "answer": "Insufficient evidence in the authorized knowledge base.",
+      "ordinary_provider_calls": 0,
+      "request_index_removed": true,
+      "elapsed_seconds": 0.18308362900006614
+    },
+    "other_tenant_retained_after_delete": {
+      "retained": true
+    },
+    "deadline_cleanup": {
+      "http_status": 504,
+      "code": "upstream_timeout",
+      "request_index_removed": true
+    }
+  },
+  "sidecar_responses": [
+    {
+      "http_status": 401,
+      "elapsed_seconds": 0.0025203149998560548,
+      "detail": {
+        "code": "invalid_credentials"
+      },
+      "diagnostics": null,
+      "usage": null
+    },
+    {
+      "http_status": 403,
+      "elapsed_seconds": 0.001256480999472842,
+      "detail": {
+        "code": "tenant_mismatch"
+      },
+      "diagnostics": null,
+      "usage": null
+    },
+    {
+      "http_status": 422,
+      "elapsed_seconds": 0.0009830349999901955,
+      "detail": {
+        "code": "invalid_request"
+      },
+      "diagnostics": null,
+      "usage": null
+    },
+    {
+      "http_status": 200,
+      "elapsed_seconds": 13.095139566999933,
+      "detail": null,
+      "diagnostics": {
+        "source_count": 1,
+        "engine_executed": true,
+        "reflection_calls": 1,
+        "generated_tokens": 16,
+        "reflection_relevance_tokens": 1,
+        "reflection_support_tokens": 1,
+        "reflection_utility_tokens": 1,
+        "reflection_abstentions": 0,
+        "checkpoint_sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+        "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+        "runtime": "llama.cpp-b12631-cpu-owned-buffers",
+        "checkpoint_revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+        "checkpoint_quantization": "Q4_K_M",
+        "inference_mode": "always_retrieve_short_form",
+        "score_kind": "conditional_reflection_reward"
+      },
+      "usage": {
+        "input_tokens": 37,
+        "output_tokens": 16
+      }
+    },
+    {
+      "http_status": 200,
+      "elapsed_seconds": 15.495913538999957,
+      "detail": null,
+      "diagnostics": {
+        "source_count": 1,
+        "engine_executed": true,
+        "reflection_calls": 1,
+        "generated_tokens": 16,
+        "reflection_relevance_tokens": 1,
+        "reflection_support_tokens": 1,
+        "reflection_utility_tokens": 1,
+        "reflection_abstentions": 0,
+        "checkpoint_sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+        "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+        "runtime": "llama.cpp-b12631-cpu-owned-buffers",
+        "checkpoint_revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+        "checkpoint_quantization": "Q4_K_M",
+        "inference_mode": "always_retrieve_short_form",
+        "score_kind": "conditional_reflection_reward"
+      },
+      "usage": {
+        "input_tokens": 37,
+        "output_tokens": 16
+      }
+    },
+    {
+      "http_status": 200,
+      "elapsed_seconds": 16.091019409999717,
+      "detail": null,
+      "diagnostics": {
+        "source_count": 1,
+        "engine_executed": true,
+        "reflection_calls": 1,
+        "generated_tokens": 16,
+        "reflection_relevance_tokens": 1,
+        "reflection_support_tokens": 1,
+        "reflection_utility_tokens": 1,
+        "reflection_abstentions": 0,
+        "checkpoint_sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+        "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+        "runtime": "llama.cpp-b12631-cpu-owned-buffers",
+        "checkpoint_revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+        "checkpoint_quantization": "Q4_K_M",
+        "inference_mode": "always_retrieve_short_form",
+        "score_kind": "conditional_reflection_reward"
+      },
+      "usage": {
+        "input_tokens": 37,
+        "output_tokens": 16
+      }
+    },
+    {
+      "http_status": 200,
+      "elapsed_seconds": 13.127039353999862,
+      "detail": null,
+      "diagnostics": {
+        "source_count": 1,
+        "engine_executed": true,
+        "reflection_calls": 1,
+        "generated_tokens": 16,
+        "reflection_relevance_tokens": 1,
+        "reflection_support_tokens": 1,
+        "reflection_utility_tokens": 1,
+        "reflection_abstentions": 0,
+        "checkpoint_sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+        "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+        "runtime": "llama.cpp-b12631-cpu-owned-buffers",
+        "checkpoint_revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+        "checkpoint_quantization": "Q4_K_M",
+        "inference_mode": "always_retrieve_short_form",
+        "score_kind": "conditional_reflection_reward"
+      },
+      "usage": {
+        "input_tokens": 37,
+        "output_tokens": 16
+      }
+    },
+    {
+      "http_status": 200,
+      "elapsed_seconds": 16.523785325999597,
+      "detail": null,
+      "diagnostics": {
+        "source_count": 1,
+        "engine_executed": true,
+        "reflection_calls": 1,
+        "generated_tokens": 31,
+        "reflection_relevance_tokens": 1,
+        "reflection_support_tokens": 0,
+        "reflection_utility_tokens": 1,
+        "reflection_abstentions": 1,
+        "checkpoint_sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+        "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+        "runtime": "llama.cpp-b12631-cpu-owned-buffers",
+        "checkpoint_revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+        "checkpoint_quantization": "Q4_K_M",
+        "inference_mode": "always_retrieve_short_form",
+        "score_kind": "conditional_reflection_reward"
+      },
+      "usage": {
+        "input_tokens": 41,
+        "output_tokens": 31
+      }
+    },
+    {
+      "http_status": 200,
+      "elapsed_seconds": 0.2429316949992426,
+      "detail": null,
+      "diagnostics": {
+        "source_count": 0,
+        "engine_executed": false
+      },
+      "usage": null
+    },
+    {
+      "http_status": 200,
+      "elapsed_seconds": 0.1759942910002792,
+      "detail": null,
+      "diagnostics": {
+        "source_count": 0,
+        "engine_executed": false
+      },
+      "usage": null
+    },
+    {
+      "http_status": 504,
+      "elapsed_seconds": 0.10348360199986928,
+      "detail": {
+        "code": "upstream_timeout"
+      },
+      "diagnostics": null,
+      "usage": null
+    }
+  ],
+  "passed": true,
+  "elapsed_seconds": 77.23028389599949
+}

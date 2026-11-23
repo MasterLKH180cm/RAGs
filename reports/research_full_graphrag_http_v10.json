@@ -1,0 +1,291 @@
+{
+  "schema": "research-http-e2e-v03",
+  "verified_at": "2026-11-23T16:34:48.277732+00:00",
+  "engine": "full_graphrag",
+  "implementation": {
+    "library": "graphrag",
+    "version": "3.3.0",
+    "source_commit": "5faaaf4f5685fa2056fa8c3bf9342cb089f2942f",
+    "adapter_version": "v10"
+  },
+  "embedding_library": "fastembed:0.9.1",
+  "generation": "explicit_local_openai_protocol_deterministic_fixture",
+  "trained_generation_quality_verified": false,
+  "fixture_http_calls": 71,
+  "checks": {
+    "authentication": {
+      "invalid_token": 401,
+      "tenant_mismatch": 403,
+      "no_model_calls": true
+    },
+    "actual_upstream_http": {
+      "implementation": {
+        "library": "graphrag",
+        "version": "3.3.0",
+        "source_commit": "5faaaf4f5685fa2056fa8c3bf9342cb089f2942f",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 33,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 34,
+        "score_kind": "reciprocal_local_source_rank",
+        "query_mode": "local_graph_context",
+        "source_count": 17,
+        "pipeline_stages": 9,
+        "text_units": 16,
+        "graph_nodes": 16,
+        "graph_edges": 16,
+        "communities": 4,
+        "community_reports": 4,
+        "retrieved_chunks": 17,
+        "retrieved_entities": 16,
+        "retrieved_relationships": 16,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "14cbffd37385b4f0b335b5ee4df3eb7f",
+        "2760a563af4e248bc46a6b14c9830f64",
+        "2b82d1a133f1eacdf955f092b78100fc",
+        "317052fa2ed47ef13365562a1c0a8bb8",
+        "67ac53b125b97a03651a26ec50d29777",
+        "6a7f3275076c75436bf7f3671011c714",
+        "6a925d3b2456d93e959f3bb1dc9c0eb3",
+        "6c5929ffe4a96b57ae0a9a8fcecda761",
+        "7f88b64a63b672fed414a193fa2eba34",
+        "8da883b0f1b7f9aa8af39a421f42b81d",
+        "9cdc61aae71eb5cac9c237bab28e96d1",
+        "d97a53b5fcae4295b03854d41b6562ec",
+        "dd3d1a1ea629ba4f820e21721e8fb6d6",
+        "e2e263e2d11518b2a4f2d42796ac36f7",
+        "f59f40742fce4ca4d716f8877e07ba8d",
+        "fad5b9b759559ece373039061977298d",
+        "fee01aff204702e49a9301c35b3b2776"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "duplicate_source_identity": {
+      "both_original_ids_preserved": true
+    },
+    "updated_snapshot": {
+      "implementation": {
+        "library": "graphrag",
+        "version": "3.3.0",
+        "source_commit": "5faaaf4f5685fa2056fa8c3bf9342cb089f2942f",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 10,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 12,
+        "score_kind": "reciprocal_local_source_rank",
+        "query_mode": "local_graph_context",
+        "source_count": 5,
+        "pipeline_stages": 9,
+        "text_units": 5,
+        "graph_nodes": 4,
+        "graph_edges": 4,
+        "communities": 2,
+        "community_reports": 2,
+        "retrieved_chunks": 5,
+        "retrieved_entities": 4,
+        "retrieved_relationships": 4,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "2760a563af4e248bc46a6b14c9830f64",
+        "8da883b0f1b7f9aa8af39a421f42b81d",
+        "b87a8e3a36a4f60b903904f066247033",
+        "fad5b9b759559ece373039061977298d",
+        "fee01aff204702e49a9301c35b3b2776"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "historical_snapshot": {
+      "implementation": {
+        "library": "graphrag",
+        "version": "3.3.0",
+        "source_commit": "5faaaf4f5685fa2056fa8c3bf9342cb089f2942f",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 9,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 9,
+        "score_kind": "reciprocal_local_source_rank",
+        "query_mode": "local_graph_context",
+        "source_count": 5,
+        "pipeline_stages": 9,
+        "text_units": 4,
+        "graph_nodes": 4,
+        "graph_edges": 4,
+        "communities": 2,
+        "community_reports": 2,
+        "retrieved_chunks": 5,
+        "retrieved_entities": 4,
+        "retrieved_relationships": 4,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "2760a563af4e248bc46a6b14c9830f64",
+        "6a925d3b2456d93e959f3bb1dc9c0eb3",
+        "8da883b0f1b7f9aa8af39a421f42b81d",
+        "fad5b9b759559ece373039061977298d",
+        "fee01aff204702e49a9301c35b3b2776"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "tenant_source_isolation": {
+      "implementation": {
+        "library": "graphrag",
+        "version": "3.3.0",
+        "source_commit": "5faaaf4f5685fa2056fa8c3bf9342cb089f2942f",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 4,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 2,
+        "score_kind": "reciprocal_local_source_rank",
+        "query_mode": "local_graph_context",
+        "source_count": 1,
+        "pipeline_stages": 9,
+        "text_units": 1,
+        "graph_nodes": 2,
+        "graph_edges": 1,
+        "communities": 1,
+        "community_reports": 1,
+        "retrieved_chunks": 1,
+        "retrieved_entities": 2,
+        "retrieved_relationships": 1,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "a8516c96b08e54a0ef1a1f6923649a7f"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "deleted_current_snapshot": {
+      "implementation": {
+        "library": "graphrag",
+        "version": "3.3.0",
+        "source_commit": "5faaaf4f5685fa2056fa8c3bf9342cb089f2942f",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 8,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 7,
+        "score_kind": "reciprocal_local_source_rank",
+        "query_mode": "local_graph_context",
+        "source_count": 3,
+        "pipeline_stages": 9,
+        "text_units": 3,
+        "graph_nodes": 4,
+        "graph_edges": 3,
+        "communities": 2,
+        "community_reports": 2,
+        "retrieved_chunks": 3,
+        "retrieved_entities": 4,
+        "retrieved_relationships": 3,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "8da883b0f1b7f9aa8af39a421f42b81d",
+        "fad5b9b759559ece373039061977298d",
+        "fee01aff204702e49a9301c35b3b2776"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "deleted_historical_snapshot": {
+      "implementation": {
+        "library": "graphrag",
+        "version": "3.3.0",
+        "source_commit": "5faaaf4f5685fa2056fa8c3bf9342cb089f2942f",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 8,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 7,
+        "score_kind": "reciprocal_local_source_rank",
+        "query_mode": "local_graph_context",
+        "source_count": 3,
+        "pipeline_stages": 9,
+        "text_units": 3,
+        "graph_nodes": 4,
+        "graph_edges": 3,
+        "communities": 2,
+        "community_reports": 2,
+        "retrieved_chunks": 3,
+        "retrieved_entities": 4,
+        "retrieved_relationships": 3,
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "8da883b0f1b7f9aa8af39a421f42b81d",
+        "fad5b9b759559ece373039061977298d",
+        "fee01aff204702e49a9301c35b3b2776"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "empty_scope": {
+      "implementation": {
+        "library": "graphrag",
+        "version": "3.3.0",
+        "source_commit": "5faaaf4f5685fa2056fa8c3bf9342cb089f2942f",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "source_count": 0,
+        "engine_executed": false
+      },
+      "cited_chunk_ids": [],
+      "outcome": "insufficient_evidence",
+      "request_index_removed": true
+    },
+    "deadline_cleanup": {
+      "http_status": 504,
+      "code": "upstream_timeout",
+      "request_index_removed": true
+    }
+  },
+  "passed": true,
+  "elapsed_seconds": 104.04973419299995
+}

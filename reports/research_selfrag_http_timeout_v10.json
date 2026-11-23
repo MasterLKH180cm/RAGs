@@ -1,0 +1,53 @@
+{
+  "schema": "selfrag-http-e2e-v10",
+  "passed": false,
+  "engine": "self_rag",
+  "error_type": "AssertionError",
+  "error": "POST query returned 504; expected 200: {\"detail\":{\"code\":\"upstream_timeout\",\"reason\":\"Research execution exceeded its configured deadline\"}}",
+  "partial_checks": {
+    "authorization_and_protocol": {
+      "invalid_token": 401,
+      "tenant_mismatch": 403,
+      "protocol_mismatch": 422
+    }
+  },
+  "sidecar_responses": [
+    {
+      "http_status": 401,
+      "elapsed_seconds": 0.0014589140000680345,
+      "detail": {
+        "code": "invalid_credentials"
+      },
+      "diagnostics": null,
+      "usage": null
+    },
+    {
+      "http_status": 403,
+      "elapsed_seconds": 0.0012545390000013867,
+      "detail": {
+        "code": "tenant_mismatch"
+      },
+      "diagnostics": null,
+      "usage": null
+    },
+    {
+      "http_status": 422,
+      "elapsed_seconds": 0.0007097739999153418,
+      "detail": {
+        "code": "invalid_request"
+      },
+      "diagnostics": null,
+      "usage": null
+    },
+    {
+      "http_status": 504,
+      "elapsed_seconds": 120.20080395199966,
+      "detail": {
+        "code": "upstream_timeout"
+      },
+      "diagnostics": null,
+      "usage": null
+    }
+  ],
+  "elapsed_seconds": 122.01838743999997
+}

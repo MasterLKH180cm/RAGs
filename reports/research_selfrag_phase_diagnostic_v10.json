@@ -1,0 +1,832 @@
+{
+  "schema": "selfrag-main-phase-diagnostic-v10",
+  "http_status": 200,
+  "elapsed_seconds": 296.0426584029997,
+  "sidecar_deadline_seconds": 300,
+  "backend_deadline_seconds": 330,
+  "client_deadline_seconds": 350,
+  "response": {
+    "question": "What is the refund period?",
+    "mode_requested": "self_rag",
+    "answer": "The refund period is 14 days after purchase.\n\n[63b9b596fe74cd32a81b24fd6ba78ed9]",
+    "citations": [
+      {
+        "chunk_id": "63b9b596fe74cd32a81b24fd6ba78ed9",
+        "document_id": "refund",
+        "title": "Synthetic refund",
+        "source": "fixture:refund",
+        "section": "Document",
+        "score": 2.21177989,
+        "text": "The refund period is 14 days after purchase.",
+        "revision": "1868991b41d441ee860c8d9e1bf6ae0b",
+        "profile_id": "dcd8e49aeb257c0940e1a46a3ac86ece3bd1aa2819b4820590df29488828559e",
+        "start_char": 0,
+        "end_char": 44,
+        "origin_source": "local",
+        "origin_chunk_id": "63b9b596fe74cd32a81b24fd6ba78ed9"
+      }
+    ],
+    "retrieval_diagnostics": {
+      "candidate_count": 1,
+      "candidate_ids": [
+        "63b9b596fe74cd32a81b24fd6ba78ed9"
+      ],
+      "candidate_document_ids": [
+        "refund"
+      ],
+      "usable_as_evidence": false
+    },
+    "budget": {
+      "input_units": 339,
+      "unit": "unicode_codepoints",
+      "count_kind": "fallback_units",
+      "tokenizer": "unicode-codepoints-v1",
+      "included_ids": [
+        "63b9b596fe74cd32a81b24fd6ba78ed9"
+      ],
+      "dropped_ids": [],
+      "truncated_ids": [],
+      "context_budget": 16000,
+      "output_reserve": 1024,
+      "envelope_reserve": 256
+    },
+    "usage": {
+      "calls": 0,
+      "provider_reports": [],
+      "token_usage": "unavailable",
+      "cost": null,
+      "cost_reason": "No operator pricing schedule configured"
+    },
+    "mode_used": "self_rag",
+    "engine": "self_rag:authorized-evidence-v2",
+    "score_kind": "backend_score",
+    "trace": [
+      {
+        "action": "retrieve",
+        "mode": "self_rag",
+        "candidates": 1,
+        "encoder": "offline-hash-v1"
+      },
+      {
+        "operation": "external_backend",
+        "backend": "self_rag",
+        "evidence_level": "pinned_upstream_reported",
+        "implementation": {
+          "library": "self-rag",
+          "version": "git-1fcdc42",
+          "source_commit": "1fcdc420e48f50a7d7ab1ece5494221b93252e99",
+          "adapter_version": "v10"
+        },
+        "diagnostics": {
+          "source_count": 1,
+          "engine_executed": true,
+          "reflection_calls": 1,
+          "generated_tokens": 16,
+          "reflection_relevance_tokens": 1,
+          "reflection_support_tokens": 1,
+          "reflection_utility_tokens": 1,
+          "reflection_abstentions": 0,
+          "checkpoint_sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+          "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+          "checkpoint_revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+          "checkpoint_quantization": "Q4_K_M",
+          "inference_mode": "always_retrieve_short_form",
+          "score_kind": "conditional_reflection_reward"
+        }
+      }
+    ],
+    "backend_usage": {
+      "reported": {
+        "input_tokens": 37,
+        "output_tokens": 16
+      }
+    },
+    "admission": {
+      "policy_version": "evidence-admission-v1",
+      "decision": "unassessed",
+      "basis": "ranked_unassessed",
+      "profile_id": null,
+      "score": null,
+      "threshold": null,
+      "candidate_count": 1,
+      "accepted_count": 1
+    },
+    "supported": null,
+    "outcome": "success",
+    "refusal_reason": null
+  },
+  "phase_profile": [
+    {
+      "stage": "python_boot",
+      "pid": 6,
+      "time": 3356.169847764,
+      "cpu_seconds": 0.063854,
+      "max_rss_bytes": 30863360,
+      "major_faults": 0,
+      "native_threads": "4",
+      "omp_threads": "2"
+    },
+    {
+      "stage": "python_boot",
+      "pid": 8,
+      "time": 3356.741505334,
+      "cpu_seconds": 0.06751399999999999,
+      "max_rss_bytes": 34533376,
+      "major_faults": 0,
+      "native_threads": "4",
+      "omp_threads": "2"
+    },
+    {
+      "stage": "python_boot",
+      "pid": 10,
+      "time": 3357.629777996,
+      "cpu_seconds": 0.065605,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "native_threads": "4",
+      "omp_threads": "2"
+    },
+    {
+      "stage": "model_init_start",
+      "pid": 10,
+      "time": 3357.79704595,
+      "cpu_seconds": 0.23256699999999997,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3357.797141799,
+      "cpu_seconds": 0.23268399999999997,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "selfrag_llama2_7b.Q4_K_M.gguf"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.675959814,
+      "cpu_seconds": 13.515808,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "selfrag_llama2_7b.Q4_K_M.gguf"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.676851316,
+      "cpu_seconds": 13.516798000000001,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libllama.so.1.0.0"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.703732828,
+      "cpu_seconds": 13.543055,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libllama.so.1.0.0"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.703850802,
+      "cpu_seconds": 13.543220999999999,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml.so.1.0.0"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.704247053,
+      "cpu_seconds": 13.543365,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml.so.1.0.0"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.704293054,
+      "cpu_seconds": 13.543418,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-base.so.1.0.0"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.706686532,
+      "cpu_seconds": 13.545414,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-base.so.1.0.0"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.70684021,
+      "cpu_seconds": 13.545599999999999,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-alderlake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.717805828,
+      "cpu_seconds": 13.555936,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-alderlake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.717888934,
+      "cpu_seconds": 13.556053,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cannonlake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.7326245,
+      "cpu_seconds": 13.570049999999998,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cannonlake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.732702865,
+      "cpu_seconds": 13.570159,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cascadelake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.739803752,
+      "cpu_seconds": 13.576282,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cascadelake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.739879862,
+      "cpu_seconds": 13.576388,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cooperlake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.748478249,
+      "cpu_seconds": 13.584314,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-cooperlake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.748617181,
+      "cpu_seconds": 13.584512,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-haswell.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.754519923,
+      "cpu_seconds": 13.589780000000001,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-haswell.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.754592871,
+      "cpu_seconds": 13.589879999999999,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-icelake.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.762631919,
+      "cpu_seconds": 13.597195,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-icelake.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.762732965,
+      "cpu_seconds": 13.59732,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-ivybridge.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.76890806,
+      "cpu_seconds": 13.602796,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-ivybridge.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.768983504,
+      "cpu_seconds": 13.602901,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-piledriver.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.776257574,
+      "cpu_seconds": 13.609669,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-piledriver.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.776327597,
+      "cpu_seconds": 13.609765999999999,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sandybridge.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.788556457,
+      "cpu_seconds": 13.621400000000001,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sandybridge.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.788722913,
+      "cpu_seconds": 13.621593,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sapphirerapids.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.800915445,
+      "cpu_seconds": 13.632608000000001,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sapphirerapids.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.801217565,
+      "cpu_seconds": 13.632929,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-skylakex.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.812043577,
+      "cpu_seconds": 13.643147,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-skylakex.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.81212449,
+      "cpu_seconds": 13.643292,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sse42.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.816265136,
+      "cpu_seconds": 13.646947,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-sse42.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.816346015,
+      "cpu_seconds": 13.647055,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-x64.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.82085133,
+      "cpu_seconds": 13.651122,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-x64.so"
+    },
+    {
+      "stage": "hash_start",
+      "pid": 10,
+      "time": 3371.820919226,
+      "cpu_seconds": 13.651215,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-zen4.so"
+    },
+    {
+      "stage": "hash_end",
+      "pid": 10,
+      "time": 3371.830356241,
+      "cpu_seconds": 13.660624,
+      "max_rss_bytes": 45789184,
+      "major_faults": 0,
+      "artifact": "libggml-cpu-zen4.so"
+    },
+    {
+      "stage": "model_init_end",
+      "pid": 10,
+      "time": 3374.849989879,
+      "cpu_seconds": 16.672665000000002,
+      "max_rss_bytes": 4906627072,
+      "major_faults": 2,
+      "cpu_backend": "libggml-cpu-zen4.so"
+    },
+    {
+      "stage": "generate_start",
+      "pid": 10,
+      "time": 3374.85051996,
+      "cpu_seconds": 16.673192,
+      "max_rss_bytes": 4906627072,
+      "major_faults": 2
+    },
+    {
+      "stage": "decode_start",
+      "pid": 10,
+      "time": 3374.894057977,
+      "cpu_seconds": 16.716673,
+      "max_rss_bytes": 4906627072,
+      "major_faults": 2,
+      "input_count": 37,
+      "position": 0
+    },
+    {
+      "stage": "decode_end",
+      "pid": 10,
+      "time": 3382.855943004,
+      "cpu_seconds": 27.148187999999998,
+      "max_rss_bytes": 4915269632,
+      "major_faults": 115967,
+      "input_count": 37,
+      "position": 0
+    },
+    {
+      "stage": "decode_start",
+      "pid": 10,
+      "time": 3382.86089155,
+      "cpu_seconds": 27.176334,
+      "max_rss_bytes": 4915269632,
+      "major_faults": 115967,
+      "input_count": 1,
+      "position": 37
+    },
+    {
+      "stage": "decode_end",
+      "pid": 10,
+      "time": 3404.16802218,
+      "cpu_seconds": 38.754073,
+      "max_rss_bytes": 4945686528,
+      "major_faults": 517324,
+      "input_count": 1,
+      "position": 37
+    },
+    {
+      "stage": "decode_start",
+      "pid": 10,
+      "time": 3404.173794961,
+      "cpu_seconds": 38.777687,
+      "max_rss_bytes": 4945686528,
+      "major_faults": 517324,
+      "input_count": 1,
+      "position": 38
+    },
+    {
+      "stage": "decode_end",
+      "pid": 10,
+      "time": 3419.426944318,
+      "cpu_seconds": 47.699529,
+      "max_rss_bytes": 4947398656,
+      "major_faults": 768695,
+      "input_count": 1,
+      "position": 38
+    },
+    {
+      "stage": "decode_start",
+      "pid": 10,
+      "time": 3419.433809585,
+      "cpu_seconds": 47.71962,
+      "max_rss_bytes": 4947529728,
+      "major_faults": 768695,
+      "input_count": 1,
+      "position": 39
+    },
+    {
+      "stage": "decode_end",
+      "pid": 10,
+      "time": 3440.265261367,
+      "cpu_seconds": 61.107289,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 1093723,
+      "input_count": 1,
+      "position": 39
+    },
+    {
+      "stage": "decode_start",
+      "pid": 10,
+      "time": 3440.272821783,
+      "cpu_seconds": 61.136839,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 1093723,
+      "input_count": 1,
+      "position": 40
+    },
+    {
+      "stage": "decode_end",
+      "pid": 10,
+      "time": 3463.921279691,
+      "cpu_seconds": 76.89982599999999,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 1495058,
+      "input_count": 1,
+      "position": 40
+    },
+    {
+      "stage": "decode_start",
+      "pid": 10,
+      "time": 3463.926251767,
+      "cpu_seconds": 76.91869700000001,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 1495058,
+      "input_count": 1,
+      "position": 41
+    },
+    {
+      "stage": "decode_end",
+      "pid": 10,
+      "time": 3478.378922256,
+      "cpu_seconds": 88.439904,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 1746397,
+      "input_count": 1,
+      "position": 41
+    },
+    {
+      "stage": "decode_start",
+      "pid": 10,
+      "time": 3478.384600406,
+      "cpu_seconds": 88.461278,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 1746397,
+      "input_count": 1,
+      "position": 42
+    },
+    {
+      "stage": "decode_end",
+      "pid": 10,
+      "time": 3495.999512239,
+      "cpu_seconds": 104.247967,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 2071455,
+      "input_count": 1,
+      "position": 42
+    },
+    {
+      "stage": "decode_start",
+      "pid": 10,
+      "time": 3496.004345112,
+      "cpu_seconds": 104.27607900000001,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 2071455,
+      "input_count": 1,
+      "position": 43
+    },
+    {
+      "stage": "decode_end",
+      "pid": 10,
+      "time": 3517.141945084,
+      "cpu_seconds": 116.422285,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 2472753,
+      "input_count": 1,
+      "position": 43
+    },
+    {
+      "stage": "decode_start",
+      "pid": 10,
+      "time": 3517.146265634,
+      "cpu_seconds": 116.439517,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 2472753,
+      "input_count": 1,
+      "position": 44
+    },
+    {
+      "stage": "decode_end",
+      "pid": 10,
+      "time": 3530.786006984,
+      "cpu_seconds": 123.610528,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 2724134,
+      "input_count": 1,
+      "position": 44
+    },
+    {
+      "stage": "decode_start",
+      "pid": 10,
+      "time": 3530.789168666,
+      "cpu_seconds": 123.62303,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 2724134,
+      "input_count": 1,
+      "position": 45
+    },
+    {
+      "stage": "decode_end",
+      "pid": 10,
+      "time": 3548.603719186,
+      "cpu_seconds": 135.25589300000001,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 3049208,
+      "input_count": 1,
+      "position": 45
+    },
+    {
+      "stage": "decode_start",
+      "pid": 10,
+      "time": 3548.609301128,
+      "cpu_seconds": 135.279293,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 3049208,
+      "input_count": 1,
+      "position": 46
+    },
+    {
+      "stage": "decode_end",
+      "pid": 10,
+      "time": 3568.250420115,
+      "cpu_seconds": 150.768173,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 3450618,
+      "input_count": 1,
+      "position": 46
+    },
+    {
+      "stage": "decode_start",
+      "pid": 10,
+      "time": 3568.254656516,
+      "cpu_seconds": 150.783006,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 3450618,
+      "input_count": 1,
+      "position": 47
+    },
+    {
+      "stage": "decode_end",
+      "pid": 10,
+      "time": 3583.286182194,
+      "cpu_seconds": 160.499688,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 3702076,
+      "input_count": 1,
+      "position": 47
+    },
+    {
+      "stage": "decode_start",
+      "pid": 10,
+      "time": 3583.291026068,
+      "cpu_seconds": 160.519252,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 3702076,
+      "input_count": 1,
+      "position": 48
+    },
+    {
+      "stage": "decode_end",
+      "pid": 10,
+      "time": 3600.708853915,
+      "cpu_seconds": 172.86414100000002,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 4027094,
+      "input_count": 1,
+      "position": 48
+    },
+    {
+      "stage": "decode_start",
+      "pid": 10,
+      "time": 3600.714094113,
+      "cpu_seconds": 172.885737,
+      "max_rss_bytes": 4947795968,
+      "major_faults": 4027094,
+      "input_count": 1,
+      "position": 49
+    },
+    {
+      "stage": "decode_end",
+      "pid": 10,
+      "time": 3624.128308413,
+      "cpu_seconds": 188.56351899999999,
+      "max_rss_bytes": 4948090880,
+      "major_faults": 4428691,
+      "input_count": 1,
+      "position": 49
+    },
+    {
+      "stage": "decode_start",
+      "pid": 10,
+      "time": 3624.131970186,
+      "cpu_seconds": 188.567185,
+      "max_rss_bytes": 4948090880,
+      "major_faults": 4428691,
+      "input_count": 1,
+      "position": 50
+    },
+    {
+      "stage": "decode_end",
+      "pid": 10,
+      "time": 3637.095913117,
+      "cpu_seconds": 196.92888900000003,
+      "max_rss_bytes": 4948090880,
+      "major_faults": 4680125,
+      "input_count": 1,
+      "position": 50
+    },
+    {
+      "stage": "decode_start",
+      "pid": 10,
+      "time": 3637.101260457,
+      "cpu_seconds": 196.94931400000002,
+      "max_rss_bytes": 4948090880,
+      "major_faults": 4680125,
+      "input_count": 1,
+      "position": 51
+    },
+    {
+      "stage": "decode_end",
+      "pid": 10,
+      "time": 3653.148152479,
+      "cpu_seconds": 207.122206,
+      "max_rss_bytes": 4948090880,
+      "major_faults": 5005152,
+      "input_count": 1,
+      "position": 51
+    },
+    {
+      "stage": "generate_end",
+      "pid": 10,
+      "time": 3653.153335385,
+      "cpu_seconds": 207.14711799999998,
+      "max_rss_bytes": 4948090880,
+      "major_faults": 5005152,
+      "input_tokens": 37,
+      "output_tokens": 16,
+      "ended": true
+    }
+  ],
+  "evidence_kind": "temporary_phase_instrumentation_on_the_actual_pinned_native_runtime",
+  "no_checkpoint_or_inference_policy_changes": true
+}

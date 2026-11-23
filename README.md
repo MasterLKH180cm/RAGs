@@ -714,7 +714,7 @@ flowchart TD
     Docs -.-> Models["Configured generation or research backend"]
 ```
 
-The workflow runtime remains a separate service. Named research HTTP adapters receive only authorized source passages and must return IDs from that supplied set. Image assets use separate endpoints and original-image citations.
+The workflow runtime remains a separate service. Research HTTP adapters receive authorized source passages. The v1 contract returns IDs only from that supplied set; CRAG v2 may also return separately authorized external snapshots with tenant-bound content identities. Image assets use separate endpoints and original-image citations.
 
 ### Ingestion and reindexing
 
@@ -788,7 +788,7 @@ The index fingerprint includes chunking/tokenizer settings, model identities, th
 
 ## Twenty-family coverage
 
-**Native** means the stated mechanism is implemented. **Provider-dependent** paths have control-flow tests; live paid-model behavior remains unverified. **Pretrained encoder** paths have actual local checkpoint tests. **Pinned upstream** means the upstream code executes through an isolated service, with real embeddings and explicitly deterministic generation fixtures in verification. **External contract** means the named upstream engine still needs implementation and execution evidence.
+**Native** means the stated mechanism is implemented. **Provider-dependent** paths have control-flow tests; live paid-model behavior remains unverified. **Pretrained encoder** paths have actual local checkpoint tests. **Pinned upstream** means the named upstream algorithm executes through an isolated service. GraphRAG/HippoRAG use actual BGE embeddings with deterministic generation fixtures; Self-RAG uses the official trained checkpoint through a validated quantized CPU port; CRAG uses the official trained evaluator with labelled generation/web fixtures. See the [implementation, execution evidence and limits](docs/RESEARCH_COMPLETION.md). Passing execution checks does not establish paper benchmark parity or general answer quality.
 
 | Original family | Entry point | Implementation and boundary |
 | --- | --- | --- |
@@ -801,11 +801,11 @@ The index fingerprint includes chunking/tokenizer settings, model identities, th
 | Multi-vector / ColBERT | `multivector`, `colbert` | Actual FastEmbed ColBERT token matrices and normalized sum-MaxSim; checkpoint required |
 | Contextual RAG | `contextual` | Searches generated context in both indexes; contextual ingestion required |
 | Hierarchical / RAPTOR | `parent_child`, `hierarchical`; `raptor` | Native parent expansion and recursive clustered summaries; separate pinned RAPTOR service runs actual UMAP/GMM tree building and upstream retrieval, resolving summaries to original leaves |
-| GraphRAG | `graph`; `full_graphrag` | Native two-hop graph traversal, label-propagation communities, and source lineage; Microsoft GraphRAG is external |
+| GraphRAG | `graph`; `full_graphrag` | Native two-hop traversal remains separate; pinned Microsoft GraphRAG standard indexing, Leiden communities and local graph-context retrieval execute with original-source lineage |
 | LightRAG | `lightrag` | Pinned 1.5.7 service runs actual entity/relation extraction, graph merging and hybrid retrieval; internal chunks resolve to authorized original sources |
-| HippoRAG | `hipporag` | External contract; actual upstream graph/PPR engine is not bundled or verified |
-| Self-RAG | `self_reflective`; `self_rag` | Native bounded draft/critique/refine loop; trained reflection-token Self-RAG remains external |
-| CRAG | `corrective`; `crag` | Native bounded evidence evaluation and corrective retrieval; the paper-specific engine remains external |
+| HippoRAG | `hipporag` | Pinned upstream OpenIE, fact selection, graph construction and personalized PageRank; actual algorithm and BGE execution |
+| Self-RAG | `self_reflective`; `self_rag` | Native critique loop remains separate; official trained 7B checkpoint, bounded Q4 CPU reflection-token decoding and selected-answer preservation |
+| CRAG | `corrective`; `crag` | Native corrective retrieval remains separate; official T5 evaluator, all three correction branches, optional bounded web acquisition and combined-source provenance |
 | Adaptive RAG | `adaptive` | Provider router chooses a validated, available mechanism and records its reason |
 | Agentic RAG | `agentic` | Provider search planning, evidence review, and bounded additional searches |
 | Multimodal RAG | `/assets/*`, `caption`; `multimodal_native` | Actual paired CLIP asset retrieval; separate text-caption path; optional external contract; no audio/video or image-answer generation |
@@ -962,7 +962,7 @@ Set credentials locally, outside Git. OpenAI embeddings and generation are indep
 
 `RAGS_SOURCES_JSON` maps source IDs to fixed RAG API URLs and `tenant_keys` mappings. A `federated` request selects those IDs through `sources`; it cannot supply a URL or tenant. Credentials are distinct per tenant. Remote responses are bounded to 2 MB, redirects/compressed responses are rejected, and a failed source does not produce a misleading partial success.
 
-`RAGS_RESEARCH_BACKENDS_JSON` separately configures research adapters using `url`, optional `model` label, `tenant_tokens`, and bounded `timeout_seconds`. Set `require_pinned_upstream:true` for the supplied RAPTOR/LightRAG services. The `authorized-evidence-v1` protocol sends only scoped original passages and accepts IDs from that set. HippoRAG, Microsoft GraphRAG, trained Self-RAG and paper-specific CRAG still require separate upstream integrations; their generic adapter is not an implementation of those engines.
+`RAGS_RESEARCH_BACKENDS_JSON` separately configures research adapters using `url`, optional `model` label, `tenant_tokens`, and bounded `timeout_seconds`. Set `require_pinned_upstream:true` for supplied services; it is mandatory for `self_rag` and `crag`. RAPTOR, LightRAG, GraphRAG and HippoRAG use `authorized-evidence-v1` and accept only scoped original source IDs. Self-RAG and CRAG use `authorized-evidence-v2`, preserving their selected answer and explicit source IDs through evidence admission and token budgets. CRAG external acquisition is disabled by default and requires matching host and tenant allowlists on the backend and sidecar. Installation, official model provisioning, request limits and verification boundaries are documented in [research completion](docs/RESEARCH_COMPLETION.md).
 
 ## Feature and operational configuration
 
@@ -1384,7 +1384,7 @@ PostgreSQL/pgvector is the deployed store; SQLite remains explicit local develop
 | [`retrieval.py`](rags/retrieval.py), [`native.py`](rags/native.py) | Distinct retrieval paths, bounded loops, graph/structured algorithms |
 | [`providers.py`](rags/providers.py), [`backends.py`](rags/backends.py) | Model adapters, actual late interaction, upstream protocol |
 | [`admission.py`](rags/admission.py), [`answerability.py`](rags/answerability.py), [`admission_eval.py`](rags/admission_eval.py) | Typed evidence decisions, immutable scorer profiles, calibration and held-out evaluation |
-| [`research_service.py`](rags/research_service.py), [`research_worker.py`](rags/research_worker.py), [`research/`](rags/research/) | Bounded process isolation and pinned RAPTOR/LightRAG adapters |
+| [`research_service.py`](rags/research_service.py), [`research_worker.py`](rags/research_worker.py), [`research/`](rags/research/) | Bounded process isolation; pinned RAPTOR, LightRAG, GraphRAG and HippoRAG adapters; trained Self-RAG CPU and CRAG ports |
 | [`vision.py`](rags/vision.py), [`multimodal.py`](rags/multimodal.py) | Caption ingestion and separate original-image retrieval |
 | [`evaluate.py`](rags/evaluate.py), [`tests/`](tests/) | Measured evaluation and behavioral integration tests |
 

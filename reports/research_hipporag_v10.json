@@ -1,0 +1,199 @@
+{
+  "schema": "actual-upstream-verification-v1",
+  "engine": "hipporag",
+  "verified_at": "2026-11-23T16:06:47.700803+00:00",
+  "python": "3.12.14",
+  "verification": "actual_upstream_algorithm_real_bge_embeddings_deterministic_generation_fixture",
+  "not_verified": [
+    "trained_generation_quality",
+    "paper_benchmark_reproduction",
+    "paid_provider_quality"
+  ],
+  "runtime_versions": {
+    "fastembed": "0.9.1",
+    "onnxruntime": "1.32.0",
+    "tokenizers": "0.20.3",
+    "numpy": "2.5.5",
+    "tiktoken": "0.14.0",
+    "igraph": "0.11.8",
+    "torch": "2.5.1+cpu",
+    "pandas": "3.1.1",
+    "pyarrow": "26.0.1"
+  },
+  "embedding_artifacts_sha256": {
+    "model_optimized.onnx": "51f1bd0addd6e859e42c2c8021a5e5461385bb676a649f4b269aa445449f2431",
+    "tokenizer.json": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66",
+    "tokenizer_config.json": "0b29c7bfc889e53b36d9dd3e686dd4300f6525110eaa98c76a5dafceb2029f53"
+  },
+  "algorithm_elapsed_seconds": 8.618587509999998,
+  "result": {
+    "hits": [
+      {
+        "chunk_id": "water-1",
+        "score": 0.09185148149901655
+      },
+      {
+        "chunk_id": "water-2",
+        "score": 0.04448697961476943
+      },
+      {
+        "chunk_id": "water-4",
+        "score": 0.037225570067124236
+      },
+      {
+        "chunk_id": "water-3",
+        "score": 0.035889363622037575
+      },
+      {
+        "chunk_id": "health-1",
+        "score": 0.005522286902617531
+      },
+      {
+        "chunk_id": "health-2",
+        "score": 0.005038706460792133
+      },
+      {
+        "chunk_id": "space-3",
+        "score": 0.004915069689246744
+      },
+      {
+        "chunk_id": "space-4",
+        "score": 0.004741039401223307
+      },
+      {
+        "chunk_id": "space-2",
+        "score": 0.004380204569081927
+      },
+      {
+        "chunk_id": "space-1",
+        "score": 0.00405143206814878
+      },
+      {
+        "chunk_id": "health-4",
+        "score": 0.003199462677031471
+      },
+      {
+        "chunk_id": "health-3",
+        "score": 0.0024211734118736415
+      },
+      {
+        "chunk_id": "library-4",
+        "score": 0.0023749361909003977
+      },
+      {
+        "chunk_id": "library-1",
+        "score": 0.0022593442845319518
+      },
+      {
+        "chunk_id": "library-3",
+        "score": 0.002151505021189408
+      },
+      {
+        "chunk_id": "library-2",
+        "score": 0.0002249250945369195
+      }
+    ],
+    "implementation": {
+      "library": "hipporag",
+      "version": "2.0.0a5",
+      "source_commit": "d5c8329422e0a0b834a15874545cb6a74b4f9b26",
+      "adapter_version": "v10"
+    },
+    "diagnostics": {
+      "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+      "generation_provider": "fixture:hipporag-deterministic-generation-v1",
+      "embedding_dimensions": 384,
+      "embedding_calls": 49,
+      "embedding_token_limit": 512,
+      "embedding_window_policy": "provider_exact_counter_reject_oversize",
+      "query_embedding_calls": 1,
+      "generation_calls": 33,
+      "score_kind": "personalized_pagerank",
+      "source_count": 16,
+      "unique_passages": 16,
+      "graph_nodes": 32,
+      "graph_edges": 48,
+      "retrieved_chunks": 16,
+      "ppr_calls": 1,
+      "extracted_triples": 16,
+      "linked_facts": 3,
+      "retrieval_path": "personalized_pagerank"
+    }
+  },
+  "duplicate_snapshot": {
+    "hits": [
+      {
+        "chunk_id": "duplicate-original",
+        "score": 0.1692307694585483
+      },
+      {
+        "chunk_id": "water-1",
+        "score": 0.1692307694585483
+      },
+      {
+        "chunk_id": "water-2",
+        "score": 0.04615384614649843
+      }
+    ],
+    "implementation": {
+      "library": "hipporag",
+      "version": "2.0.0a5",
+      "source_commit": "d5c8329422e0a0b834a15874545cb6a74b4f9b26",
+      "adapter_version": "v10"
+    },
+    "diagnostics": {
+      "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+      "generation_provider": "fixture:hipporag-deterministic-generation-v1",
+      "embedding_dimensions": 384,
+      "embedding_calls": 8,
+      "embedding_token_limit": 512,
+      "embedding_window_policy": "provider_exact_counter_reject_oversize",
+      "query_embedding_calls": 1,
+      "generation_calls": 5,
+      "score_kind": "personalized_pagerank",
+      "source_count": 3,
+      "unique_passages": 2,
+      "graph_nodes": 5,
+      "graph_edges": 6,
+      "retrieved_chunks": 3,
+      "ppr_calls": 1,
+      "extracted_triples": 2,
+      "linked_facts": 2,
+      "retrieval_path": "personalized_pagerank"
+    }
+  },
+  "replacement_snapshot": {
+    "hits": [
+      {
+        "chunk_id": "different-tenant-same-id",
+        "score": 0.20975609770280698
+      }
+    ],
+    "implementation": {
+      "library": "hipporag",
+      "version": "2.0.0a5",
+      "source_commit": "d5c8329422e0a0b834a15874545cb6a74b4f9b26",
+      "adapter_version": "v10"
+    },
+    "diagnostics": {
+      "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+      "generation_provider": "fixture:hipporag-deterministic-generation-v1",
+      "embedding_dimensions": 384,
+      "embedding_calls": 5,
+      "embedding_token_limit": 512,
+      "embedding_window_policy": "provider_exact_counter_reject_oversize",
+      "query_embedding_calls": 1,
+      "generation_calls": 3,
+      "score_kind": "personalized_pagerank",
+      "source_count": 1,
+      "unique_passages": 1,
+      "graph_nodes": 3,
+      "graph_edges": 3,
+      "retrieved_chunks": 1,
+      "ppr_calls": 1,
+      "extracted_triples": 1,
+      "linked_facts": 1,
+      "retrieval_path": "personalized_pagerank"
+    }
+  }
+}
