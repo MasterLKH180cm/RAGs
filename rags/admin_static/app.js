@@ -53,6 +53,7 @@
     $('#agent-approve').disabled=false;$('#agent-deny').disabled=false;
     $('#workflow-start').disabled=false;$('#workflow-start').textContent='執行工作流 →';
     $('#workflow-approve').disabled=false;$('#workflow-deny').disabled=false;
+    $('#login-submit').disabled=false;$('#login-submit').textContent='安全登入 →';
     for(const id of ['#add-dialog','#delete-dialog'])if($(id).open)$(id).close();
     for(const id of ['#query-answer','#citation-count','#query-status',
         '#document-count','#document-range','#stat-documents','#stat-chunks',
@@ -271,16 +272,22 @@
   async function signIn(event){
     event.preventDefault();const input=$('#admin-token'),token=input.value.trim();input.value='';
     if(!token){txt('#login-error','請輸入具有管理員權限的權杖。');$('#login-error').hidden=false;return;}
+    // A late bootstrap 401 belongs to the previous anonymous epoch. Abort it
+    // before authenticating so it cannot clear a newer login or its result.
+    showLogin();const epoch=state.epoch,controller=new AbortController();pending.add(controller);
     const submit=$('#login-submit');busy(submit,true,'驗證中…');$('#login-error').hidden=true;
     try{
       const res=await fetch('/admin/api/session',{method:'POST',headers:{Authorization:'Bearer '+token},
-        credentials:'same-origin',cache:'no-store'});
+        credentials:'same-origin',cache:'no-store',signal:controller.signal});
+      if(epoch!==state.epoch)return;
       if(!res.ok)throw new APIError(res.status);
-      showApp(await api('session'));notice('已安全登入。');
+      const info=await api('session');if(epoch!==state.epoch)return;
+      showApp(info);notice('已安全登入。');
     }catch(e){
+      if(epoch!==state.epoch)return;
       txt('#login-error',e.status===403?'需要管理員權限與安全連線。':
         '登入失敗，請確認權杖與身分驗證服務。');$('#login-error').hidden=false;
-    }finally{busy(submit,false,'安全登入 →');}
+    }finally{pending.delete(controller);if(epoch===state.epoch)busy(submit,false,'安全登入 →');}
   }
   async function logout(){
     try{await api('session',{method:'DELETE'});}catch(_){}

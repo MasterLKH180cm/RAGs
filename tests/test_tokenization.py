@@ -17,10 +17,12 @@ TEXTS = [
 ]
 
 
-@pytest.fixture(params=["unicode", "tiktoken"])
+@pytest.fixture(params=["unicode", "tiktoken", "utf8_bytes"])
 def tokenizer(request):
     if request.param == "unicode":
         return resolve_tokenizer()
+    if request.param == "utf8_bytes":
+        return resolve_tokenizer({"backend": "utf8_bytes"})
     return resolve_tokenizer(TokenizerConfig(backend="tiktoken", encoding="cl100k_base"))
 
 

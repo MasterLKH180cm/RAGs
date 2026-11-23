@@ -26,19 +26,19 @@ def _text(value: str) -> None:
 
 @dataclass(frozen=True)
 class TokenizerConfig:
-    backend: Literal["unicode", "tiktoken"] = "unicode"
+    backend: Literal["unicode", "tiktoken", "utf8_bytes"] = "unicode"
     model: str | None = None
     encoding: str | None = None
 
     def __post_init__(self) -> None:
-        if self.backend not in {"unicode", "tiktoken"}:
-            raise ValueError("Tokenizer backend must be unicode or tiktoken")
+        if self.backend not in {"unicode", "tiktoken", "utf8_bytes"}:
+            raise ValueError("Tokenizer backend must be unicode, utf8_bytes or tiktoken")
         for name in ("model", "encoding"):
             value = getattr(self, name)
             if value is not None and (not isinstance(value, str) or not value.strip()):
                 raise ValueError(f"Tokenizer {name} must be a non-empty string")
-        if self.backend == "unicode" and (self.model or self.encoding):
-            raise ValueError("Unicode counting does not accept a model or encoding")
+        if self.backend in {"unicode", "utf8_bytes"} and (self.model or self.encoding):
+            raise ValueError("Fallback counting does not accept a model or encoding")
         if self.backend == "tiktoken" and not (self.model or self.encoding):
             raise ValueError("Tiktoken requires a model or explicit encoding")
 
@@ -145,6 +145,44 @@ class UnicodeTokenizer(_SpanTokenizer):
         return text[-budget:] if budget else ""
 
 
+class UTF8ByteTokenizer(_SpanTokenizer):
+    """Conservative UTF-8 text budget, explicitly not exact model tokenization."""
+    id = "utf8-bytes-v1"
+    unit = "utf8_bytes"
+    count_kind = "conservative_bytes"
+
+    @property
+    def profile(self) -> dict:
+        return {"backend": "utf8_bytes", "id": self.id, "unit": self.unit,
+                "count_kind": self.count_kind, "version": 1}
+
+    def encode(self, text: str) -> list[int]:
+        _text(text)
+        return list(text.encode("utf-8"))
+
+    def decode(self, tokens: Sequence[int]) -> str:
+        try:
+            if any(type(token) is not int for token in tokens):
+                raise ValueError("Expected byte integers")
+            return bytes(tokens).decode("utf-8", errors="strict")
+        except (ValueError, TypeError, UnicodeError) as exc:
+            raise ValueError("Byte sequence does not decode to valid UTF-8") from exc
+
+    def count(self, text: str) -> int:
+        _text(text)
+        return len(text.encode("utf-8"))
+
+    def truncate(self, text: str, budget: int) -> str:
+        _text(text)
+        _integer(budget, "budget")
+        return text.encode("utf-8")[:budget].decode("utf-8", errors="ignore")
+
+    def suffix(self, text: str, budget: int) -> str:
+        _text(text)
+        _integer(budget, "budget")
+        return text.encode("utf-8")[-budget:].decode("utf-8", errors="ignore") if budget else ""
+
+
 class TiktokenTokenizer(_SpanTokenizer):
     unit = "model_tokens"
     count_kind = "exact_encoding"
@@ -236,7 +274,11 @@ def resolve_tokenizer(config: TokenizerConfig | Mapping | None = None) -> Tokeni
             raise ValueError("Unknown tokenizer configuration field") from exc
     if not isinstance(config, TokenizerConfig):
         raise ValueError("Expected TokenizerConfig or a configuration object")
-    return UnicodeTokenizer() if config.backend == "unicode" else TiktokenTokenizer(config)
+    if config.backend == "unicode":
+        return UnicodeTokenizer()
+    if config.backend == "utf8_bytes":
+        return UTF8ByteTokenizer()
+    return TiktokenTokenizer(config)
 
 
 @dataclass(frozen=True)

@@ -7,7 +7,9 @@ import base64
 import io
 import warnings
 
-import httpx
+from rags import provider_transport
+from rags.agents.deadline import remaining_timeout
+from rags.model_profiles import chat_profile
 
 from rags.config import Settings
 from rags.providers import response_object, response_text
@@ -48,9 +50,12 @@ def describe_image(raw: bytes, media_type: str, settings: Settings) -> str:
         "Do not assume sensitive or clinically meaningful conclusions."
     )
     if settings.model_provider == "openai":
+        profile = chat_profile(settings.chat_model, settings.generation_protocol)
         if not settings.generation_credential:
-            raise ValueError("RAGS_GENERATION_API_KEY or OPENAI_API_KEY is required for image description")
-        response = httpx.post(
+            credential = ("RAGS_GENERATION_API_KEY or RAGS_GENERATION_API_KEY_FILE"
+                          if profile.protocol == "tinker" else "RAGS_GENERATION_API_KEY or OPENAI_API_KEY")
+            raise ValueError(credential + " is required for image description")
+        response = provider_transport.post(
             settings.generation_endpoint + "/chat/completions",
             headers={"Authorization": "Bearer " + settings.generation_credential},
             json={
@@ -65,14 +70,16 @@ def describe_image(raw: bytes, media_type: str, settings: Settings) -> str:
                         }},
                     ],
                 }],
-                "max_tokens": 1000,
+                **profile.parameters(
+                    max_output_tokens=1000, effort=settings.reasoning_effort),
             },
-            timeout=90,
+            timeout=remaining_timeout(90),
+            max_request_bytes=provider_transport.MAX_IMAGE_REQUEST_BYTES,
         )
     else:
         if not settings.generation_credential:
             raise ValueError("RAGS_GENERATION_API_KEY or ANTHROPIC_API_KEY is required for image description")
-        response = httpx.post(
+        response = provider_transport.post(
             settings.generation_endpoint + "/messages",
             headers={
                 "x-api-key": settings.generation_credential,
@@ -93,7 +100,8 @@ def describe_image(raw: bytes, media_type: str, settings: Settings) -> str:
                     ],
                 }],
             },
-            timeout=90,
+            timeout=remaining_timeout(90),
+            max_request_bytes=provider_transport.MAX_IMAGE_REQUEST_BYTES,
         )
     payload = response_object(response, "invalid_model_output", "Vision provider returned an invalid response")
     return response_text(payload, settings.model_provider)[:12_000]

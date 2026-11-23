@@ -34,7 +34,7 @@ def invalid_response(monkeypatch, failure):
             return httpx.Response(200, request=request, text="private upstream credential fixture-secret-openai")
         return httpx.Response(200, request=request, json={"private": "fixture-secret-openai"})
 
-    monkeypatch.setattr(provider_module.httpx, "post", post)
+    monkeypatch.setattr(provider_module.provider_transport, "post", post)
 
 
 @pytest.mark.parametrize("failure", ["envelope", "json", "http", "timeout"])

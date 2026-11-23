@@ -187,7 +187,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             monitor.shutdown()
-    app = FastAPI(title="RAGs", version="0.8.0", docs_url="/docs" if docs else None,
+    app = FastAPI(title="RAGs", version="0.9.0", docs_url="/docs" if docs else None,
                   redoc_url="/redoc" if docs else None, openapi_url="/openapi.json" if docs else None, lifespan=lifespan)
     app.add_middleware(BodyLimitMiddleware, max_body_bytes=2_100_000)
     store = Store(config.db_path)

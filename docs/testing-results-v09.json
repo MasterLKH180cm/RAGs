@@ -1,0 +1,168 @@
+{
+  "schema_version": "rags-validation-v09",
+  "recorded_at_utc": "2026-11-23T02:41:55.262079+00:00",
+  "production_source_sha256": "d2970c94e0a468c33793747a3184f7e4eb6bcc4363e885c7dca0918db6e51fb1",
+  "pytest": {
+    "status": "passed",
+    "passed": 1201,
+    "unit": 777,
+    "integration_including_postgres": 424,
+    "postgres_included": 27,
+    "ordinary_core": 1174,
+    "deselected_external": 5,
+    "skipped": 0,
+    "failures": 0,
+    "deselected_resources": {
+      "encoders": 3,
+      "external": 5,
+      "research_raptor": 1,
+      "research_lightrag": 1
+    }
+  },
+  "coverage": {
+    "scope": "complete production Python package; ordinary parent-process unit+integration",
+    "files": 49,
+    "line_percent": 84.63047743623284,
+    "branch_percent": 76.95060844667144,
+    "minimum_lines": 80,
+    "minimum_branches": 72,
+    "passed": true
+  },
+  "process_acceptance": {
+    "local-platform-http-final": {
+      "status": "passed",
+      "live_model": false,
+      "checks": [
+        {
+          "id": "inkling_wire_contract",
+          "passed": true
+        },
+        {
+          "id": "agent_rag_tool_roundtrip",
+          "passed": true
+        },
+        {
+          "id": "truncated_tool_blocked",
+          "passed": true
+        },
+        {
+          "id": "tenant_isolation",
+          "passed": true
+        },
+        {
+          "id": "workflow_restart_and_revision",
+          "passed": true
+        },
+        {
+          "id": "admin_cookie_csrf",
+          "passed": true
+        }
+      ],
+      "cleanup_completed": true
+    },
+    "local-platform-postgres-final": {
+      "status": "passed",
+      "live_model": false,
+      "checks": [
+        {
+          "id": "inkling_wire_contract",
+          "passed": true
+        },
+        {
+          "id": "agent_rag_tool_roundtrip",
+          "passed": true
+        },
+        {
+          "id": "truncated_tool_blocked",
+          "passed": true
+        },
+        {
+          "id": "tenant_isolation",
+          "passed": true
+        },
+        {
+          "id": "workflow_restart_and_revision",
+          "passed": true
+        },
+        {
+          "id": "admin_cookie_csrf",
+          "passed": true
+        }
+      ],
+      "cleanup_completed": true
+    }
+  },
+  "static_and_packaging": {
+    "ruff": "passed",
+    "javascript_syntax": "passed",
+    "admin_dom_regressions": "passed",
+    "isolated_installed_wheel": "passed",
+    "wheel_version": "0.9.0",
+    "lock_consistency": "passed"
+  },
+  "pgvector_synthetic": {
+    "workload": "synthetic_temp_tables",
+    "database": "postgresql+pgvector",
+    "postgres_version": "17.12",
+    "pgvector_version": "0.8.7",
+    "documents": 500,
+    "chunks_per_document": 8,
+    "candidate_fraction": 0.1,
+    "vector_dimensions": 32,
+    "warmups": 3,
+    "iterations": 30,
+    "measurements": {
+      "unfiltered_tenant_scan": {
+        "p50_ms": 3.42,
+        "p95_ms": 6.1,
+        "rows": 400,
+        "samples": 30
+      },
+      "scoped_revision_join": {
+        "p50_ms": 0.908,
+        "p95_ms": 1.977,
+        "rows": 400,
+        "samples": 30
+      },
+      "exact_scoped_cosine": {
+        "p50_ms": 0.86,
+        "p95_ms": 1.696,
+        "rows": 10,
+        "samples": 30
+      }
+    },
+    "explain": {
+      "unfiltered_tenant_scan": {
+        "execution_ms": 0.508,
+        "shared_hit_blocks": 0,
+        "temp_read_blocks": 0
+      },
+      "scoped_revision_join": {
+        "execution_ms": 0.868,
+        "shared_hit_blocks": 0,
+        "temp_read_blocks": 0
+      },
+      "exact_scoped_cosine": {
+        "execution_ms": 0.818,
+        "shared_hit_blocks": 0,
+        "temp_read_blocks": 0
+      }
+    },
+    "disclaimer": "Synthetic single-connection read-path comparison; not production capacity or p99."
+  },
+  "live_inkling": {
+    "status": "blocked",
+    "block_reason": "missing_model_credential",
+    "actual_requests": 0,
+    "readiness_report": "reports/inkling-mini-readiness-v09.json"
+  },
+  "recorded_admission_quality": {
+    "source": "reports/admission-verification-qwen-v03.json",
+    "freshly_scored": false,
+    "correctness_passed": 21,
+    "quality_passed": 7,
+    "quality_failed": 4,
+    "promotion_status": "failed"
+  },
+  "remote_ci": "Actual Chromium, Docker Compose, encoders/research and pinned admission runtime remain independent exact-revision CI gates; they are not included in local pass counts."
+}

@@ -10,12 +10,18 @@ RAGs provides an authenticated FastAPI knowledge service and a read-only MCP bri
 
 Version 0.6 adds tenant-scoped roles and opt-in OAuth2 introspection with strict per-operation scope checks; review [SECURITY_V06](docs/SECURITY_V06.md). Version 0.5 adds the installable CLI, five operator profiles, read-only doctor, and measured revision-scoped PostgreSQL reads; see the [synthetic performance report](docs/PERFORMANCE_V05.md) and [v0.5 specification](docs/SPEC_V05.md). Version 0.4 adds operator feature permissions, dedicated model endpoint configuration, and a PostgreSQL/pgvector deployment; see the [v0.4 specification](docs/SPEC_V04.md). Version 0.3 adds typed evidence decisions, separately calibrated relevance and answerability profiles, and isolated services executing pinned RAPTOR and LightRAG code. It builds on v0.2's six chunking strategies, token budgets, parent/summary indexes, graph traversal, structured queries, temporal revisions, federation, and pretrained encoders. The [twenty-family coverage table](#twenty-family-coverage) distinguishes native mechanisms, tested upstream execution, and remaining external requirements. An unavailable capability returns an explicit error instead of silently running another strategy.
 
+The v0.9 upgrade adds explicit model protocol capabilities, Inkling 2 Mini
+configuration, conservative UTF-8 budgeting, and approval checkpoints bound to
+model/tool contracts. See [the specification](docs/SPEC_V09.md). Model fixtures
+verify compatibility; they do not establish live model quality or speed.
+
 ## Contents
 
 - [Quick start](#quick-start)
 - [Agent Platform: model routing, workflows and memory (v0.8)](#agent-platform-model-routing-workflows-and-memory-v08)
 - [Admin Dashboard and OpenTelemetry (v0.7)](#admin-dashboard-and-opentelemetry-v07)
 - [Tenant authorization and OAuth2](#tenant-authorization-and-oauth2)
+- [Inkling 2 Mini](#inkling-2-mini)
 - [Installable CLI](#installable-cli-no-clone-needed)
 - [uv environment workflow](#uv-environment-workflow)
 - [Ingest and query](#ingest-and-query)
@@ -280,7 +286,89 @@ See [v0.8 spec](docs/SPEC_V08.md) and [implementation review](docs/REVIEW_V08.md
 
 ## Quick start
 
-### Installable CLI (no clone needed)
+### Inkling 2 Mini
+
+The published model ID is `thinkingmachines/Inkling-2-Mini`. The official Tinker
+endpoint is `https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1`.
+Its OpenAI-compatible protocol uses **`max_completion_tokens`** and accepts
+`reasoning_effort`. Tinker documents `response_format` as ignored, so RAGs always
+validates JSON and registered tool arguments locally. See the official
+[model card](https://thinkingmachines.ai/model-card/inkling-2-mini/) and
+[chat API](https://tinker-docs.thinkingmachines.ai/inference/openai/chat-completions/).
+
+Create a profile in an empty configuration directory:
+
+```bash
+rags init --profile inkling --directory /path/to/existing/empty-directory
+export RAGS_GENERATION_API_KEY_FILE=/secrets/tinker-api-key
+rags doctor --env-file /path/to/existing/empty-directory/.env --no-db --json
+rags serve --env-file /path/to/existing/empty-directory/.env
+```
+
+Tinker generation requires `RAGS_GENERATION_API_KEY` or its `_FILE` form; it does
+not inherit `OPENAI_API_KEY` or `TINKER_API_KEY`. This keeps embedding credentials
+separate. If the generation URL is omitted, the Tinker profile uses the official
+Tinker base rather than `OPENAI_BASE_URL`. An operator-configured gateway still
+uses an explicit `RAGS_GENERATION_BASE_URL` and generation credential. The separate
+[live benchmark](docs/INKLING_BENCHMARK.md) accepts `TINKER_API_KEY(_FILE)` for its
+fixed target.
+
+This profile fixes reasoning effort to `low` (Tinker's documented value `0.2`)
+and sets a 1,024-token generated-output limit. That limit includes the model's
+generated work; it is not a promise of 1,024 visible answer tokens. Increase the
+limit explicitly for longer reasoning workloads. The server's default effort
+when omitted is `0.9`; do not compare timings across different effort settings.
+
+The profile selects `utf8_bytes` for generation budgeting, with complete Unicode
+boundaries and explicit `conservative_bytes` provenance. This budget is not the
+Inkling tokenizer, billing count or an exact measure of chat framing. An operator
+may select a verified tokenizer separately. Source chunking keeps its existing
+configuration. The default embedding encoder remains the clearly labelled local
+hashing demo; Inkling is not exposed as an embedding model. Configure a trained
+embedding model independently when evaluating retrieval quality.
+
+For autonomous agents, use the same operator-approved model with the router:
+
+```bash
+export RAGS_ROUTER_GATEWAY_URL=https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1
+export RAGS_ROUTER_API_KEY_FILE=/secrets/tinker-api-key
+export RAGS_ROUTER_MODELS_JSON='{"inkling":"thinkingmachines/Inkling-2-Mini"}'
+export RAGS_ROUTER_MODEL_OPTIONS_JSON='{"inkling":{"protocol":"tinker","reasoning_effort":"low"}}'
+rags agent doctor --json
+```
+
+`protocol` accepts `auto`, `openai`, or `tinker`. `auto` recognizes the exact
+published Inkling ID; gateway aliases can select `tinker` explicitly. Existing
+OpenAI-compatible models preserve their legacy token-limit field. Per-model
+options accept only protocol and reasoning effort; they cannot change endpoints,
+keys, permissions or arbitrary upstream parameters. Direct generation uses
+`RAGS_GENERATION_PROTOCOL` and `RAGS_REASONING_EFFORT`; router generation uses the
+per-alias options above.
+
+Direct generation and embedding requests have a 1 MiB JSON-body limit; image
+captions allow 3,000,000 bytes for the existing 2 MB image upload plus encoding.
+Responses are limited to 512 KiB. The shared transport rejects redirects and
+compressed responses before reading their bodies, and one wall deadline covers
+connection, headers and all body reads. These limits include framing and apply
+in addition to the configured model context/output budgets.
+
+Native tool continuations replay bounded upstream `reasoning_content`, including
+across approval/restart, as the Tinker API recommends. It is kept only in the
+private run checkpoint, never in public response serialization, checkpoint
+exports, API summaries, conversation history or observations. Database operators
+must apply the same access and retention policy to run checkpoints as to prompts.
+
+A truncated response never executes a tool or completes a generated answer.
+Approval checkpoints include tool schemas, permissions, idempotency policy,
+approved model mappings and runtime bounds. Deploying a changed contract rejects
+an old pending approval with `definition_mismatch`; start a new run and review its
+new request. Rotating the same gateway credential does not change the contract.
+Upgrading from v0.8 to v0.9 also changes this fingerprint: pending agent approvals
+and other resumable agent checkpoints from v0.8 must be replaced with new runs
+and reviewed again, even when operator configuration is unchanged.
+Existing history remains readable by its original tenant and owner.
+
+## Installable CLI (no clone needed)
 
 The Hatch wheel publishes the `rags` console command. The package has **not**
 been published on PyPI; install directly from the repository until a release
@@ -320,6 +408,7 @@ trusted reverse proxy and an auth gateway before permitting non-loopback binding
 | `openai` | SQLite | OpenAI API | OpenAI-compatible chat | Set `RAGS_EMBEDDING_API_KEY` and `RAGS_GENERATION_API_KEY` in a secret environment |
 | `ollama` | SQLite | Ollama OpenAI-compatible API | Ollama local chat | Run Ollama and fetch matching embedding/chat models separately |
 | `anthropic` | SQLite | Deterministic local hash | Anthropic chat | Set `ANTHROPIC_API_KEY` in a secret environment |
+| `inkling` | SQLite | Deterministic local hash | Inkling 2 Mini via Tinker | Set `RAGS_GENERATION_API_KEY` or its `_FILE`; generation and embeddings stay separate |
 
 Choose with `rags init --profile postgres --directory /path/to/existing/dir`.
 For optional PostgreSQL support, install with:
@@ -598,7 +687,7 @@ Pass `chunking` and `tokenizer` on ingestion/reindexing, or set `RAGS_CHUNKING_J
 
 Default source processing uses `structure`, 850 Unicode code points per chunk, and 120 units of overlap. Unicode units are **not model tokens**. For exact encoding counts, select `{"backend":"tiktoken","model":"known-model"}` or an explicit, correct encoding. Unknown model mappings fail. Processing metadata records tokenizer identity, counts, source spans, block types, and generated context separately.
 
-Generation has its own `RAGS_GENERATION_TOKENIZER_JSON`. OpenAI generation defaults to the configured chat model's tiktoken mapping; other defaults explicitly count Unicode units. Select the correct generation encoding when using compatible servers with custom model names. `RAGS_CONTEXT_BUDGET`, `RAGS_OUTPUT_BUDGET`, and `RAGS_ENVELOPE_BUDGET` control full-prompt packing, output reservation, and provider framing allowance. Headers, instructions, question, and delimiters are counted; an oversized question fails instead of being silently dropped.
+Generation has its own `RAGS_GENERATION_TOKENIZER_JSON`. The Tinker profile defaults to conservative UTF-8 bytes; ordinary OpenAI generation defaults to the configured chat model's tiktoken mapping; other defaults explicitly count Unicode units. Select the correct generation encoding when using compatible servers with custom model names. `RAGS_CONTEXT_BUDGET`, `RAGS_OUTPUT_BUDGET`, and `RAGS_ENVELOPE_BUDGET` control full-prompt packing, output reservation, and provider framing allowance. Headers, instructions, question, and delimiters are counted; an oversized question fails instead of being silently dropped.
 
 The index fingerprint includes chunking/tokenizer settings, model identities, embedding endpoint/dimensions, and prompt revision. Legacy rows remain marked `legacy` until explicitly reindexed; incompatible vector profiles return a reindex requirement.
 
@@ -857,8 +946,11 @@ setting change; model/endpoint/tokenizer changes can require explicit reindexing
 | `RAGS_GENERATION_API_KEY` | Unset | Dedicated generation credential; choose this or its _FILE, never both. |
 | `RAGS_GENERATION_API_KEY_FILE` | Unset | Container-readable generation secret path. |
 | `RAGS_GENERATION_MODEL` | Unset | Dedicated generation model; otherwise selected provider's legacy model. |
+| `RAGS_GENERATION_PROTOCOL` | `auto` | auto, openai or tinker; controls the supported generation request fields. |
+| `RAGS_REASONING_EFFORT` | Unset | Tinker effort name or numeric 0..0.99; omitted leaves the provider default. |
+| `RAGS_ROUTER_MODEL_OPTIONS_JSON` | `{}` | Per-approved-alias protocol and reasoning effort; unknown aliases/fields fail startup. |
 | `RAGS_TOKENIZER_JSON` | Unset | Empty uses the built-in unicode counter; exact option: {"backend":"tiktoken","encoding":"cl100k_base"}. |
-| `RAGS_GENERATION_TOKENIZER_JSON` | Unset | Empty preserves provider-specific defaults; OpenAI generation uses its model tokenizer. |
+| `RAGS_GENERATION_TOKENIZER_JSON` | Unset | Empty preserves profile defaults; Tinker uses utf8_bytes, ordinary OpenAI generation uses its model tokenizer. |
 | `RAGS_CHUNKING_JSON` | Unset | Empty uses structure/max_tokens=850/overlap_tokens=120; JSON overrides are validated. |
 | `RAGS_CONTEXT_BUDGET` | `16000` | Total generation context units. |
 | `RAGS_OUTPUT_BUDGET` | `1024` | Output reserve inside context budget. |
@@ -1164,3 +1256,11 @@ PostgreSQL/pgvector is the deployed store; SQLite remains explicit local develop
 | [`evaluate.py`](rags/evaluate.py), [`tests/`](tests/) | Measured evaluation and behavioral integration tests |
 
 Licensed under the [MIT License](LICENSE).
+
+### v0.9 validation evidence
+
+The [v0.9 validation review](docs/VALIDATION_V09.md) separates local core and
+PostgreSQL results, actual process acceptance, browser/external-resource CI,
+and live-model evidence. The [Inkling readiness report](reports/inkling-mini-readiness-v09.json)
+is explicitly blocked when no authorized Tinker credential is available; it
+contains no inferred latency or quality result.

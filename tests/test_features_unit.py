@@ -2,7 +2,6 @@
 from dataclasses import replace
 import os
 
-import httpx
 import pytest
 
 from rags.config import Settings
@@ -165,7 +164,7 @@ def test_embedding_permission_rejects_before_any_encoder_or_network(provider_nam
     def forbidden(*args, **kwargs):
         pytest.fail("disabled embedding reached an encoder or HTTP request")
     monkeypatch.setattr("rags.providers._semantic_encoder", forbidden)
-    monkeypatch.setattr(httpx, "post", forbidden)
+    monkeypatch.setattr("rags.provider_transport.post", forbidden)
     monkeypatch.setattr("rags.providers.local_embedding", forbidden)
     settings = replace(Settings.from_env(), embedding_provider=provider_name, features=disabled("embedding." + provider_name))
     for method in (Providers(settings).embedding, Providers(settings).query_embedding):
@@ -175,7 +174,7 @@ def test_embedding_permission_rejects_before_any_encoder_or_network(provider_nam
 
 @pytest.mark.parametrize("feature", ["model_generation", "tokenizer.unicode"])
 def test_generation_permission_precedes_http_even_with_configured_credentials(feature, monkeypatch):
-    monkeypatch.setattr(httpx, "post", lambda *a, **kw: pytest.fail("disabled generation called HTTP"))
+    monkeypatch.setattr("rags.provider_transport.post", lambda *a, **kw: pytest.fail("disabled generation called HTTP"))
     settings = replace(Settings.from_env(), model_provider="openai", generation_api_key="fixture-key", features=disabled(feature))
     with pytest.raises(CapabilityError) as error:
         Providers(settings).complete("instruction", "question")
@@ -184,7 +183,7 @@ def test_generation_permission_precedes_http_even_with_configured_credentials(fe
 
 @pytest.mark.parametrize("feature", ["image_captioning", "model_generation"])
 def test_vision_permission_precedes_image_encoding_or_http(feature, monkeypatch):
-    monkeypatch.setattr(httpx, "post", lambda *a, **kw: pytest.fail("disabled vision called HTTP"))
+    monkeypatch.setattr("rags.provider_transport.post", lambda *a, **kw: pytest.fail("disabled vision called HTTP"))
     settings = replace(Settings.from_env(), model_provider="openai", features=disabled(feature))
     with pytest.raises(CapabilityError, match="Feature is disabled"):
         describe_image(b"not-an-image", "image/png", settings)

@@ -19,7 +19,7 @@ from rags.config import Settings
 from rags.features import MANIFEST
 
 
-PROFILES = ("offline", "postgres", "openai", "ollama", "anthropic")
+PROFILES = ("offline", "postgres", "openai", "ollama", "anthropic", "inkling")
 ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 MAX_ENV_SIZE = 65_536
 PROFILE_DISABLED = {
@@ -33,6 +33,8 @@ PROFILE_DISABLED = {
                "multimodal", "original_images"),
     "anthropic": ("embedding.openai", "embedding.fastembed", "research", "federation",
                   "multimodal", "original_images"),
+    "inkling": ("embedding.openai", "embedding.fastembed", "research", "federation",
+                "multimodal", "image_captioning", "original_images"),
 }
 
 
@@ -246,7 +248,7 @@ def _run_serve(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="rags", description="RAGs platform tooling")
-    parser.add_argument("--version", action="version", version="rags-platform 0.8.0")
+    parser.add_argument("--version", action="version", version="rags-platform 0.9.0")
     sub = parser.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init", help="Create private credentials and a deployment profile")
     init.add_argument("--profile", choices=PROFILES, default="offline")

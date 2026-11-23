@@ -115,6 +115,66 @@ def test_required_options_work_when_inventory_already_exists(isolated_suite):
     assert json.loads(inventory.read_text())["selected"] == 1
 
 
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("external", [False, True])
+def test_http_guard_blocks_core_and_preserves_explicit_resource_gates(isolated_suite, asynchronous, external):
+    # A sentinel pool prevents all socket/DNS I/O even if the guard regresses.
+    # The real transport method must deny a core case before reaching that pool;
+    # a declared external-resource case is allowed to reach the injected pool.
+    source = """
+        import asyncio
+        import httpx
+        import pytest
+
+        class SentinelPool:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                pass
+            def handle_request(self, request):
+                raise RuntimeError("injected wire reached")
+            async def handle_async_request(self, request):
+                raise RuntimeError("injected wire reached")
+            def close(self):
+                pass
+            async def aclose(self):
+                pass
+
+        def send():
+            transport = httpx.HTTPTransport()
+            transport._pool = SentinelPool()
+            with httpx.Client(transport=transport, trust_env=False) as client:
+                client.post("https://fixture.invalid/v1", json={"input": "synthetic"})
+
+        async def async_send():
+            transport = httpx.AsyncHTTPTransport()
+            transport._pool = SentinelPool()
+            async with httpx.AsyncClient(transport=transport, trust_env=False) as client:
+                await client.post("https://fixture.invalid/v1", json={"input": "synthetic"})
+
+        @pytest.mark.integration
+        EXTERNAL_MARKER
+        def test_case():
+            EXERCISE
+    """
+    operation = "asyncio.run(async_send())" if asynchronous else "send()"
+    exercise = ("with pytest.raises(RuntimeError, match='injected wire reached'):\n                " + operation
+                if external else operation)
+    isolated_suite.makepyfile(source.replace("EXTERNAL_MARKER", "@pytest.mark.external" if external else "")
+                             .replace("EXERCISE", exercise))
+    result = isolated_suite.runpytest_subprocess("-q")
+    if external:
+        result.assert_outcomes(passed=1)
+    else:
+        result.assert_outcomes(failed=1)
+        assert "Core tests cannot access nonlocal HTTP" in result.stdout.str()
+        assert "RuntimeError: injected wire reached" not in result.stdout.str()
+
+
 @pytest.fixture
 def coverage_gate(tmp_path):
     spec = importlib.util.spec_from_file_location("coverage_gate", ROOT / "scripts/check_coverage.py")

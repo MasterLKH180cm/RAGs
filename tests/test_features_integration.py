@@ -64,7 +64,7 @@ def test_transitive_permissions_precede_generation_network_or_scope(settings, mo
     configured = replace(settings, model_provider="openai", openai_key="private-key", features=flags(feature))
     service = RAGService(Store(settings.db_path), Providers(configured))
     monkeypatch.setattr(service.store, "scope", lambda *a, **kw: pytest.fail("dependent feature read data"))
-    monkeypatch.setattr(httpx, "post", lambda *a, **kw: pytest.fail("dependent feature called HTTP"))
+    monkeypatch.setattr("rags.provider_transport.post", lambda *a, **kw: pytest.fail("dependent feature called HTTP"))
     with pytest.raises(CapabilityError, match="Feature is disabled"):
         service.query("tenant-a", "Where is the policy?", mode, generate=False)
 
@@ -118,7 +118,7 @@ def test_http_permissions_preserve_authentication_and_sources(settings, feature,
 @pytest.mark.parametrize("path,feature", [("/documents/upload", "uploads"), ("/images", "image_captioning"),
                                             ("/images", "model_generation")])
 def test_upload_permissions_fail_before_parsers_and_vision(settings, path, feature, monkeypatch):
-    monkeypatch.setattr(httpx, "post", lambda *a, **kw: pytest.fail("disabled image called provider"))
+    monkeypatch.setattr("rags.provider_transport.post", lambda *a, **kw: pytest.fail("disabled image called provider"))
     with TestClient(create_app(replace(settings, features=flags(feature)))) as client:
         response = client.post(path, headers=AUTH, files={"file": ("bad.pdf", b"invalid file", "application/pdf")})
         assert response.status_code == 403 and response.json()["detail"]["code"] == "feature_disabled"
@@ -159,7 +159,7 @@ def test_disabled_graph_builder_does_not_create_implicit_edges(settings):
 def test_configured_model_is_not_silently_replaced_after_generation_disabled(settings, monkeypatch):
     ingest(settings)
     configured = replace(settings, model_provider="openai", openai_key="configured-key", features=flags("model_generation"))
-    monkeypatch.setattr(httpx, "post", lambda *a, **kw: pytest.fail("disabled model called HTTP"))
+    monkeypatch.setattr("rags.provider_transport.post", lambda *a, **kw: pytest.fail("disabled model called HTTP"))
     with TestClient(create_app(configured)) as client:
         response = client.post("/query", headers=AUTH, json={"question": "Telemetry", "mode": "sparse"})
         assert response.status_code == 403
@@ -223,7 +223,7 @@ def test_caption_ingestion_preflights_chunker_and_tokenizer_before_vision(settin
     raw = io.BytesIO()
     Image.new("RGB", (2, 2), "white").save(raw, format="PNG")
     configured = replace(settings, model_provider="openai", openai_key="fixture-key", features=flags(feature))
-    monkeypatch.setattr(httpx, "post", lambda *a, **kw: pytest.fail("disabled ingestion called vision provider"))
+    monkeypatch.setattr("rags.provider_transport.post", lambda *a, **kw: pytest.fail("disabled ingestion called vision provider"))
     with TestClient(create_app(configured)) as client:
         response = client.post("/images", headers=AUTH, files={"file": ("image.png", raw.getvalue(), "image/png")})
         assert response.status_code == 403 and response.json()["detail"]["code"] == "feature_disabled"
@@ -239,7 +239,7 @@ def test_internal_generation_preflights_tokenizer_even_with_generate_false(setti
         calls.append(url)
         return httpx.Response(200, request=httpx.Request("POST", url), json={"data": [{"embedding": [1.0, 0.0]}]})
 
-    monkeypatch.setattr(httpx, "post", embedding_response)
+    monkeypatch.setattr("rags.provider_transport.post", embedding_response)
     ingest(configured)
     assert calls
     calls.clear()

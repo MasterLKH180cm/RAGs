@@ -13,6 +13,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from rags.agents.config import AgentPlatformConfig
+from rags.model_profiles import chat_profile, normalized_usage, strict_json
 from rags.registry import CapabilityError
 
 
@@ -29,6 +30,8 @@ class Message(BaseModel):
     name: str | None = None
     tool_call_id: str | None = None
     tool_calls: list[dict] | None = None
+    # Upstream reasoning is replayed only to the model, never to a user or log.
+    reasoning_content: str | None = Field(default=None, max_length=30000, repr=False)
 
     @field_validator("role")
     @classmethod
@@ -66,6 +69,7 @@ class ModelReply(BaseModel):
     finish_reason: str
     model: str
     usage: dict[str, int] = Field(default_factory=dict)
+    reasoning_content: str | None = Field(default=None, max_length=30000, repr=False, exclude=True)
 
 
 class EmbeddingReply(BaseModel):
@@ -93,6 +97,9 @@ class ModelRouter:
         selected = self.config.models.get(model)
         if selected is None:
             raise CapabilityError("model_not_allowed", "Embedding model alias is not approved", 403)
+        profile = chat_profile(selected, self.config.model_options.get(model, {}).get("protocol", "auto"))
+        if not profile.supports_embeddings:
+            raise CapabilityError("unsupported_model_operation", "Selected model does not provide embeddings", 422)
         if not isinstance(text, str) or not text or len(text.encode("utf-8")) > MAX_CONTEXT_BYTES:
             raise ValueError("Embedding input exceeds the configured length limit")
         if type(timeout_seconds) not in (int, float) or not 0.05 <= timeout_seconds <= 90.:
@@ -103,12 +110,14 @@ class ModelRouter:
                 with client.stream(
                     "POST", self.config.gateway_url + "/embeddings",
                     headers={"Authorization": "Bearer " + self.config.gateway_key,
-                             "Accept": "application/json"},
+                             "Accept": "application/json", "Accept-Encoding": "identity"},
                     json={"model": selected, "input": text},
                 ) as response:
                     if response.status_code != 200:
                         raise CapabilityError("embedding_gateway_failed",
                                               "Gateway rejected the embedding request", 502)
+                    if response.headers.get("content-encoding", "identity").lower() != "identity":
+                        raise CapabilityError("invalid_embedding", "Compressed embedding responses are unsupported", 502)
                     chunks, size = [], 0
                     for chunk in response.iter_bytes():
                         if time.monotonic() >= deadline:
@@ -119,22 +128,22 @@ class ModelRouter:
                         chunks.append(chunk)
             if time.monotonic() >= deadline:
                 raise CapabilityError("model_timeout", "Embedding deadline exceeded", 504)
-            payload = json.loads(b"".join(chunks))
+            payload = strict_json(b"".join(chunks))
         except CapabilityError:
             raise
-        except (httpx.HTTPError, ValueError, UnicodeError) as exc:
+        except (httpx.HTTPError, ValueError, UnicodeError, RecursionError) as exc:
             raise CapabilityError("embedding_gateway_failed",
                                   "Gateway embedding request failed", 502) from exc
         try:
             data = payload["data"]
+            if not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], dict):
+                raise ValueError("Expected one embedding result")
             vector = data[0]["embedding"]
             if not isinstance(vector, list) or not 1 <= len(vector) <= 16000 or any(
                 type(value) not in (int, float) or not math.isfinite(value) for value in vector
             ):
                 raise ValueError("Invalid embedding vector")
-            usage = payload.get("usage") or {}
-            safe_usage = {key: count for key in ("prompt_tokens", "total_tokens")
-                          if type((count := usage.get(key))) is int and 0 <= count <= 10**9}
+            safe_usage = normalized_usage(payload)
             return EmbeddingReply(vector=vector, model=selected, usage=safe_usage)
         except (ValueError, TypeError, KeyError, IndexError, AttributeError) as exc:
             raise CapabilityError("invalid_embedding", "Invalid Gateway embedding result", 502) from exc
@@ -159,19 +168,32 @@ class ModelRouter:
             tools = []
         if not isinstance(tools, list) or len(tools) > 12:
             raise ValueError("Tool definitions must be a bounded list")
+        names = set()
         for item in tools:
             if (not isinstance(item, dict) or item.get("type") != "function"
                     or not isinstance(item.get("function"), dict)
                     or not TOOL_NAME.fullmatch(str(item["function"].get("name", "")))):
                 raise ValueError("Invalid tool definition")
+            name = item["function"]["name"]
+            if name in names:
+                raise ValueError("Duplicate tool declaration")
+            names.add(name)
         tokens = self.config.max_output_tokens if max_output_tokens is None else max_output_tokens
         if type(tokens) is not int or not 1 <= tokens <= self.config.max_output_tokens:
             raise ValueError("Invalid model output token limit")
-        request = {"model": selected, "messages": normalized, "max_tokens": tokens,
-                   "temperature": 0}
+        options = self.config.model_options.get(model, {})
+        profile = chat_profile(selected, options.get("protocol", "auto"))
+        request = {"model": selected, "messages": normalized,
+                   **profile.parameters(max_output_tokens=tokens, effort=options.get("reasoning_effort"))}
         if tools:
             request["tools"] = tools
             request["tool_choice"] = "auto"
+        try:
+            request_size = len(json.dumps(request, ensure_ascii=False, allow_nan=False).encode("utf-8"))
+        except (TypeError, ValueError, UnicodeError, RecursionError) as exc:
+            raise ValueError("Model request must contain valid JSON values") from exc
+        if request_size > MAX_CONTEXT_BYTES:
+            raise CapabilityError("context_budget_exceeded", "Router request budget exceeded", 422)
         if type(timeout_seconds) not in (int, float) or not 0.05 <= timeout_seconds <= 90.:
             raise ValueError("Model request timeout must be 0.05..90 seconds")
         deadline = time.monotonic() + timeout_seconds
@@ -180,12 +202,14 @@ class ModelRouter:
                 with client.stream(
                     "POST", self.config.gateway_url + "/chat/completions",
                     headers={"Authorization": "Bearer " + self.config.gateway_key,
-                             "Accept": "application/json"},
+                             "Accept": "application/json", "Accept-Encoding": "identity"},
                     json=request,
                 ) as response:
                     if response.status_code != 200:
                         raise CapabilityError("model_gateway_failed",
                                               "Model gateway did not complete the request", 502)
+                    if response.headers.get("content-encoding", "identity").lower() != "identity":
+                        raise CapabilityError("invalid_model_output", "Compressed model responses are unsupported", 502)
                     payload, size = [], 0
                     for chunk in response.iter_bytes():
                         if time.monotonic() >= deadline:
@@ -196,18 +220,24 @@ class ModelRouter:
                         payload.append(chunk)
             if time.monotonic() >= deadline:
                 raise CapabilityError("model_timeout", "Model deadline exceeded", 504)
-            data = json.loads(b"".join(payload))
+            data = strict_json(b"".join(payload))
         except CapabilityError:
             raise
-        except (httpx.HTTPError, UnicodeError, ValueError) as exc:
+        except (httpx.HTTPError, UnicodeError, ValueError, RecursionError) as exc:
             raise CapabilityError("model_gateway_failed",
                                   "Model gateway is unavailable or returned invalid JSON", 502) from exc
         try:
             choices = data["choices"]
+            if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
+                raise ValueError("Expected one completion result")
             message = choices[0]["message"]
             if not isinstance(message, dict):
                 raise ValueError("Gateway message must be an object")
-            raw_calls = message.get("tool_calls") or []
+            if message.get("role", "assistant") != "assistant":
+                raise ValueError("Gateway reply must be an assistant message")
+            raw_calls = message.get("tool_calls")
+            if raw_calls is None:
+                raw_calls = []
             if not isinstance(raw_calls, list) or len(raw_calls) > 8:
                 raise ValueError("Unexpected tool calls")
             calls = []
@@ -218,7 +248,7 @@ class ModelRouter:
                 args = item["function"]["arguments"]
                 if not isinstance(args, str) or len(args.encode("utf-8")) > 16_384:
                     raise ValueError("Invalid arguments length")
-                parsed_args = json.loads(args)
+                parsed_args = strict_json(args)
                 if not isinstance(parsed_args, dict):
                     raise ValueError("Tool arguments must be JSON object")
                 call = ToolCall(id=item["id"], name=item["function"]["name"], arguments=parsed_args)
@@ -229,17 +259,24 @@ class ModelRouter:
             reason = choices[0].get("finish_reason", "stop")
             if reason not in {"stop", "tool_calls", "length"}:
                 raise ValueError("Unsupported termination reason")
-            content = message.get("content") or ""
+            if calls and reason != "tool_calls":
+                raise ValueError("Partial or inconsistently terminated tool calls")
+            if reason == "tool_calls" and not calls:
+                raise ValueError("Tool termination without tool calls")
+            declared = {item["function"]["name"] for item in tools}
+            if any(call.name not in declared for call in calls):
+                raise ValueError("Undeclared tool call")
+            content = message.get("content")
+            if content is None:
+                content = ""
             if not isinstance(content, str) or len(content) > 30000:
                 raise ValueError("Invalid message content")
-            usage = data.get("usage") or {}
-            report = {}
-            for name in ("prompt_tokens", "completion_tokens", "total_tokens"):
-                value = usage.get(name) if isinstance(usage, dict) else None
-                if type(value) is int and 0 <= value <= 10**9:
-                    report[name] = value
+            reasoning = message.get("reasoning_content")
+            if reasoning is not None and (not isinstance(reasoning, str) or len(reasoning) > 30000):
+                raise ValueError("Invalid reasoning continuation")
+            report = normalized_usage(data)
             return ModelReply(content=content, tool_calls=calls, finish_reason=reason,
-                              model=selected, usage=report)
-        except (KeyError, IndexError, TypeError, ValueError) as exc:
+                              model=selected, usage=report, reasoning_content=reasoning)
+        except (KeyError, IndexError, TypeError, ValueError, AttributeError, RecursionError) as exc:
             raise CapabilityError("invalid_model_output",
                                   "Model gateway response did not match tool schema", 502) from exc

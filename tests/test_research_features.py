@@ -3,7 +3,6 @@ import asyncio
 from dataclasses import replace
 from types import SimpleNamespace
 
-import httpx
 import pytest
 
 from rags.config import Settings
@@ -59,7 +58,7 @@ def test_disabled_adapter_dependencies_leave_no_tokenizer_encoder_http_or_index(
         pytest.fail("Disabled research reached an optional dependency or provider")
     monkeypatch.setattr("rags.research.common.resolve_tokenizer", forbidden)
     monkeypatch.setattr("rags.providers._semantic_encoder", forbidden)
-    monkeypatch.setattr(httpx, "post", forbidden)
+    monkeypatch.setattr("rags.provider_transport.post", forbidden)
     adapter = raptor_adapter if engine == "raptor" else lightrag_adapter
     monkeypatch.setattr(adapter, "verify_source", forbidden)
     with pytest.raises(CapabilityError) as error:
@@ -116,7 +115,7 @@ def test_native_openai_counter_rejects_disabled_tiktoken_before_loading_or_http(
                          features=disabled("tokenizer.tiktoken"))
     bridge = ProviderBridge(Providers(configured))
     monkeypatch.setattr("rags.research.common.resolve_tokenizer", lambda *_: pytest.fail("disabled tiktoken loaded"))
-    monkeypatch.setattr(httpx, "post", lambda *a, **kw: pytest.fail("disabled research called HTTP"))
+    monkeypatch.setattr("rags.provider_transport.post", lambda *a, **kw: pytest.fail("disabled research called HTTP"))
     with pytest.raises(CapabilityError) as error:
         bridge.embed("Authorized source text")
     assert error.value.code == "feature_disabled" and "tokenizer.tiktoken" in error.value.reason

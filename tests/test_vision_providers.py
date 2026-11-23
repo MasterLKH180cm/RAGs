@@ -32,7 +32,7 @@ def provider_reply(monkeypatch):
         content = {"json": state["payload"]} if state["body"] is None else {"content": state["body"]}
         return httpx.Response(200, request=httpx.Request("POST", url), **content)
 
-    monkeypatch.setattr("rags.vision.httpx.post", post)
+    monkeypatch.setattr("rags.vision.provider_transport.post", post)
     return state
 
 

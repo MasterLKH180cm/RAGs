@@ -157,10 +157,11 @@ def test_ingestion_provider_errors_keep_their_typed_status(system, monkeypatch, 
         # Actual image parsing and a controlled valid caption reach the same ingestion handoff.
         image = io.BytesIO()
         Image.new("RGB", (2, 2)).save(image, format="PNG")
-        settings = replace(settings, model_provider="openai", openai_key="fixture-key")
+        settings = replace(settings, model_provider="openai", openai_key="fixture-key",
+                           openai_base_url="https://caption-fixture.invalid/v1")
         app = api.create_app(settings)
         service = app.state.service
-        monkeypatch.setattr(providers.httpx, "post", lambda url, **_: httpx.Response(
+        monkeypatch.setattr(providers.provider_transport, "post", lambda url, **_: httpx.Response(
             200, request=httpx.Request("POST", url), json={"choices": [{"message": {"content": "Image description."}}]},
         ))
         request = {"files": {"file": ("image.png", image.getvalue(), "image/png")}}
