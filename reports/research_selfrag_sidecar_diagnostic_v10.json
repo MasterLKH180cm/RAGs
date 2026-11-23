@@ -1,0 +1,40 @@
+{
+  "schema": "selfrag-negative-sidecar-diagnostic-v10",
+  "http_status": 200,
+  "elapsed_seconds": 57.66236161300003,
+  "response": {
+    "hits": [],
+    "implementation": {
+      "library": "self-rag",
+      "version": "git-1fcdc42",
+      "source_commit": "1fcdc420e48f50a7d7ab1ece5494221b93252e99",
+      "adapter_version": "v10"
+    },
+    "diagnostics": {
+      "source_count": 1,
+      "engine_executed": true,
+      "reflection_calls": 1,
+      "generated_tokens": 31,
+      "reflection_relevance_tokens": 1,
+      "reflection_support_tokens": 0,
+      "reflection_utility_tokens": 1,
+      "reflection_abstentions": 1,
+      "checkpoint_sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+      "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+      "checkpoint_revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+      "checkpoint_quantization": "Q4_K_M",
+      "inference_mode": "always_retrieve_short_form",
+      "score_kind": "conditional_reflection_reward"
+    },
+    "usage": {
+      "input_tokens": 41,
+      "output_tokens": 31
+    },
+    "grounded_answer": null,
+    "external_sources": []
+  },
+  "runtime_threads": 4,
+  "OMP_NUM_THREADS": 2,
+  "ordinary_provider_used": false,
+  "request_directories_remaining": []
+}

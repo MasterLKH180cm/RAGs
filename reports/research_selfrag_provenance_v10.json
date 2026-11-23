@@ -1,0 +1,594 @@
+{
+  "schema": "selfrag-preparation-and-diagnostic-history-v10",
+  "evidence_kind": "actual_official_checkpoint_preparation_and_synthetic_model_diagnostics",
+  "checkpoint_manifest": {
+    "schema": "selfrag-cpu-artifacts-v1",
+    "checkpoint_repository": "selfrag/selfrag_llama2_7b",
+    "checkpoint_revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+    "quantization": "Q4_K_M",
+    "model": {
+      "filename": "selfrag_llama2_7b.Q4_K_M.gguf",
+      "bytes": 4081095936,
+      "sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+      "verified": true
+    },
+    "source_files": {
+      "added_tokens.json": {
+        "bytes": 433,
+        "sha256": "dcb083dc232eb79aa0eac5e2a5f2013dcfda0980561ca313ce191ad69fbbf954"
+      },
+      "config.json": {
+        "bytes": 635,
+        "sha256": "eeaf19f35c1b9aee755d6903f5a628b27c310824efc273b991e02dcd67c7ae35"
+      },
+      "generation_config.json": {
+        "bytes": 188,
+        "sha256": "7b81a582ca675c32477c0d4fc8272b3265c4f314fe24ec79a16b20e33740471d"
+      },
+      "pytorch_model-00001-of-00002.bin": {
+        "bytes": 9976751194,
+        "sha256": "5c726ea09de32bff5ad0053f98bfd68847e18830d54b4c3d08b67c270380bbd1"
+      },
+      "pytorch_model-00002-of-00002.bin": {
+        "bytes": 3500441859,
+        "sha256": "0883291fa5ac8b05ff5afb22cf08921be94c34988424a5e9ae3931663ad8ed93"
+      },
+      "pytorch_model.bin.index.json": {
+        "bytes": 23950,
+        "sha256": "0ca9b8f5a8f500eafd4bdcbd52898a75834f2f5d596630cdca4da3c30034b625"
+      },
+      "special_tokens_map.json": {
+        "bytes": 470,
+        "sha256": "dc76ec5e7d56ed1a0b80b582c30714d117b9b3ba15f3f5bc8bb8333c0312a48f"
+      },
+      "tokenizer.model": {
+        "bytes": 499723,
+        "sha256": "9e556afd44213b6bd1be2b850ebbbd98f5481437a8021afaf58ee7fb1818d347"
+      },
+      "tokenizer_config.json": {
+        "bytes": 855,
+        "sha256": "e5ad35cc8dd767a57020a885f2e2687c65912203566625f188a46af7eab789be"
+      }
+    },
+    "conversion_runtime": {
+      "torch": "2.15.0+cpu",
+      "transformers": "4.57.6",
+      "numpy": "2.5.5",
+      "sentencepiece": "0.2.1",
+      "safetensors": "0.8.0"
+    },
+    "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+    "runtime_library_hashes": {
+      "libllama.so.1.0.0": "ac2798b6ec4818da5339c579586c9ba54e9904d5412de0eb17e7eae83e4eef7d",
+      "libggml.so.1.0.0": "405441c70127eb7fbf000ee9681a8ef9e4a540f151bed57d1475b8115b6b46d4",
+      "libggml-base.so.1.0.0": "b03b6e322f476a7e2fca31ea07f95d91e439b2e1e6c8077e1864a47ea58df905",
+      "libggml-cpu-alderlake.so": "2f977cbc5b1805788187cbaa25220b833aefd9fcb0e64c67a793a9a2214383fe",
+      "libggml-cpu-cannonlake.so": "26b2825103049b5bfffa80be1a65ab6453152f7c32fb93fb9e9865ba60b0bad7",
+      "libggml-cpu-cascadelake.so": "e8c485ed680844959eb76ec6b45af2b4ddfabb74aeda9093f373c956b2eabef5",
+      "libggml-cpu-cooperlake.so": "f54049992facc29d01bca74c01323503095b9fd7d4eb355600e72d4cbfe49c8c",
+      "libggml-cpu-haswell.so": "039e232dc8243dc4d9c7b6ab879bc414bd203f46b4a937f13e62b444520b713d",
+      "libggml-cpu-icelake.so": "b444c3f789048ca3dc6dacf25d2f2f560e5810cd3a34d3f5e66b4941544f42ca",
+      "libggml-cpu-ivybridge.so": "ec15d63385780ad6e8426003bf7a0f2e59119293ff417a416a5de1b1a2286293",
+      "libggml-cpu-piledriver.so": "b2a5a39d5112d0b7ac79bd47bf68e3242446fbc76742c3a8e595af524512b598",
+      "libggml-cpu-sandybridge.so": "b35b453b7063c1d0db9340c9dcce4cfa53d41d1a87be3c486eff8705117ab4e5",
+      "libggml-cpu-sapphirerapids.so": "79747f60800ad66ed01ce0e839f49833aec55295a9e1f0f1b72d4f4741d61815",
+      "libggml-cpu-skylakex.so": "a44e64ac9892ec05268fdb6f8e94bf58367a885d1b65da7e31413b7ec909a209",
+      "libggml-cpu-sse42.so": "8103927f863313ef364097b00192bab39f3353088989c37452f4004a54719061",
+      "libggml-cpu-x64.so": "3b8b675c08e2963e5dc1b0915175756ac0660b657be824305793da772a308341",
+      "libggml-cpu-zen4.so": "de6d921ee1c28086c3d2193efb821d23cf9795152c5b3094acc450316d93054c"
+    },
+    "reflection_token_ids": {
+      "[No Retrieval]": 32000,
+      "[Retrieval]": 32001,
+      "[Continue to Use Evidence]": 32002,
+      "[Irrelevant]": 32003,
+      "[Relevant]": 32004,
+      "<paragraph>": 32005,
+      "</paragraph>": 32006,
+      "[Utility:1]": 32007,
+      "[Utility:2]": 32008,
+      "[Utility:3]": 32009,
+      "[Utility:4]": 32010,
+      "[Utility:5]": 32011,
+      "[Fully supported]": 32012,
+      "[Partially supported]": 32013,
+      "[No support / Contradictory]": 32014,
+      "<pad>": 32015
+    },
+    "conversion_correction": "CodeLlama EOT metadata 32010 normalized to official Self-RAG EOS 2; tensors unchanged",
+    "model_inference_executed": false
+  },
+  "algorithm": {
+    "repository": "https://github.com/AkariAsai/self-rag",
+    "commit": "1fcdc420e48f50a7d7ab1ece5494221b93252e99",
+    "path": "retrieval_lm/run_short_form.py",
+    "file_sha256": "39bc137ec99c736b513e8da7eb16653a815088a6c89feb463ebd32adcefb51da"
+  },
+  "conversion": {
+    "exit_code": 0,
+    "elapsed_seconds": 63.64506185799996,
+    "peak_child_rss_bytes": 2672156672,
+    "command": [
+      "$CONVERSION_PYTHON",
+      "$LLAMA_SOURCE/convert_hf_to_gguf.py",
+      "$MODEL_CACHE",
+      "--outfile",
+      "$MODEL_CACHE/selfrag_llama2_7b.f16.gguf",
+      "--outtype",
+      "f16",
+      "--model-name",
+      "selfrag/selfrag_llama2_7b"
+    ]
+  },
+  "quantization": {
+    "exit_code": 0,
+    "elapsed_seconds": 178.40343408500007,
+    "peak_child_rss_bytes": 910864384,
+    "command": [
+      "$LLAMA_RUNTIME/llama-quantize",
+      "$MODEL_CACHE/selfrag_llama2_7b.f16.gguf",
+      "$MODEL_CACHE/selfrag_llama2_7b.Q4_K_M.gguf",
+      "Q4_K_M",
+      "4"
+    ],
+    "f16": {
+      "bytes": 13478368000,
+      "sha256": "e7ad486ae418d03fda1e0258863ad66ec3c19266b4773c8e206cc1750c2ce583"
+    },
+    "q4_k_m": {
+      "bytes": 4081095936,
+      "sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85"
+    }
+  },
+  "native_abi": {
+    "source": "https://github.com/ggml-org/llama.cpp/blob/e300919cc704ddde3a8a8346a8714f57eeeee71b/include/llama.h",
+    "compiled_c_probe": "model=80 context=176 batch=56 ctxother=168 nosamp=160 modelbools=72",
+    "ctypes_sizes": {
+      "model": 80,
+      "context": 176,
+      "batch": 56
+    },
+    "ctypes_offsets": {
+      "ctx_other": 168,
+      "n_samplers": 160,
+      "vocab_only": 72
+    }
+  },
+  "synthetic_case": {
+    "question": "What is the refund period?",
+    "positive_passage": "The refund period is 14 days after purchase.",
+    "negative_passage": "Bananas are yellow fruit and dolphins swim in the ocean."
+  },
+  "initial_failed_adapter_attempt": {
+    "status": "failed",
+    "error_type": "CapabilityError",
+    "error": "Self-RAG returned invalid reflection output",
+    "cause": "None",
+    "elapsed_seconds": 19.828212587000053
+  },
+  "positive_raw_diagnostic": {
+    "status": "raw_diagnostic",
+    "elapsed_seconds": 13.55917383499991,
+    "peak_rss_bytes": 5051580416,
+    "cpu_backend": "libggml-cpu-zen4.so",
+    "tokens": [
+      32004,
+      1576,
+      2143,
+      870,
+      3785,
+      338,
+      29871,
+      29896,
+      29946,
+      3841,
+      1156,
+      20590,
+      29889,
+      32012,
+      32011,
+      2
+    ],
+    "input_tokens": 37,
+    "ended": true,
+    "raw_text": "[Relevant]The refund period is 14 days after purchase.[Fully supported][Utility:5]</s>",
+    "controls": [
+      32004,
+      32012,
+      32011
+    ],
+    "reflection_rows": [
+      {
+        "32000": 6.600386619567871,
+        "32001": 2.237989902496338,
+        "32002": 4.548530101776123,
+        "32003": 6.959733009338379,
+        "32004": 11.843605041503906,
+        "32005": 0.14216375350952148,
+        "32006": -0.381089448928833,
+        "32007": 3.687835693359375,
+        "32008": 2.9738359451293945,
+        "32009": 1.6805150508880615,
+        "32010": 5.727062225341797,
+        "32011": 7.995792388916016,
+        "32012": -1.5867468118667603,
+        "32013": -1.035001516342163,
+        "32014": 1.2937610149383545,
+        "32015": -4.131466865539551
+      },
+      {
+        "32000": 5.379457950592041,
+        "32001": 2.3658313751220703,
+        "32002": 3.791400909423828,
+        "32003": 0.6420116424560547,
+        "32004": 4.451754570007324,
+        "32005": 1.9573402404785156,
+        "32006": -0.7551922798156738,
+        "32007": 1.7689447402954102,
+        "32008": 0.14531326293945312,
+        "32009": -1.2469379901885986,
+        "32010": 2.1978836059570312,
+        "32011": 6.105066299438477,
+        "32012": 2.0209851264953613,
+        "32013": 3.411670684814453,
+        "32014": 3.629706859588623,
+        "32015": -0.6186898946762085
+      },
+      {
+        "32000": 2.767873764038086,
+        "32001": 2.8431880474090576,
+        "32002": 1.3513107299804688,
+        "32003": 0.08132052421569824,
+        "32004": 0.8509211540222168,
+        "32005": -1.2898470163345337,
+        "32006": -0.7687387466430664,
+        "32007": 3.669285297393799,
+        "32008": 0.471721887588501,
+        "32009": 1.8764342069625854,
+        "32010": -0.8640251159667969,
+        "32011": 8.32810115814209,
+        "32012": -1.5376510620117188,
+        "32013": 5.709373474121094,
+        "32014": 4.152015686035156,
+        "32015": 1.4409170150756836
+      },
+      {
+        "32000": 6.351839065551758,
+        "32001": 3.377751350402832,
+        "32002": 2.780916690826416,
+        "32003": -3.4416863918304443,
+        "32004": 0.45001721382141113,
+        "32005": -0.30544620752334595,
+        "32006": 0.2986365556716919,
+        "32007": 1.611534833908081,
+        "32008": 3.6608052253723145,
+        "32009": 0.13433623313903809,
+        "32010": 1.3591971397399902,
+        "32011": 3.398378849029541,
+        "32012": 0.509675145149231,
+        "32013": 3.47798228263855,
+        "32014": 5.484432697296143,
+        "32015": 0.4169454574584961
+      },
+      {
+        "32000": 6.7216715812683105,
+        "32001": 3.9520111083984375,
+        "32002": 1.6240887641906738,
+        "32003": 1.1487789154052734,
+        "32004": -3.313771963119507,
+        "32005": -0.9789417386054993,
+        "32006": -0.32848358154296875,
+        "32007": 5.034818172454834,
+        "32008": 3.742218494415283,
+        "32009": -0.8251749277114868,
+        "32010": 0.9651498794555664,
+        "32011": 11.715855598449707,
+        "32012": 0.4795970916748047,
+        "32013": 3.4032480716705322,
+        "32014": 4.858654022216797,
+        "32015": 2.571680784225464
+      },
+      {
+        "32000": 2.339916229248047,
+        "32001": 4.264226913452148,
+        "32002": 3.248548746109009,
+        "32003": 1.3620190620422363,
+        "32004": -2.755915880203247,
+        "32005": 0.14935410022735596,
+        "32006": 0.21817874908447266,
+        "32007": 3.534186840057373,
+        "32008": 1.8981108665466309,
+        "32009": -0.07198858261108398,
+        "32010": 3.6268014907836914,
+        "32011": 8.084590911865234,
+        "32012": 1.2910356521606445,
+        "32013": 6.792254447937012,
+        "32014": 6.094974040985107,
+        "32015": -0.42998385429382324
+      },
+      {
+        "32000": 3.3092753887176514,
+        "32001": 2.840665340423584,
+        "32002": 4.988272666931152,
+        "32003": -0.6506880521774292,
+        "32004": -1.0114812850952148,
+        "32005": 1.255602240562439,
+        "32006": -0.8754340410232544,
+        "32007": 2.6036200523376465,
+        "32008": 0.16873836517333984,
+        "32009": 0.7652080059051514,
+        "32010": 2.3672549724578857,
+        "32011": 7.745805740356445,
+        "32012": 4.3983354568481445,
+        "32013": 5.414217472076416,
+        "32014": 8.265625,
+        "32015": 1.1335079669952393
+      },
+      {
+        "32000": 2.763930320739746,
+        "32001": 2.6208298206329346,
+        "32002": 1.4208948612213135,
+        "32003": 0.44678282737731934,
+        "32004": -0.08576726913452148,
+        "32005": 2.8151564598083496,
+        "32006": 0.16588449478149414,
+        "32007": 2.109715461730957,
+        "32008": -0.20588159561157227,
+        "32009": 0.5635561943054199,
+        "32010": 2.9400105476379395,
+        "32011": 6.041890621185303,
+        "32012": 0.7487219572067261,
+        "32013": 4.42749547958374,
+        "32014": 4.56084680557251,
+        "32015": 1.5241190195083618
+      },
+      {
+        "32000": 4.2293853759765625,
+        "32001": 0.6564379930496216,
+        "32002": 2.6099472045898438,
+        "32003": 0.2975327968597412,
+        "32004": 0.8419370651245117,
+        "32005": 1.2035256624221802,
+        "32006": -0.3048887252807617,
+        "32007": 3.632868766784668,
+        "32008": 2.0826406478881836,
+        "32009": 1.5868340730667114,
+        "32010": 2.4178466796875,
+        "32011": 8.255426406860352,
+        "32012": 2.94633412361145,
+        "32013": 3.5975489616394043,
+        "32014": 2.6274843215942383,
+        "32015": -0.14481830596923828
+      },
+      {
+        "32000": 5.103938102722168,
+        "32001": 4.929087162017822,
+        "32002": 1.8656375408172607,
+        "32003": 2.2079336643218994,
+        "32004": -0.0359036922454834,
+        "32005": -0.5021233558654785,
+        "32006": -1.1823220252990723,
+        "32007": 2.987316846847534,
+        "32008": 2.1352241039276123,
+        "32009": -0.2069988250732422,
+        "32010": 1.75162935256958,
+        "32011": 9.909956932067871,
+        "32012": 5.418176651000977,
+        "32013": 4.836128234863281,
+        "32014": 7.538580894470215,
+        "32015": 2.0287833213806152
+      },
+      {
+        "32000": 4.6789140701293945,
+        "32001": 0.8388127088546753,
+        "32002": 2.3861005306243896,
+        "32003": -3.575333595275879,
+        "32004": 0.14376544952392578,
+        "32005": -0.7167007923126221,
+        "32006": 0.0008727312088012695,
+        "32007": 1.302049160003662,
+        "32008": 2.830065965652466,
+        "32009": 1.0340980291366577,
+        "32010": 2.010798454284668,
+        "32011": 7.608085632324219,
+        "32012": 7.32288932800293,
+        "32013": 9.19884967803955,
+        "32014": 10.569194793701172,
+        "32015": -1.645770788192749
+      },
+      {
+        "32000": 4.308973789215088,
+        "32001": 5.522600173950195,
+        "32002": 2.86478590965271,
+        "32003": -0.24338364601135254,
+        "32004": -0.5062344074249268,
+        "32005": 1.0840506553649902,
+        "32006": 1.4548946619033813,
+        "32007": 2.1467432975769043,
+        "32008": 0.9010471105575562,
+        "32009": 0.7702326774597168,
+        "32010": -1.604445219039917,
+        "32011": 9.671855926513672,
+        "32012": 4.5718183517456055,
+        "32013": 4.7732744216918945,
+        "32014": 6.107770919799805,
+        "32015": -1.5614763498306274
+      },
+      {
+        "32000": 2.450185775756836,
+        "32001": -0.9266632795333862,
+        "32002": 3.0369348526000977,
+        "32003": 0.09984254837036133,
+        "32004": -0.8501200675964355,
+        "32005": -0.7316551208496094,
+        "32006": -0.39470767974853516,
+        "32007": 2.1231513023376465,
+        "32008": 1.7845921516418457,
+        "32009": 4.43842887878418,
+        "32010": 1.7348592281341553,
+        "32011": 5.324933052062988,
+        "32012": 9.069494247436523,
+        "32013": 8.16287612915039,
+        "32014": 9.51388168334961,
+        "32015": -1.4653494358062744
+      },
+      {
+        "32000": 5.1561479568481445,
+        "32001": 1.4344971179962158,
+        "32002": 5.450766563415527,
+        "32003": -0.8732056617736816,
+        "32004": -1.6032993793487549,
+        "32005": -1.2141659259796143,
+        "32006": -0.022542715072631836,
+        "32007": 1.6021289825439453,
+        "32008": -0.3925964832305908,
+        "32009": 2.4405643939971924,
+        "32010": 1.7084827423095703,
+        "32011": 4.627917289733887,
+        "32012": 12.389413833618164,
+        "32013": 9.778491973876953,
+        "32014": 11.374932289123535,
+        "32015": -4.382747650146484
+      },
+      {
+        "32000": 9.622323989868164,
+        "32001": 3.292600631713867,
+        "32002": 8.85976791381836,
+        "32003": -0.2295994758605957,
+        "32004": 1.4419035911560059,
+        "32005": -1.1654040813446045,
+        "32006": -0.24870800971984863,
+        "32007": 4.964719772338867,
+        "32008": 3.0025999546051025,
+        "32009": 3.6658425331115723,
+        "32010": 7.671770095825195,
+        "32011": 12.500129699707031,
+        "32012": 1.3192026615142822,
+        "32013": -0.27135956287384033,
+        "32014": 1.5263023376464844,
+        "32015": -3.9503798484802246
+      },
+      {
+        "32000": 7.867749214172363,
+        "32001": 1.878739356994629,
+        "32002": 3.1528921127319336,
+        "32003": -0.14165568351745605,
+        "32004": -3.563347816467285,
+        "32005": 3.2148005962371826,
+        "32006": 1.201170563697815,
+        "32007": 4.835841178894043,
+        "32008": 3.5218164920806885,
+        "32009": 2.1562914848327637,
+        "32010": 3.2136478424072266,
+        "32011": 2.4155354499816895,
+        "32012": -1.4533350467681885,
+        "32013": -0.4976310729980469,
+        "32014": 3.827888011932373,
+        "32015": 0.5154812335968018
+      }
+    ]
+  },
+  "negative_raw_diagnostic": {
+    "status": "raw_diagnostic",
+    "elapsed_seconds": 13.196108178000031,
+    "peak_rss_bytes": 5068062720,
+    "tokens": [
+      32003,
+      29902,
+      29915,
+      29885,
+      7423,
+      29892,
+      541,
+      306,
+      29915,
+      29885,
+      451,
+      1854,
+      825,
+      366,
+      526,
+      6721,
+      29889,
+      32000,
+      23323,
+      366,
+      3113,
+      3867,
+      901,
+      3030,
+      470,
+      15544,
+      596,
+      1139,
+      29973,
+      32010,
+      2
+    ],
+    "input_tokens": 41,
+    "ended": true,
+    "raw_text": "[Irrelevant]I'm sorry, but I'm not sure what you are asking.[No Retrieval]Could you please provide more context or clarify your question?[Utility:4]</s>",
+    "controls": [
+      32003,
+      32000,
+      32010
+    ],
+    "validation_error": "Self-RAG returned invalid reflection output"
+  },
+  "diagnostic_resolution": "The completed negative output legitimately continued with [No Retrieval]. The initial strict parser rejected it. Final policy admits that control only as whole-answer abstention, preserving the raw response as diagnostic evidence rather than rewriting it into a grounded answer.",
+  "additional_explicit_admission_policy": "A [No support / Contradictory] decision also makes the complete answer ineligible regardless of its unchanged reflection reward. This stricter policy has semantic regression coverage, not a fabricated real-checkpoint NoSupport fixture.",
+  "limitations": [
+    "Raw diagnostics were exploratory execution, not a quality benchmark.",
+    "Preparation and conversion alone do not prove inference; direct and HTTP execution have separate reports.",
+    "The quantized always-retrieve short-form port does not claim full-precision equivalence or paper benchmark parity."
+  ],
+  "paths_normalized_for_public_report": true,
+  "path_labels": {
+    "$CONVERSION_PYTHON": "isolated pinned conversion environment Python",
+    "$LLAMA_SOURCE": "verified pinned llama.cpp converter source root",
+    "$MODEL_CACHE": "operator model artifact cache",
+    "$LLAMA_RUNTIME": "verified pinned native runtime directory"
+  },
+  "runtime_correction_history": [
+    {
+      "report": "research_selfrag_http_initial_failure_v10.json",
+      "meaning": "Initial generic main-API backend error; the original sidecar status was not captured."
+    },
+    {
+      "report": "research_selfrag_sidecar_diagnostic_v10.json",
+      "meaning": "The same negative source completed actual trained abstention directly through the real sidecar."
+    },
+    {
+      "report": "research_selfrag_http_timeout_v10.json",
+      "meaning": "Instrumented real-API rerun identified sidecar HTTP 504 at 120.2008 seconds."
+    },
+    {
+      "report": "research_selfrag_paging_before_v10.json",
+      "meaning": "The same positive API workload completed in 296.04 seconds with 5,005,150 generation major page faults under AUTO/mmap."
+    },
+    {
+      "report": "research_selfrag_eager_initial_failure_v10.json",
+      "meaning": "The initial eager/full-size-KV failure is retained without a success claim."
+    },
+    {
+      "report": "research_selfrag_eager_exit_diagnostic_v10.json",
+      "meaning": "A repeated eager/full-size-KV attempt captured an actual SIGKILL during KV allocation."
+    },
+    {
+      "report": "research_selfrag_paging_after_v10.json",
+      "meaning": "Owned CPU buffers plus prompt-sized full-budget KV completed the same API workload in 14.16 seconds: 5 generation major page faults, all during prefill; 0 during autoregressive decoding."
+    },
+    {
+      "report": "research_selfrag_cpu_comparison_v10.json",
+      "meaning": "Scoped before/after measurements and a separate exact token-reference comparison."
+    },
+    {
+      "report": "research_selfrag_v10.json",
+      "meaning": "Final actual direct positive/negative checkpoint execution, without phase hooks."
+    },
+    {
+      "report": "research_selfrag_http_v10.json",
+      "meaning": "Final complete 11-check ordinary HTTP lifecycle under the unchanged 120-second limit."
+    }
+  ]
+}

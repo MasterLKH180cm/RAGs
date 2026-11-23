@@ -167,18 +167,22 @@ headers and body, plus a 2,000,000-byte raw response cap. Any failed branch reje
 the federated result. Bounded worker scheduling means this is a per-source
 deadline, not a ten-second bound for every multi-source query.
 
-The native hierarchy, native graph and reflection loop keep their own names. Separate `raptor` and `lightrag` identifiers execute pinned upstream implementations through the request-local service below. `full_graphrag`, `hipporag`, `self_rag` and `crag` still expose only the generic external contract. They do not become implemented papers because a native path has a similar purpose. See the [remaining upstream ledger](RESEARCH_ENGINES.md).
+The native hierarchy, native graph and reflection loop keep their own names. Separate `raptor`, `lightrag`, `full_graphrag` and `hipporag` identifiers execute pinned upstream implementations through the request-local service below. `self_rag` executes the official trained checkpoint through a bounded quantized CPU port; `crag` executes the official trained evaluator and all three correction branches. These two engines preserve the selected answer through the versioned source contract and existing admission/budget gates. See [implementation and evidence boundaries](RESEARCH_COMPLETION.md) and the [upstream ledger](RESEARCH_ENGINES.md).
 
 Model-dependent paths validate structured outputs, permitted choices, and source IDs. Bounded loops record decisions and stopping reasons. There is no arbitrary shell execution or general-purpose tool execution in this RAG service. The companion workflow runtime owns its own tool and approval policies.
 
 ## Evidence decisions and profile identity
 
-`EvidenceAdmission` runs on original authorized passages before answer generation,
+`EvidenceAdmission` runs on authorized original evidence before finalizing and exposing an answer,
 including when `generate=false`. Its result separates successful retrieval from
 insufficient evidence, and identifies unassessed ranking, calibrated relevance,
 calibrated answerability, explicit model review or exact structured data. A
 refusal removes all usable citations. Candidate IDs/counts remain separate
 diagnostics and cannot become downstream evidence.
+
+Self-RAG and CRAG generate a candidate answer inside the retrieval worker as part
+of their algorithm. That internal candidate is still subject to parent admission
+and source-budget checks before it can become the public answer.
 
 Compatibility without a profile is explicitly unassessed. Required policy needs
 a configured immutable profile for ordinary passage evidence. The profile
@@ -203,7 +207,7 @@ may still contribute evidence.
 
 ## Request-local research execution
 
-The authenticated research sidecar hosts one fixed RAPTOR or LightRAG engine. Both supplied upstream adapters require the `tokenizer.tiktoken` permission because their provider bridge enforces actual encoder token windows.
+The authenticated research sidecar hosts one fixed engine. RAPTOR, LightRAG, GraphRAG and HippoRAG require the `tokenizer.tiktoken` permission because their provider bridge enforces actual encoder token windows. Self-RAG uses its pinned native tokenizer and model runtime; CRAG uses the evaluator's native tokenizer plus bounded configured generation.
 The RAG service sends the original passages already selected for tenant,
 metadata and time. The sidecar verifies its credential's tenant and the fixed
 engine before starting the worker. A finite semaphore bounds active requests;
@@ -213,6 +217,17 @@ Each request uses a fixed `python -m rags.research_worker` command, a fresh
 working directory and a fresh temporary index. Its environment contains only
 runtime and selected provider configuration, not RAG/Agent tenant credential
 maps. Source-derived caches/logs are request-local; public weights may be shared.
+
+Self-RAG and CRAG require `authorized-evidence-v2`, which binds a selected answer
+to returned original source IDs. The parent never replaces that answer with a
+generic generator; failed evidence admission or truncated cited evidence causes
+refusal. CRAG may add bounded external snapshots only when the operator enables
+the exact hosts on both services and authorizes the tenant on the sidecar. The
+snapshot identity binds tenant, literal approved HTTPS URL and content hash;
+external IDs cannot overwrite internal source IDs. Web-enabled CRAG rejects
+metadata and historical filters before HTTP because current public pages cannot
+honor those scope constraints. External pages remain ephemeral and do not become
+stored tenant documents. See [the complete web acquisition contract](RESEARCH_COMPLETION.md#source-and-answer-contracts).
 A complete wall timeout bounds stdin/output exchange. Output is read through a
 bounded pipe; failures expose fixed codes. Completion, timeout and cancellation
 terminate the process group and remove the temporary directory.
@@ -232,7 +247,7 @@ No health response or configured URL is treated as algorithm verification.
 
 ## External boundaries and authorization
 
-The caller cannot select a tenant, backend URL, or backend credential. Federation and research endpoints come from operator configuration; each tenant has a distinct mapped credential. Requests carry only already authorized source passages or source-scoped query parameters. Research responses can select IDs only from the supplied original leaf records. Federation IDs are source-qualified to prevent collisions.
+The caller cannot select a tenant, backend URL, or backend credential. Federation and research endpoints come from operator configuration; each tenant has a distinct mapped credential. Requests carry already authorized source passages or source-scoped query parameters. Research v1 responses select IDs only from supplied original leaf records. CRAG v2 may additionally select independently authorized, hash-verified external snapshots; the parent validates their tenant, URL, content and noncolliding identity. Federation IDs are source-qualified to prevent collisions.
 
 HTTP adapters reject redirects and compressed responses and enforce byte limits before buffering. Research requests use one asyncio wall deadline spanning connection, headers and all body reads; the synchronous API facade owns that event loop. Federation retains its separately bounded transport checks. Numeric scores, aggregation values, usage fields and token matrices reject nonfinite values and inappropriate types. Invalid Unicode bearer credentials return unauthorized responses. Provider failures remain execution errors.
 

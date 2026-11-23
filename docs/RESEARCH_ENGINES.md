@@ -1,14 +1,18 @@
 # Research engine integrations
 
-RAGs v0.3 executes pinned **RAPTOR** and **LightRAG** code through isolated,
-authenticated services. Both paths have actual CPU execution reports using
-trained BGE embeddings and explicitly deterministic generation fixtures.
-Microsoft GraphRAG, HippoRAG, trained Self-RAG and paper-specific CRAG remain
-unimplemented upstream integrations. Their configurable HTTP contracts do not
-establish that those algorithms ran.
+RAGs executes pinned **RAPTOR**, **LightRAG**, **Microsoft GraphRAG** and
+**HippoRAG** through isolated authenticated services. The trained **Self-RAG**
+checkpoint runs through a bounded quantized CPU port; **CRAG** uses the authors'
+trained evaluator and implements all three correction branches. Each has actual
+execution evidence; generation fixtures and live-service limits are labelled.
 
-This ledger records the implementation and verification on **2026-11-21**.
-The [v0.3 specification](SPEC_V03.md) defines the contract; the
+The RAPTOR/LightRAG record below is the original **2026-11-21** verification.
+The four additional engines have a separate current
+[implementation and execution ledger](RESEARCH_COMPLETION.md), including model
+identities, install commands, measured workloads, web-source controls and limits.
+The [v0.3 specification](SPEC_V03.md) defines the original contract; the
+[completion specification](RESEARCH_COMPLETION_SPEC.md) adds the answer-preserving
+v2 contract. The
 [architecture](ARCHITECTURE.md#request-local-research-execution) describes its
 service boundaries. Model quality, paper benchmark reproduction and paid
 generation behavior are separate from the execution checks below.
@@ -19,6 +23,10 @@ generation behavior are separate from the execution checks below.
 | --- | --- | --- |
 | RAPTOR | Official source [`7da1d48a7e1d7dec61a63c9d9aae84e2dfaa5767`](https://github.com/parthsarthi03/raptor/tree/7da1d48a7e1d7dec61a63c9d9aae84e2dfaa5767); reported version `git-7da1d48` | [`raptor_adapter.py`](../rags/research/raptor_adapter.py) |
 | LightRAG | `lightrag-hku==1.5.7`, official source [`28ff1b05f2ac3f3e6fa14dd2cd33656579bd0c9c`](https://github.com/HKUDS/LightRAG/tree/28ff1b05f2ac3f3e6fa14dd2cd33656579bd0c9c) | [`lightrag_adapter.py`](../rags/research/lightrag_adapter.py) |
+| Microsoft GraphRAG | `graphrag==3.3.0`, official source [`5faaaf4f5685fa2056fa8c3bf9342cb089f2942f`](https://github.com/microsoft/graphrag/tree/5faaaf4f5685fa2056fa8c3bf9342cb089f2942f) | [`graphrag_adapter.py`](../rags/research/graphrag_adapter.py) |
+| HippoRAG | Official source version `2.0.0a5`, [`d5c8329422e0a0b834a15874545cb6a74b4f9b26`](https://github.com/OSU-NLP-Group/HippoRAG/tree/d5c8329422e0a0b834a15874545cb6a74b4f9b26) | [`hipporag_adapter.py`](../rags/research/hipporag_adapter.py) |
+| Trained Self-RAG | Reference inference [`1fcdc420e48f50a7d7ab1ece5494221b93252e99`](https://github.com/AkariAsai/self-rag/tree/1fcdc420e48f50a7d7ab1ece5494221b93252e99), official checkpoint revision `190261383b0779ff66d2f95a73c7ad267d94b820` | [`selfrag_adapter.py`](../rags/research/selfrag_adapter.py), [`selfrag_runtime.py`](../rags/research/selfrag_runtime.py) |
+| CRAG | Reference [`de7c2961ae624a1483a138c5798e1f6d0c4fb0e0`](https://github.com/HuskyInSalt/CRAG/tree/de7c2961ae624a1483a138c5798e1f6d0c4fb0e0), individually hashed official evaluator artifacts | [`crag_adapter.py`](../rags/research/crag_adapter.py), [`crag_web.py`](../rags/research/crag_web.py) |
 
 RAPTOR is installed from the official source checkout, not the unrelated PyPI
 package named `raptor`. The installer verifies its clean pinned checkout; the
@@ -71,7 +79,7 @@ embedding callbacks remain distinct. The integration uses bounded extraction,
 summary and retrieval settings; it does not establish parity with every upstream
 storage backend or the authors' evaluation results.
 
-## Providers, isolation and limits
+## RAPTOR/LightRAG providers, isolation and limits
 
 The [shared provider bridge](../rags/research/common.py) requires a configured
 trained embedding provider and generator. The worker constructs ordinary RAGs
@@ -115,7 +123,7 @@ an operator/provider responsibility. The runtime label
 metadata; actual execution evidence comes from the tests, not from a health
 response or configured URL.
 
-## Provisioning and reproduction
+## RAPTOR/LightRAG provisioning and reproduction
 
 Use separate environments. The recorded installations were checked on CPython
 3.12.14 and Linux x86_64; their incompatible transitive pins should not be merged
@@ -204,82 +212,56 @@ large-corpus capacity, throughput, or universal answer grounding. Admission and
 answerability measurements have their own profiles and reports; an upstream
 retrieval result is not automatically a calibrated acceptance.
 
-## Remaining upstream engines
+## Completed additional research engines
 
-These are source-audited candidates, not bundled or executed engines. The source
-revisions below identify the audited prerequisites; they are not installation
-claims. Completing them requires their actual model/algorithm path, original
-source mapping, lifecycle isolation and execution evidence.
-
-| Identifier | Audited official source | Current status |
-| --- | --- | --- |
-| `full_graphrag` | [Microsoft GraphRAG 3.3.0, `5faaaf4f5685fa2056fa8c3bf9342cb089f2942f`](https://github.com/microsoft/graphrag/tree/5faaaf4f5685fa2056fa8c3bf9342cb089f2942f) | Generic external contract only |
-| `hipporag` | [HippoRAG source version 2.0.0a5, `d5c8329422e0a0b834a15874545cb6a74b4f9b26`](https://github.com/OSU-NLP-Group/HippoRAG/tree/d5c8329422e0a0b834a15874545cb6a74b4f9b26) | Generic external contract only |
-| `self_rag` | [Self-RAG, `1fcdc420e48f50a7d7ab1ece5494221b93252e99`](https://github.com/AkariAsai/self-rag/tree/1fcdc420e48f50a7d7ab1ece5494221b93252e99) | Trained reflection-token inference absent |
-| `crag` | [CRAG, `de7c2961ae624a1483a138c5798e1f6d0c4fb0e0`](https://github.com/HuskyInSalt/CRAG/tree/de7c2961ae624a1483a138c5798e1f6d0c4fb0e0) | Paper evaluator and correction pipeline absent |
+The previously source-audited prerequisites now have concrete implementations.
+Their `adapter_version` is `v10`; this is an adapter cohort, not a change to the
+package's `0.9.0` version. Optional environments keep their dependencies out of
+the ordinary offline service. The full supported scope and honest limits live in
+[RESEARCH_COMPLETION.md](RESEARCH_COMPLETION.md).
 
 ### Microsoft GraphRAG
 
-The audited package requires Python 3.11–3.13 and supplies indexing/query APIs.
-Its [official methods documentation](https://microsoft.github.io/graphrag/index/methods/)
-distinguishes standard LLM entity/relation extraction and community reporting
-from FastGraphRAG's NLP noun phrases and co-occurrence graph. FastGraphRAG still
-uses generation for community reports; it is not a generator-free substitute.
-NLP model/resources and language coverage must also be provisioned explicitly.
-
-A real integration must run the selected indexing method and upstream query
-path, then map document/text-unit/community evidence back to the authorized
-original passages. It needs compatible embedding/generation providers and
-isolated artifacts for each source snapshot. Native `graph` traversal and
-label-propagation communities do not implement this pipeline. No GraphRAG model
-or pipeline execution is reported here.
+The adapter executes standard LLM entity/relation extraction, graph construction,
+Leiden communities, community reporting, embeddings and upstream local
+graph-context retrieval. It verifies actual pipeline stages and source lineage,
+normalizes validated extraction to the pinned parser's delimiter rules, and
+rejects swallowed upstream failures. Real upstream regression checks assert
+relationship weights as well as graph existence. Native `graph` remains separate;
+global/DRIFT search and FastGraphRAG are outside this implementation.
 
 ### HippoRAG
 
-The audited source exposes `HippoRAG.index(docs=...)` and retrieval methods,
-combining model-extracted knowledge with graph/PPR retrieval and trained
-embeddings. Its [dependency declaration](https://github.com/OSU-NLP-Group/HippoRAG/blob/d5c8329422e0a0b834a15874545cb6a74b4f9b26/pyproject.toml)
-makes vLLM and GritLM optional extras. They should not be described as mandatory
-for every source-based configuration.
-
-The missing work is a concrete provider/runtime selection, actual OpenIE and
-PPR execution, source-ID mapping, and snapshot-specific graph/cache cleanup.
-An appropriately configured API provider or local model path is possible in
-principle; this repository has not installed or verified one. A generic graph
-walk is not evidence of HippoRAG execution.
+The adapter invokes official indexing, OpenIE, fact selection and graph retrieval,
+and observes actual igraph personalized PageRank calls. Original source identities
+survive internal text deduplication. A no-fact or dense-only fallback returns an
+explicit error instead of being recorded as PPR execution. The isolated source
+installation uses pinned CPU dependencies, trained BGE and actual provider
+callbacks; no vLLM/GritLM extra is required for this supported configuration.
 
 ### Trained Self-RAG
 
-The [official repository](https://github.com/AkariAsai/self-rag/tree/1fcdc420e48f50a7d7ab1ece5494221b93252e99)
-provides trained checkpoints and short-/long-form inference runners. Its pinned
-reference requirements include vLLM 0.2.6 and flash-attn 2.3.6. Integrating the
-[7B checkpoint](https://huggingface.co/selfrag/selfrag_llama2_7b) requires a
-compatible inference environment or a separately validated port, sufficient
-model resources, actual reflection-token decisions and scores, and source
-lineage through retrieved passages. Checkpoint/runtime identity and tokenizer
-special-token handling must be tested explicitly.
-
-The native `self_reflective` prompt loop and the Qwen answerability scorer do
-not execute this trained Self-RAG checkpoint. No such checkpoint execution,
-reflection-token behavior or benchmark result has been verified here.
+The official trained 7B checkpoint is reproducibly converted from pinned source
+shards to Q4_K_M and decoded with a pinned llama.cpp CPU runtime. The short-form,
+always-retrieve port measures actual relevance/support/utility token logits and
+retains the selected model answer and source IDs. Tests verify the reflection
+vocabulary, EOS handling, valid supported answer, and whole-answer abstention for
+irrelevant/no-retrieval/contradictory output. See [CPU port details](SELF_RAG_CPU.md).
+This does not establish full-precision, adaptive retrieval, long-form or paper
+benchmark parity. Native `self_reflective` and Qwen admission remain separate.
 
 ### Paper-specific CRAG
 
-The [pinned README](https://github.com/HuskyInSalt/CRAG/blob/de7c2961ae624a1483a138c5798e1f6d0c4fb0e0/README.md)
-requires a fine-tuned retrieval evaluator, links its weights on Google Drive,
-and uses a Self-RAG Llama-2 checkpoint for the reference generation path. The
-evaluator training code uses T5-large. Those evaluator artifacts have not been
-downloaded, hashed or executed by this repository.
+The authors' T5 evaluator artifacts are downloaded, hash checked and executed
+in FP32 on CPU. The original PopQA thresholds select correct/incorrect/ambiguous
+branches. Decomposition preserves source slices; ambiguous results retain both
+internal and external evidence. The configured generation bridge returns an
+explicit selected answer; actual tests label its deterministic fixtures.
 
-The correct branch filters/decomposes internal evidence; incorrect retrieval
-invokes question rewriting and web search; ambiguous retrieval combines both.
-The reference external-knowledge branch requires OpenAI and Serper search
-credentials. A complete integration must verify the evaluator, implement all
-claimed correction branches and preserve provenance for externally acquired
-evidence. The current supplied-passage-only research contract would also need an
-explicit design for those new web sources. An evaluator-only test would not
-verify the full pipeline described in the [CRAG paper](https://arxiv.org/abs/2401.15884).
-
-Native `corrective` routing remains a distinct bounded mechanism. The remaining
-work is implementation, artifact provisioning and verification; it is not a
-claim that these engines are impossible on a particular class of hardware.
+Optional rewritten Serper acquisition uses exact host and tenant allowlists,
+public DNS validation, pinned-IP verified TLS, one deadline and bounded content.
+The v2 protocol binds each ephemeral web snapshot to tenant, URL and text hash.
+All three branches and the real HTTP lifecycle are exercised with the actual
+evaluator. TLS transport fixtures are executed, while live Serper and end-to-end
+learned generation quality remain unverified. Native `corrective` remains a
+distinct mechanism; these execution checks do not reproduce paper benchmarks.

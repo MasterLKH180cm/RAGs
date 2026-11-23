@@ -1,0 +1,279 @@
+{
+  "schema": "research-http-e2e-v03",
+  "verified_at": "2026-11-23T16:14:02.890083+00:00",
+  "engine": "hipporag",
+  "implementation": {
+    "library": "hipporag",
+    "version": "2.0.0a5",
+    "source_commit": "d5c8329422e0a0b834a15874545cb6a74b4f9b26",
+    "adapter_version": "v10"
+  },
+  "embedding_library": "fastembed:0.9.1",
+  "generation": "explicit_local_openai_protocol_deterministic_fixture",
+  "trained_generation_quality_verified": false,
+  "fixture_http_calls": 70,
+  "checks": {
+    "authentication": {
+      "invalid_token": 401,
+      "tenant_mismatch": 403,
+      "no_model_calls": true
+    },
+    "actual_upstream_http": {
+      "implementation": {
+        "library": "hipporag",
+        "version": "2.0.0a5",
+        "source_commit": "d5c8329422e0a0b834a15874545cb6a74b4f9b26",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 49,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 33,
+        "score_kind": "personalized_pagerank",
+        "source_count": 17,
+        "unique_passages": 16,
+        "graph_nodes": 32,
+        "graph_edges": 48,
+        "retrieved_chunks": 17,
+        "ppr_calls": 1,
+        "extracted_triples": 16,
+        "linked_facts": 3,
+        "retrieval_path": "personalized_pagerank",
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "08e4241d5bb7852ff84f4163bd909ce9",
+        "16da0932aa2f8129f0528dcf8236c925",
+        "171e1dabce2e28f5774709710af4022c",
+        "1863bed566ce5b22d8619f1d4ee98be1",
+        "21214fd1d7570665a2fec1708112cc29",
+        "30caae318a75804d286b4ac531615bf0",
+        "3509bc3af89710bafd1bd2a0c22e7dfa",
+        "3f32389e988f9e9306324d7050876511",
+        "42fb79a5731e10bd305105e33fbf72d2",
+        "4893a9b182b473a9628fc5f8da8a39a5",
+        "6385ad6019149851b0314a273a5045b6",
+        "9e8e3f44e84a30f108a27ec21287fb19",
+        "b2dff764c8d60605b7091f8003d3f831",
+        "be231a5291a6fa3b18b221ac847d5120",
+        "d8b6bde12694704042169fed0f2f4496",
+        "f4ec48053a73632c4353e1e4427615c7",
+        "fb322d373a256251fdbc34903f5c36a8"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "duplicate_source_identity": {
+      "both_original_ids_preserved": true
+    },
+    "updated_snapshot": {
+      "implementation": {
+        "library": "hipporag",
+        "version": "2.0.0a5",
+        "source_commit": "d5c8329422e0a0b834a15874545cb6a74b4f9b26",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 14,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 11,
+        "score_kind": "personalized_pagerank",
+        "source_count": 5,
+        "unique_passages": 5,
+        "graph_nodes": 9,
+        "graph_edges": 14,
+        "retrieved_chunks": 5,
+        "ppr_calls": 1,
+        "extracted_triples": 4,
+        "linked_facts": 3,
+        "retrieval_path": "personalized_pagerank",
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "08f592ee891be9bc247a7f9669546b7c",
+        "42fb79a5731e10bd305105e33fbf72d2",
+        "6385ad6019149851b0314a273a5045b6",
+        "9e8e3f44e84a30f108a27ec21287fb19",
+        "b2dff764c8d60605b7091f8003d3f831"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "historical_snapshot": {
+      "implementation": {
+        "library": "hipporag",
+        "version": "2.0.0a5",
+        "source_commit": "d5c8329422e0a0b834a15874545cb6a74b4f9b26",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 13,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 9,
+        "score_kind": "personalized_pagerank",
+        "source_count": 5,
+        "unique_passages": 4,
+        "graph_nodes": 8,
+        "graph_edges": 12,
+        "retrieved_chunks": 5,
+        "ppr_calls": 1,
+        "extracted_triples": 4,
+        "linked_facts": 3,
+        "retrieval_path": "personalized_pagerank",
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "42fb79a5731e10bd305105e33fbf72d2",
+        "6385ad6019149851b0314a273a5045b6",
+        "9e8e3f44e84a30f108a27ec21287fb19",
+        "b2dff764c8d60605b7091f8003d3f831",
+        "d8b6bde12694704042169fed0f2f4496"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "tenant_source_isolation": {
+      "implementation": {
+        "library": "hipporag",
+        "version": "2.0.0a5",
+        "source_commit": "d5c8329422e0a0b834a15874545cb6a74b4f9b26",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 5,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 3,
+        "score_kind": "personalized_pagerank",
+        "source_count": 1,
+        "unique_passages": 1,
+        "graph_nodes": 3,
+        "graph_edges": 3,
+        "retrieved_chunks": 1,
+        "ppr_calls": 1,
+        "extracted_triples": 1,
+        "linked_facts": 1,
+        "retrieval_path": "personalized_pagerank",
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "1d441bb9e8e5095f2e9f5a62d10a5a5f"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "deleted_current_snapshot": {
+      "implementation": {
+        "library": "hipporag",
+        "version": "2.0.0a5",
+        "source_commit": "d5c8329422e0a0b834a15874545cb6a74b4f9b26",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 11,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 7,
+        "score_kind": "personalized_pagerank",
+        "source_count": 3,
+        "unique_passages": 3,
+        "graph_nodes": 7,
+        "graph_edges": 9,
+        "retrieved_chunks": 3,
+        "ppr_calls": 1,
+        "extracted_triples": 3,
+        "linked_facts": 3,
+        "retrieval_path": "personalized_pagerank",
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "42fb79a5731e10bd305105e33fbf72d2",
+        "6385ad6019149851b0314a273a5045b6",
+        "9e8e3f44e84a30f108a27ec21287fb19"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "deleted_historical_snapshot": {
+      "implementation": {
+        "library": "hipporag",
+        "version": "2.0.0a5",
+        "source_commit": "d5c8329422e0a0b834a15874545cb6a74b4f9b26",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+        "generation_provider": "openai:fixture-deterministic-generation-v1",
+        "embedding_dimensions": 384,
+        "embedding_calls": 11,
+        "embedding_token_limit": 512,
+        "embedding_window_policy": "native_tokenizer_reject_oversize",
+        "query_embedding_calls": 1,
+        "generation_calls": 7,
+        "score_kind": "personalized_pagerank",
+        "source_count": 3,
+        "unique_passages": 3,
+        "graph_nodes": 7,
+        "graph_edges": 9,
+        "retrieved_chunks": 3,
+        "ppr_calls": 1,
+        "extracted_triples": 3,
+        "linked_facts": 3,
+        "retrieval_path": "personalized_pagerank",
+        "engine_executed": true
+      },
+      "cited_chunk_ids": [
+        "42fb79a5731e10bd305105e33fbf72d2",
+        "6385ad6019149851b0314a273a5045b6",
+        "9e8e3f44e84a30f108a27ec21287fb19"
+      ],
+      "outcome": "success",
+      "request_index_removed": true
+    },
+    "empty_scope": {
+      "implementation": {
+        "library": "hipporag",
+        "version": "2.0.0a5",
+        "source_commit": "d5c8329422e0a0b834a15874545cb6a74b4f9b26",
+        "adapter_version": "v10"
+      },
+      "diagnostics": {
+        "source_count": 0,
+        "engine_executed": false
+      },
+      "cited_chunk_ids": [],
+      "outcome": "insufficient_evidence",
+      "request_index_removed": true
+    },
+    "deadline_cleanup": {
+      "http_status": 504,
+      "code": "upstream_timeout",
+      "request_index_removed": true
+    }
+  },
+  "passed": true,
+  "elapsed_seconds": 45.452927815000066
+}

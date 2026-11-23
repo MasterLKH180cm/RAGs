@@ -1,0 +1,23 @@
+{
+  "schema": "selfrag-http-initial-failure-v10",
+  "passed": false,
+  "elapsed_seconds": 321.05483488300024,
+  "last_completed_checks": [
+    "authorization_and_protocol",
+    "trained_answer_preserved",
+    "observed_capability",
+    "updated_source_content",
+    "historical_source_content",
+    "tenant_source_isolation"
+  ],
+  "failed_check": "trained_refusal_no_fallback",
+  "main_api_http_status": 503,
+  "main_api_error": {
+    "code": "requires_backend",
+    "reason": "Backend unavailable: BackendUnavailable"
+  },
+  "sidecar_status": "not captured by the initial main-API harness; isolated sidecar diagnosis follows",
+  "traceback": "Traceback (most recent call last):\n  File \"$REPOSITORY/scripts/e2e_selfrag_v10.py\", line 191, in <module>\n    \n  File \"$REPOSITORY/scripts/e2e_selfrag_v10.py\", line 183, in main\n    parser.add_argument(\"--report\", required=True)\n             ^^^^^^^^^\n  File \"$REPOSITORY/scripts/e2e_selfrag_v10.py\", line 147, in run\n    negative_result = request(client, \"POST\", api + \"/query\", alpha_api,\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"$REPOSITORY/scripts/e2e_research_v03.py\", line 141, in request\n    raise AssertionError(f\"{method} {url.rsplit('/', 1)[-1]} returned {response.status_code}; expected {expected}: {response.text[:300]}\")\nAssertionError: POST query returned 503; expected 200: {\"detail\":{\"code\":\"requires_backend\",\"reason\":\"Backend unavailable: BackendUnavailable\"}}\n",
+  "interpretation": "Preserved failed integration attempt. Positive assertions had completed before the unrelated-source request failed. No final success is inferred from these partial checks.",
+  "paths_normalized_for_public_report": true
+}

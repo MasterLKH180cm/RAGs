@@ -32,12 +32,25 @@ sys.path.insert(0, str(REPO / "tests"))
 from research_fixture_provider import PASSAGES, QUESTION, fixture_completion  # noqa: E402 -- explicit test-only fixture
 
 
+def completion_fixture(engine):
+    if engine == "full_graphrag":
+        from graphrag_fixture_provider import fixture_completion as completion
+    elif engine == "hipporag":
+        from hipporag_fixture_provider import hipporag_completion as completion
+    elif engine in {"raptor", "lightrag"}:
+        completion = fixture_completion
+    else:
+        raise ValueError("Unknown research generation fixture")
+    return completion
+
+
 class GenerationFixture:
-    def __init__(self):
+    def __init__(self, engine="raptor"):
         self.calls = 0
         self.token = secrets.token_urlsafe(32)
         self._lock = threading.Lock()
         fixture = self
+        completion = completion_fixture(engine)
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *_):
@@ -55,8 +68,8 @@ class GenerationFixture:
                     messages = body["messages"]
                     system = next(item["content"] for item in messages if item["role"] == "system")
                     user = next(item["content"] for item in messages if item["role"] == "user")
-                    text = fixture_completion(system, user)
-                    value = {"choices": [{"message": {"role": "assistant", "content": text}}]}
+                    text = completion(system, user)
+                    value = {"choices": [{"message": {"role": "assistant", "content": text}, "finish_reason": "stop"}]}
                     encoded = json.dumps(value).encode()
                 except (AssertionError, KeyError, StopIteration, ValueError, TypeError, IndexError):
                     self.send_error(422, "Fixture input shape not supported")
@@ -174,12 +187,14 @@ def verify_query(value: dict, engine: str, expected: dict, work: Path, *, empty=
 
 
 def run(args) -> dict:
+    started = time.monotonic()
     base = {key: value for key, value in os.environ.items()
             if not key.startswith(("RAGS_", "OPENAI_", "ANTHROPIC_"))}
     base.update(
         RAGS_ENV="test", ORT_DISABLE_TELEMETRY="1", HF_HUB_DISABLE_TELEMETRY="1",
         OMP_NUM_THREADS="2", NUMBA_NUM_THREADS="2", OPENBLAS_NUM_THREADS="2",
         TOKENIZERS_PARALLELISM="false", NO_PROXY="127.0.0.1,localhost", no_proxy="127.0.0.1,localhost",
+        LITELLM_LOCAL_MODEL_COST_MAP="True",
         RAGS_MODEL_CACHE=str(Path(args.model_cache).resolve()), RAGS_ADMISSION_POLICY="compatibility",
         RAGS_EMBEDDING_PROVIDER="fastembed", RAGS_FASTEMBED_MODEL="BAAI/bge-small-en-v1.5",
         RAGS_TOKENIZER_JSON=json.dumps({"backend": "tiktoken", "encoding": "cl100k_base"}),
@@ -193,7 +208,7 @@ def run(args) -> dict:
         root = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="rags-http-v03-")))
         work = root / "research-work"
         work.mkdir()
-        fixture = GenerationFixture()
+        fixture = GenerationFixture(args.engine)
         stack.callback(fixture.close)
         alpha_side, beta_side, alpha_api, beta_api = [secrets.token_urlsafe(32) for _ in range(4)]
         side_env = dict(base, RAGS_RESEARCH_ENGINE=args.engine,
@@ -222,7 +237,10 @@ def run(args) -> dict:
         checks["authentication"] = {"invalid_token": 401, "tenant_mismatch": 403, "no_model_calls": True}
 
         revisions = {}
-        for item in PASSAGES:
+        passages = list(PASSAGES)
+        if args.engine in {"full_graphrag", "hipporag"}:
+            passages.append({"id": "water-duplicate", "text": PASSAGES[0]["text"]})
+        for item in passages:
             document = {"document_id": item["id"], "title": item["id"], "text": item["text"],
                         "metadata": {"group": "lifecycle" if item["id"].startswith("water-") else "other"},
                         "valid_from": "2020-01-01T00:00:00Z"}
@@ -242,9 +260,20 @@ def run(args) -> dict:
         diagnostic = checks["actual_upstream_http"]["diagnostics"]
         if args.engine == "raptor":
             assert diagnostic["summary_layers"] >= 1 and diagnostic["selected_summary_nodes"] >= 1
-        else:
+        elif args.engine in {"lightrag", "full_graphrag"}:
             assert diagnostic["graph_nodes"] >= 4 and diagnostic["graph_edges"] >= 4
             assert diagnostic["retrieved_entities"] > 0 and diagnostic["retrieved_relationships"] > 0
+            if args.engine == "full_graphrag":
+                assert diagnostic["pipeline_stages"] == 9
+                assert diagnostic["community_reports"] == diagnostic["communities"] > 0
+                assert diagnostic["query_mode"] == "local_graph_context"
+        else:
+            assert diagnostic["graph_nodes"] > 0 and diagnostic["graph_edges"] > 0
+            assert diagnostic["ppr_calls"] == 1 and diagnostic["linked_facts"] > 0
+            assert diagnostic["retrieval_path"] == "personalized_pagerank"
+        if args.engine in {"full_graphrag", "hipporag"}:
+            assert {"water-1", "water-duplicate"} <= {row["document_id"] for row in initial["citations"]}
+            checks["duplicate_source_identity"] = {"both_original_ids_preserved": True}
         catalog = request(client, "GET", api + "/strategies", alpha_api)
         capability = next(item for item in catalog["capabilities"] if item["id"] == args.engine)
         assert capability["evidence_level"] == "pinned_upstream_reported" and capability["upstream"] == UPSTREAMS[args.engine]
@@ -266,7 +295,8 @@ def run(args) -> dict:
             clean(work)
 
         scoped = {key: revision for key, revision in revisions.items() if key.startswith("water-")}
-        query = {"question": QUESTION, "mode": args.engine, "top_k": 4, "generate": False,
+        query = {"question": QUESTION, "mode": args.engine,
+                 "top_k": 20 if args.engine in {"full_graphrag", "hipporag"} else 4, "generate": False,
                  "filters": {"metadata": {"group": "lifecycle"}}}
         updated = request(client, "POST", api + "/documents", alpha_api, expected=201, json={
             "document_id": "water-1", "title": "water-1", "expected_revision": scoped["water-1"],
@@ -322,12 +352,13 @@ def run(args) -> dict:
             "trained_generation_quality_verified": False, "fixture_http_calls": fixture.calls,
             "checks": checks, "passed": True,
         }
+    report["elapsed_seconds"] = time.monotonic() - started
     return report
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--engine", choices=["raptor", "lightrag"], required=True)
+    parser.add_argument("--engine", choices=["raptor", "lightrag", "full_graphrag", "hipporag"], required=True)
     parser.add_argument("--model-cache", default=os.getenv("RAGS_MODEL_CACHE", str(REPO.parent / "model-cache-v03")))
     parser.add_argument("--raptor-source", default=os.getenv("RAGS_RAPTOR_SOURCE"))
     parser.add_argument("--report", required=True)

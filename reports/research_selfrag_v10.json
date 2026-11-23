@@ -1,0 +1,90 @@
+{
+  "schema": "selfrag-trained-cpu-v10",
+  "status": "passed",
+  "verified_at": "2026-11-23T17:06:19.766871+00:00",
+  "elapsed_seconds": 21.855498474000342,
+  "peak_process_rss_bytes": 4280741888,
+  "major_page_faults": 4,
+  "weight_loading": "owned_cpu_buffers",
+  "kv_policy": "full_snapshot_max_prompt_plus_128_rounded_256_capped_1792",
+  "checkpoint": {
+    "repository": "selfrag/selfrag_llama2_7b",
+    "revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+    "bytes": 4081095936,
+    "sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+    "quantization": "Q4_K_M"
+  },
+  "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+  "reflection_token_ids": {
+    "[No Retrieval]": 32000,
+    "[Retrieval]": 32001,
+    "[Continue to Use Evidence]": 32002,
+    "[Irrelevant]": 32003,
+    "[Relevant]": 32004,
+    "<paragraph>": 32005,
+    "</paragraph>": 32006,
+    "[Utility:1]": 32007,
+    "[Utility:2]": 32008,
+    "[Utility:3]": 32009,
+    "[Utility:4]": 32010,
+    "[Utility:5]": 32011,
+    "[Fully supported]": 32012,
+    "[Partially supported]": 32013,
+    "[No support / Contradictory]": 32014,
+    "<pad>": 32015
+  },
+  "all_reflection_ids_are_non_eog": true,
+  "evidence_kind": "actual_trained_checkpoint_with_two_synthetic_passages",
+  "limitations": [
+    "One positive and one negative fixture do not establish domain quality.",
+    "Quantized short-form CPU port; no full-precision or paper benchmark parity.",
+    "No ordinary generation provider or embedding provider is used."
+  ],
+  "result": {
+    "hits": [
+      {
+        "chunk_id": "authorized:refund",
+        "score": 2.2117798921859926
+      }
+    ],
+    "implementation": {
+      "library": "self-rag",
+      "version": "git-1fcdc42",
+      "source_commit": "1fcdc420e48f50a7d7ab1ece5494221b93252e99",
+      "adapter_version": "v10"
+    },
+    "diagnostics": {
+      "source_count": 2,
+      "engine_executed": true,
+      "reflection_calls": 2,
+      "generated_tokens": 47,
+      "reflection_relevance_tokens": 2,
+      "reflection_support_tokens": 1,
+      "reflection_utility_tokens": 2,
+      "reflection_abstentions": 1,
+      "checkpoint_sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+      "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+      "runtime": "llama.cpp-b12631-cpu-owned-buffers",
+      "checkpoint_revision": "190261383b0779ff66d2f95a73c7ad267d94b820",
+      "checkpoint_quantization": "Q4_K_M",
+      "inference_mode": "always_retrieve_short_form",
+      "score_kind": "conditional_reflection_reward"
+    },
+    "grounded_answer": {
+      "text": "The refund period is 14 days after purchase.",
+      "cited_ids": [
+        "authorized:refund"
+      ]
+    },
+    "usage": {
+      "input_tokens": 78,
+      "output_tokens": 47
+    }
+  },
+  "native_threads": 4,
+  "native_context_tokens": 256,
+  "native_context_observation": {
+    "source": "native stderr from this actual gate",
+    "line": "llama_context: n_ctx                 = 256"
+  }
+}

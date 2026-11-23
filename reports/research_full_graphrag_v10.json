@@ -1,0 +1,147 @@
+{
+  "schema": "actual-upstream-verification-v1",
+  "engine": "full_graphrag",
+  "verification": "actual_standard_index_local_graph_context_real_bge_deterministic_generation",
+  "not_verified": [
+    "trained_generation_quality",
+    "paper_benchmark_reproduction",
+    "global_search",
+    "drift_search"
+  ],
+  "python": "3.12.14",
+  "elapsed_seconds": 7.16821420999986,
+  "runtime_versions": {
+    "graphrag": "3.3.0",
+    "graphrag-llm": "3.3.0",
+    "graspologic-native": "1.2.5",
+    "lancedb": "0.38.0",
+    "pandas": "3.1.1",
+    "fastembed": "0.9.1",
+    "onnxruntime": "1.32.0",
+    "tiktoken": "0.14.0"
+  },
+  "embedding_artifacts_sha256": {
+    "model_optimized.onnx": "51f1bd0addd6e859e42c2c8021a5e5461385bb676a649f4b269aa445449f2431",
+    "tokenizer.json": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66",
+    "tokenizer_config.json": "0b29c7bfc889e53b36d9dd3e686dd4300f6525110eaa98c76a5dafceb2029f53"
+  },
+  "checks": {
+    "full_standard_pipeline": true,
+    "original_source_projection": true,
+    "duplicate_source_ids_preserved": true,
+    "isolated_replacement_snapshot": true,
+    "request_indexes_removed": true,
+    "extraction_records_and_weights_preserved": true
+  },
+  "extraction_fidelity": {
+    "parsed_relationships": 9,
+    "expected_weight": 8.0,
+    "observed_weights": [
+      8.0
+    ]
+  },
+  "result": {
+    "hits": [
+      {
+        "chunk_id": "water-1",
+        "score": 1.0
+      },
+      {
+        "chunk_id": "water-duplicate",
+        "score": 1.0
+      },
+      {
+        "chunk_id": "water-2",
+        "score": 0.5
+      },
+      {
+        "chunk_id": "water-4",
+        "score": 0.3333333333333333
+      },
+      {
+        "chunk_id": "water-3",
+        "score": 0.25
+      },
+      {
+        "chunk_id": "space-3",
+        "score": 0.2
+      },
+      {
+        "chunk_id": "space-4",
+        "score": 0.16666666666666666
+      },
+      {
+        "chunk_id": "space-1",
+        "score": 0.14285714285714285
+      },
+      {
+        "chunk_id": "space-2",
+        "score": 0.125
+      }
+    ],
+    "implementation": {
+      "library": "graphrag",
+      "version": "3.3.0",
+      "source_commit": "5faaaf4f5685fa2056fa8c3bf9342cb089f2942f",
+      "adapter_version": "v10"
+    },
+    "diagnostics": {
+      "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+      "generation_provider": "fixture:graphrag-deterministic-generation-v1",
+      "embedding_dimensions": 384,
+      "embedding_calls": 17,
+      "embedding_token_limit": 512,
+      "embedding_window_policy": "provider_exact_counter_reject_oversize",
+      "query_embedding_calls": 1,
+      "generation_calls": 16,
+      "score_kind": "reciprocal_local_source_rank",
+      "query_mode": "local_graph_context",
+      "source_count": 9,
+      "pipeline_stages": 9,
+      "text_units": 8,
+      "graph_nodes": 8,
+      "graph_edges": 8,
+      "communities": 2,
+      "community_reports": 2,
+      "retrieved_chunks": 9,
+      "retrieved_entities": 8,
+      "retrieved_relationships": 8
+    }
+  },
+  "replacement_result": {
+    "hits": [
+      {
+        "chunk_id": "replacement",
+        "score": 1.0
+      }
+    ],
+    "implementation": {
+      "library": "graphrag",
+      "version": "3.3.0",
+      "source_commit": "5faaaf4f5685fa2056fa8c3bf9342cb089f2942f",
+      "adapter_version": "v10"
+    },
+    "diagnostics": {
+      "embedding_model": "fastembed:BAAI/bge-small-en-v1.5",
+      "generation_provider": "fixture:graphrag-deterministic-generation-v1",
+      "embedding_dimensions": 384,
+      "embedding_calls": 4,
+      "embedding_token_limit": 512,
+      "embedding_window_policy": "provider_exact_counter_reject_oversize",
+      "query_embedding_calls": 1,
+      "generation_calls": 2,
+      "score_kind": "reciprocal_local_source_rank",
+      "query_mode": "local_graph_context",
+      "source_count": 1,
+      "pipeline_stages": 9,
+      "text_units": 1,
+      "graph_nodes": 2,
+      "graph_edges": 1,
+      "communities": 1,
+      "community_reports": 1,
+      "retrieved_chunks": 1,
+      "retrieved_entities": 2,
+      "retrieved_relationships": 1
+    }
+  }
+}

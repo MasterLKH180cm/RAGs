@@ -1,0 +1,15 @@
+# Isolated validated CRAG FP32 CPU evaluator runtime; no vLLM/CUDA requirement.
+# The checkpoint is safetensors-only; scripts/crag_local.py verifies every byte.
+torch==2.5.1
+transformers==4.45.2
+tokenizers==0.20.3
+safetensors==0.8.0
+sentencepiece==0.2.1
+accelerate==1.12.0
+httpx[socks]==0.28.1
+fastapi==0.165.0
+uvicorn==0.54.0
+pydantic==2.14.4
+python-multipart==0.0.34
+tiktoken==0.14.0
+pytest==9.0.2

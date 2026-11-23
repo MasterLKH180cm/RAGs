@@ -1,0 +1,10 @@
+# Microsoft GraphRAG 3.3.0, isolated CPU execution environment.
+# Production adapters use RAGs Providers; actual algorithm tests use trained BGE.
+graphrag==3.3.0
+fastembed==0.9.1
+fastapi==0.165.0
+httpx==0.28.1
+python-multipart==0.0.34
+pytest==9.2.0
+ruff==0.17.6
+uvicorn==0.54.0

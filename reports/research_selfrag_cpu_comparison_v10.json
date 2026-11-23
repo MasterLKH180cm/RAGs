@@ -1,0 +1,79 @@
+{
+  "schema": "selfrag-cpu-controlled-comparison-v10",
+  "evidence_kind": "single_same_api_corpus_and_question_phase_comparison",
+  "question": "What is the refund period?",
+  "source_text": "The refund period is 14 days after purchase.",
+  "native_threads": 4,
+  "checkpoint_sha256": "e6bcabadccb962ddda7f1899f1a684cb3f84dd98c07778f034d6b43d0f245e85",
+  "before": {
+    "native_load_mode": "AUTO/mmap",
+    "context_tokens": 1792,
+    "http_seconds": 296.0426584029997,
+    "generation_window_seconds": 278.30281542500006,
+    "generation_major_page_faults": 5005150,
+    "peak_profiled_worker_rss_bytes": 4948090880,
+    "input_tokens": 37,
+    "output_tokens": 16,
+    "plain_trained_answer": "The refund period is 14 days after purchase.",
+    "prefill_major_page_faults": 115965,
+    "autoregressive_major_page_faults": 4889185
+  },
+  "after": {
+    "native_load_mode": "NONE/owned_cpu_buffers",
+    "lazy_mode": "OFF",
+    "context_tokens": 256,
+    "http_seconds": 14.156176546000097,
+    "generation_window_seconds": 4.78170967799997,
+    "generation_major_page_faults": 5,
+    "peak_profiled_worker_rss_bytes": 4272111616,
+    "input_tokens": 37,
+    "output_tokens": 16,
+    "plain_trained_answer": "The refund period is 14 days after purchase.",
+    "prefill_major_page_faults": 5,
+    "autoregressive_major_page_faults": 0
+  },
+  "same_plain_trained_answer": true,
+  "after_token_ids_match_prior_raw_positive_diagnostic": true,
+  "matching_token_ids": [
+    32004,
+    1576,
+    2143,
+    870,
+    3785,
+    338,
+    29871,
+    29896,
+    29946,
+    3841,
+    1156,
+    20590,
+    29889,
+    32012,
+    32011,
+    2
+  ],
+  "matching_control_ids": [
+    32004,
+    32012,
+    32011,
+    2
+  ],
+  "slow_before_profile_full_token_stream_recorded": false,
+  "token_comparison_note": "The slow before profile recorded input/output counts and the complete API answer. Exact token IDs are compared to the earlier separately retained raw diagnostic of the same pinned checkpoint and identical prompt.",
+  "original_http_deadline_failure": {
+    "seconds": 120,
+    "report": "research_selfrag_http_timeout_v10.json"
+  },
+  "fixed_full_context_attempt": "research_selfrag_eager_exit_diagnostic_v10.json",
+  "successful_final_uninstrumented_http": "research_selfrag_http_v10.json",
+  "raw_phase_reports": [
+    "research_selfrag_paging_before_v10.json",
+    "research_selfrag_paging_after_v10.json"
+  ],
+  "limits": [
+    "One controlled diagnostic is not steady-state throughput or a paper/domain-quality benchmark.",
+    "File-cache state was not forcibly equalized; model/artifact verification and source content remained unchanged.",
+    "The intermediate eager/full-KV attempt received SIGKILL during KV allocation; no per-process kernel OOM attribution was available.",
+    "Final ordinary HTTP lifecycle passes under the original 120-second sidecar limit;300 seconds was used only for before/after phase measurement."
+  ]
+}

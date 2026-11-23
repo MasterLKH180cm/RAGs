@@ -2,6 +2,7 @@
 import asyncio
 from contextlib import redirect_stdout
 import inspect
+from importlib import import_module
 import json
 import os
 from pathlib import Path
@@ -12,14 +13,24 @@ from rags.research_protocol import MAX_BODY_BYTES, MAX_RESPONSE_BYTES, UPSTREAMS
 from rags.features import FeatureFlags, strategy_features
 
 
-def provider_settings():
+ADAPTERS = {
+    "raptor": "rags.research.raptor_adapter",
+    "lightrag": "rags.research.lightrag_adapter",
+    "full_graphrag": "rags.research.graphrag_adapter",
+    "hipporag": "rags.research.hipporag_adapter",
+    "self_rag": "rags.research.selfrag_adapter",
+    "crag": "rags.research.crag_adapter",
+}
+
+
+def provider_settings(*, require_embeddings=True):
     # Providers reuse Settings, but this subprocess exposes no RAG HTTP API.
     # An ephemeral internal key satisfies that separate settings invariant;
     # real service/tenant credentials never enter the worker environment.
     from rags.config import Settings
     os.environ["RAGS_KEYS_JSON"] = json.dumps({secrets.token_urlsafe(32): "research-worker"})
     settings = Settings.from_env()
-    if settings.embedding_provider not in {"fastembed", "openai"}:
+    if require_embeddings and settings.embedding_provider not in {"fastembed", "openai", "router"}:
         raise ValueError("requires_provider")
     return settings
 
@@ -28,18 +39,21 @@ async def execute(request: ResearchRequest) -> dict:
     if request.engine != os.getenv("RAGS_RESEARCH_ENGINE"):
         raise ValueError("engine_mismatch")
     FeatureFlags.from_env().require(*strategy_features(request.engine))
-    if not request.passages:
-        return {"hits": [], "implementation": UPSTREAMS[request.engine],
-                "diagnostics": {"source_count": 0, "engine_executed": False}, "usage": None}
+    if not request.passages and not request.external_hosts:
+        return validate_result({"hits": [], "implementation": UPSTREAMS[request.engine],
+                                "diagnostics": {"source_count": 0, "engine_executed": False}, "usage": None}, request)
+    search = import_module(ADAPTERS[request.engine]).search
+    if request.engine == "self_rag":
+        result = search(request.question, [p.model_dump() for p in request.passages], request.top_k, Path.cwd())
+        result.setdefault("diagnostics", {}).update(source_count=len(request.passages), engine_executed=True)
+        return validate_result(result, request)
     from rags.providers import Providers
-    provider = Providers(provider_settings())
+    provider = Providers(provider_settings(require_embeddings=request.engine != "crag"))
     provider.require_generation()
     provider.begin_usage()
-    if request.engine == "raptor":
-        from rags.research.raptor_adapter import search
-    else:
-        from rags.research.lightrag_adapter import search
-    result = search(request.question, [p.model_dump() for p in request.passages], request.top_k, Path.cwd(), provider)
+    keywords = {"namespace": request.namespace, "external_hosts": request.external_hosts} if request.engine == "crag" else {}
+    result = search(request.question, [p.model_dump() for p in request.passages], request.top_k,
+                    Path.cwd(), provider, **keywords)
     if inspect.isawaitable(result):
         result = await result
     if not isinstance(result, dict):
@@ -74,7 +88,12 @@ def main():
         from rags.registry import CapabilityError
         if isinstance(error, (ImportError, ModuleNotFoundError)):
             code = "requires_dependency"
-        elif isinstance(error, CapabilityError) and error.code in {"requires_provider", "feature_disabled"}:
+        elif isinstance(error, CapabilityError) and error.code in {
+            "requires_provider", "requires_source", "requires_external_source", "feature_disabled",
+            "context_budget_exceeded", "research_limit_exceeded", "insufficient_graph_evidence",
+            "requires_search_credentials", "external_source_forbidden", "external_source_timeout",
+            "invalid_research_input",
+        }:
             code = error.code
         elif isinstance(error, CapabilityError) and error.code == "requires_backend":
             code = "requires_dependency"

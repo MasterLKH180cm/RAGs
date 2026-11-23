@@ -11,7 +11,8 @@ os.environ.setdefault("RAGS_ENV", "test")
 
 pytest_plugins = ["pytester"]
 LAYERS = {"unit", "integration", "e2e"}
-RESOURCES = {"external", "encoders", "research_raptor", "research_lightrag", "postgres", "redis", "s3", "browser"}
+RESOURCES = {"external", "encoders", "research_raptor", "research_lightrag", "research_graphrag",
+             "research_hipporag", "research_selfrag", "research_crag", "postgres", "redis", "s3", "browser"}
 INVENTORY = pytest.StashKey[list]()
 INCOMPLETE = pytest.StashKey[list]()
 
