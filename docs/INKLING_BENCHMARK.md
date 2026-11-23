@@ -82,7 +82,9 @@ same production router and fixed 42-request upper bound, a 300-second benchmark
 deadline, and a 10-minute job timeout. The `inkling-mini-live-model` artifact
 contains the report even when the run is blocked or fails. A missing secret
 causes the job to fail with an explicit blocked report. Ordinary pull-request CI
-does not use credentials or make paid model requests.
+does not use credentials or make paid model requests. The key is scoped to the
+benchmark step; checkout, dependency installation and artifact upload do not
+receive it through their environment.
 
 ## Cases and validation
 
@@ -186,3 +188,19 @@ blocked artifact and offline contract tests are available. No throughput,
 latency, quality, cost reduction, or superiority claim can be drawn from a
 blocked artifact. Generate passing live reports with the commands above before
 making a model-performance comparison.
+
+### Verified remote attempt on November 23, 2026
+
+[Actions run 45103025522](https://github.com/MasterLKH180cm/RAGs/actions/runs/45103025522)
+executed the unchanged production benchmark on an isolated verification branch.
+It produced **blocked / missing_model_credential**, exited with status 2, and
+uploaded its report successfully. There were zero provider requests. This
+establishes that the workflow did not receive a usable Tinker credential; it
+does not establish whether a credential exists elsewhere in account settings.
+
+The [downloaded remote report](../reports/inkling-mini-readiness-actions-v09.json)
+has matching adapter, harness, dataset and measurement-control hashes to the
+local readiness run. The downloaded ZIP was verified against its Actions
+artifact SHA-256. No latency, model-quality or token-throughput result can be
+computed from this blocked execution. The temporary branch-specific trigger
+was removed; the maintained workflow uses manual dispatch only.

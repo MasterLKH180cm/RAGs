@@ -154,7 +154,19 @@
     "status": "blocked",
     "block_reason": "missing_model_credential",
     "actual_requests": 0,
-    "readiness_report": "reports/inkling-mini-readiness-v09.json"
+    "readiness_report": "reports/inkling-mini-readiness-v09.json",
+    "remote_attempt": {
+      "status": "blocked",
+      "block_reason": "missing_model_credential",
+      "actual_requests": 0,
+      "run_id": 45103025522,
+      "run_url": "https://github.com/MasterLKH180cm/RAGs/actions/runs/45103025522",
+      "execution_revision": "f36bd0e716288539077d84058a97ff3a02a28ac3",
+      "report": "reports/inkling-mini-readiness-actions-v09.json",
+      "created_at": "2026-11-23T02:56:36.657765+00:00",
+      "artifact_sha256": "5d9e30d139c2234851b474d9594ab1f085c77e431b02706a97fb4384bdb6264a",
+      "adapter_harness_and_controls_match_local": true
+    }
   },
   "recorded_admission_quality": {
     "source": "reports/admission-verification-qwen-v03.json",

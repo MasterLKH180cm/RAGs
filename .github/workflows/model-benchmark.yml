@@ -18,8 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      TINKER_API_KEY: ${{ secrets.TINKER_API_KEY }}
-      BENCHMARK_REASONING_EFFORT: ${{ inputs.reasoning_effort }}
+      BENCHMARK_REASONING_EFFORT: ${{ inputs.reasoning_effort || 'low' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -33,6 +32,8 @@ jobs:
       - name: Install locked runtime
         run: uv sync --locked
       - name: Run bounded live requests through the production router
+        env:
+          TINKER_API_KEY: ${{ secrets.TINKER_API_KEY }}
         run: >-
           uv run --no-sync python -m rags.model_benchmark run
           --reasoning-effort "$BENCHMARK_REASONING_EFFORT"

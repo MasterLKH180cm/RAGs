@@ -1264,3 +1264,6 @@ PostgreSQL results, actual process acceptance, browser/external-resource CI,
 and live-model evidence. The [Inkling readiness report](reports/inkling-mini-readiness-v09.json)
 is explicitly blocked when no authorized Tinker credential is available; it
 contains no inferred latency or quality result.
+
+The [remote Inkling readiness attempt](reports/inkling-mini-readiness-actions-v09.json)
+also reports `missing_model_credential`; no live provider request was sent.
