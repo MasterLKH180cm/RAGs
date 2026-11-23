@@ -21,6 +21,12 @@ The [optional shared LiteLLM gateway](docs/LITELLM.md) adds a separately deploye
 generation path; the default remains local hashing embeddings and extractive
 answers, with no model credentials required.
 
+The [Qwen local generation recipe](docs/SELF_HOSTED_QWEN_SPEC.md) adds a pinned
+Qwen3-1.7B Q8_0 CPU deployment and `qwen-local` / `qwen-litellm` live benchmark
+presets. It is separate from the original bfloat16 answerability scorer and its
+frozen quality gates. [Evaluation diagnostics](docs/QWEN_EVALUATION_SPEC.md)
+separate missing reference documents from references removed after retrieval.
+
 ## Contents
 
 - [Quick start](#quick-start)

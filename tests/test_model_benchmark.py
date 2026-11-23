@@ -466,6 +466,22 @@ def test_authenticated_local_default_never_reads_hosted_credentials(monkeypatch)
     assert report["warmup"] is None and report["phases"] == []
 
 
+def test_qwen_local_preset_has_dedicated_credentials_and_explicit_protocol(monkeypatch):
+    options = benchmark.Options.for_preset("qwen-local")
+    assert options.model == "qwen/Qwen3-1.7B" and options.base_url == benchmark.LOCAL_BASE_URL
+    assert options.protocol == "openai" and options.auth_mode == "none" and options.effort is None
+    assert options.key_env == "QWEN_LOCAL_API_KEY" and options.allow_loopback_http
+    class DedicatedKeyOnly(dict):
+        def get(self, name, default=None):
+            assert name in {"QWEN_LOCAL_API_KEY", "QWEN_LOCAL_API_KEY_FILE"}
+            return super().get(name, default)
+    monkeypatch.setattr(benchmark, "ModelRouter", lambda *_: pytest.fail("No router without Qwen credential"))
+    report = benchmark.run_benchmark(replace(options, auth_mode="required", deployment_manifest=deployment_manifest()),
+                                     environment=DedicatedKeyOnly({"TINKER_API_KEY": "private", "OPENAI_API_KEY": "private"}))
+    assert report["status"] == "blocked" and report["block_reason"] == "missing_model_credential"
+    assert report["warmup"] is None and report["phases"] == []
+
+
 @pytest.mark.parametrize("key_name,arguments", [
     ("INKLING_LOCAL_API_KEY", []),
     ("DEDICATED_LOCAL_TEST_KEY", ["--key-env", "DEDICATED_LOCAL_TEST_KEY"]),
@@ -536,7 +552,8 @@ def test_local_live_without_manifest_blocks_without_reading_secrets_or_network(m
     assert report["target"]["auth_mode"] == "none" and "private-unused-secret" not in json.dumps(report)
 
 
-def test_real_local_no_auth_fixture_omits_auth_and_ignores_ambient_secrets_and_proxies(monkeypatch):
+@pytest.mark.parametrize("preset,model", [("inkling-local", INKLING_MODEL), ("qwen-local", "qwen/Qwen3-1.7B")])
+def test_real_local_no_auth_fixture_omits_auth_and_ignores_ambient_secrets_and_proxies(monkeypatch, preset, model):
     cases = benchmark.default_cases()
     by_request = {case.request: case for case in cases}
     requests = []
@@ -551,7 +568,9 @@ def test_real_local_no_auth_fixture_omits_auth_and_ignores_ambient_secrets_and_p
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             requests.append((self.path, self.headers.get("Authorization"), body))
-            encoded = json.dumps(envelope(by_request[body["messages"][-1]["content"]])).encode()
+            reply = envelope(by_request[body["messages"][-1]["content"]])
+            reply["model"] = body["model"]
+            encoded = json.dumps(reply).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(encoded)))
@@ -564,13 +583,13 @@ def test_real_local_no_auth_fixture_omits_auth_and_ignores_ambient_secrets_and_p
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        options = benchmark.Options.for_preset("inkling-local", base_url=f"http://127.0.0.1:{server.server_port}/v1",
+        options = benchmark.Options.for_preset(preset, base_url=f"http://127.0.0.1:{server.server_port}/v1",
             concurrency=(1, 2, 4), repetitions=1, warmup_rounds=0)
         report = benchmark.run_benchmark(options, cases, evidence_kind="http_contract_fixture")
         assert report["status"] == "passed" and len(requests) == 18
         for path, auth, body in requests:
             assert path == "/v1/chat/completions" and auth is None
-            assert body["model"] == INKLING_MODEL and body["max_tokens"] == 512
+            assert body["model"] == model and body["max_tokens"] == 512
             assert "max_completion_tokens" not in body and "reasoning_effort" not in body
         assert report["evidence_kind"] == "http_contract_fixture" and report["deployment_manifest"] is None
         serialized = json.dumps(report)
@@ -699,9 +718,11 @@ def test_comparison_discloses_authenticated_hosted_vs_local_conditions(monkeypat
     assert result["different_protocols"] and result["different_auth_modes"]
 
 
-def test_litellm_preset_requires_explicit_deployment_before_credentials_or_network(monkeypatch):
-    options = benchmark.Options.for_preset("inkling-litellm")
-    assert options.model == "gateway/inkling-2-mini-iq4nl-v1"
+@pytest.mark.parametrize("preset,model", [("inkling-litellm", "gateway/inkling-2-mini-iq4nl-v1"),
+                                         ("qwen-litellm", "gateway/qwen3-1.7b-q8_0-v1")])
+def test_litellm_preset_requires_explicit_deployment_before_credentials_or_network(monkeypatch, preset, model):
+    options = benchmark.Options.for_preset(preset)
+    assert options.model == model
     assert options.auth_mode == "required" and options.protocol == "openai" and options.effort is None
     assert options.require_deployment_manifest and not options.allow_loopback_http
     assert options.key_env == "LITELLM_BENCHMARK_API_KEY"

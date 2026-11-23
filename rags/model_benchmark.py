@@ -37,6 +37,7 @@ SCHEMA_VERSION = "model-contract-benchmark-v2"
 VALIDATION_VERSION = "synthetic-exact-contracts-v1"
 DEPLOYMENT_VERSION = "model-deployment-v1"
 LOCAL_BASE_URL = "http://127.0.0.1:8080/v1"
+PRESETS = ("inkling-tinker", "inkling-local", "inkling-litellm", "qwen-local", "qwen-litellm")
 ID_PATTERN = r"[a-z][a-z0-9_-]{0,63}"
 ENV_PATTERN = re.compile(r"[A-Z][A-Z0-9_]{0,127}\Z")
 HASH_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
@@ -269,14 +270,17 @@ class Options:
 
     @classmethod
     def for_preset(cls, preset: str, **overrides) -> Options:
-        if not isinstance(preset, str) or preset not in {"inkling-tinker", "inkling-local", "inkling-litellm"}:
+        if not isinstance(preset, str) or preset not in PRESETS:
             raise ValueError("Unsupported model benchmark preset")
         defaults = {} if preset == "inkling-tinker" else {
             "base_url": LOCAL_BASE_URL, "auth_mode": "none", "protocol": "openai",
             "effort": None, "allow_loopback_http": True, "key_env": "INKLING_LOCAL_API_KEY",
         }
-        if preset == "inkling-litellm":
-            defaults.update(model="gateway/inkling-2-mini-iq4nl-v1", base_url="https://localhost:4000/v1",
+        if preset.startswith("qwen-"):
+            defaults.update(model="qwen/Qwen3-1.7B", key_env="QWEN_LOCAL_API_KEY")
+        if preset.endswith("-litellm"):
+            alias = "gateway/qwen3-1.7b-q8_0-v1" if preset == "qwen-litellm" else "gateway/inkling-2-mini-iq4nl-v1"
+            defaults.update(model=alias, base_url="https://localhost:4000/v1",
                             auth_mode="required", allow_loopback_http=False,
                             key_env="LITELLM_BENCHMARK_API_KEY", require_deployment_manifest=True)
         return cls(**(defaults | overrides))
@@ -786,7 +790,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = _SafeArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     run = subparsers.add_parser("run", help="Run real model requests; no offline fallback")
-    run.add_argument("--preset", choices=("inkling-tinker", "inkling-local", "inkling-litellm"), default="inkling-tinker")
+    run.add_argument("--preset", choices=PRESETS, default="inkling-tinker")
     run.add_argument("--model")
     run.add_argument("--base-url")
     run.add_argument("--key-env", help="Credential variable name; defaults to the selected preset's dedicated key")

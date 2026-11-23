@@ -5,19 +5,19 @@ Domain outcomes drive refusal metrics with or without generation. Optional
 --admission-profile explicitly selects real scoring; paid generation stays off.
 """
 import argparse
-from collections import Counter
 import json
 import math
-from pathlib import Path
 import re
 import statistics
 import tempfile
 import time
+from collections import Counter
+from pathlib import Path
 
+from rags.backends import BackendUnavailable
 from rags.config import Settings
 from rags.providers import Providers
-from rags.registry import CapabilityError, UPSTREAM_IDS
-from rags.backends import BackendUnavailable
+from rags.registry import UPSTREAM_IDS, CapabilityError
 from rags.retrieval import MODES, RAGService
 from rags.storage import Store
 
@@ -64,6 +64,60 @@ def refusal_metrics(rows: list[dict]) -> dict:
             "refusal_precision": true_refused / refused if refused else None,
             "refusal_recall": true_refused / negatives if negatives else None,
             "false_refusal_rate": false_refused / positives if positives else None}
+
+
+REFERENCE_COVERAGE = ("not_applicable", "none", "partial", "complete")
+REFERENCE_REMOVAL_CAUSES = ("admission_refusal", "context_budget", "unattributed")
+
+
+def reference_diagnostics(relevant: set[str], raw_found: list[str], found: list[str], *,
+                          outcome: str, refusal_reason: str | None) -> dict:
+    """Describe labelled document coverage, never semantic evidence sufficiency."""
+    raw = list(dict.fromkeys(raw_found))
+    admitted = list(dict.fromkeys(found))
+    raw_reference = [key for key in raw if key in relevant]
+    admitted_reference = [key for key in admitted if key in relevant]
+    admitted_ids = set(admitted_reference)
+    removed = [key for key in raw_reference if key not in admitted_ids]
+    coverage = ("not_applicable" if not relevant else "none" if not raw_reference
+                else "complete" if len(raw_reference) == len(relevant) else "partial")
+    cause = None
+    if removed:
+        cause = "unattributed"
+        if outcome == "insufficient_evidence":
+            if refusal_reason in {"below_admission_threshold", "model_rejected"}:
+                cause = "admission_refusal"
+            elif refusal_reason == "context_budget_exhausted":
+                cause = "context_budget"
+    return {"reference_document_ids": sorted(relevant),
+            "raw_reference_document_ids": raw_reference,
+            "admitted_reference_document_ids": admitted_reference,
+            "missing_raw_reference_document_ids": sorted(relevant - set(raw_reference)),
+            "removed_reference_document_ids": removed,
+            "raw_reference_coverage": coverage, "reference_removal_cause": cause}
+
+
+def reference_diagnostic_summary(rows: list[dict]) -> dict:
+    coverage = dict.fromkeys(REFERENCE_COVERAGE, 0)
+    answerable_refusals = dict.fromkeys(REFERENCE_COVERAGE, 0)
+    removals = {cause: {"cases": 0, "document_occurrences": 0} for cause in REFERENCE_REMOVAL_CAUSES}
+    for row in rows:
+        diagnostic = row["reference_diagnostics"]
+        category = diagnostic["raw_reference_coverage"]
+        coverage[category] += 1
+        if not row["unanswerable"] and row["outcome"] == "insufficient_evidence":
+            answerable_refusals[category] += 1
+        removed = diagnostic["removed_reference_document_ids"]
+        if removed:
+            counts = removals[diagnostic["reference_removal_cause"]]
+            counts["cases"] += 1
+            counts["document_occurrences"] += len(removed)
+    return {"scope": "document_id_coverage_only", "cases": len(rows),
+            "raw_reference_coverage": coverage,
+            "answerable_refusals_by_raw_reference_coverage": answerable_refusals,
+            "reference_removals": {"cases": sum(item["cases"] for item in removals.values()),
+                                   "document_occurrences": sum(item["document_occurrences"] for item in removals.values()),
+                                   "by_cause": removals}}
 
 
 def run(dataset: dict, modes: list[str], k: int = 5, *, generate: bool = False,
@@ -121,8 +175,11 @@ def run(dataset: dict, modes: list[str], k: int = 5, *, generate: bool = False,
                 if outcome not in {"success", "insufficient_evidence"}:
                     raise ValueError("Query result lacks a valid typed evidence outcome")
                 language = case.get("language") or ("zh" if re.search(r"[\u3400-\u9fff]", case["question"]) else "en")
+                diagnostic = reference_diagnostics(relevant, raw_found, found, outcome=outcome,
+                                                   refusal_reason=result["refusal_reason"])
                 decisions.append({"outcome": outcome, "unanswerable": bool(case.get("unanswerable")),
-                                  "language": language, "category": case.get("category", "unspecified")})
+                                  "language": language, "category": case.get("category", "unspecified"),
+                                  "reference_diagnostics": diagnostic})
                 authorized = {c["id"]: c for c in service.store.scope(
                     "evaluation", as_of=case.get("options", {}).get("as_of"),
                     filters=case.get("options", {}).get("filters")) if c["role"] in {"leaf", "parent"}}
@@ -146,6 +203,7 @@ def run(dataset: dict, modes: list[str], k: int = 5, *, generate: bool = False,
                 measurements.append({"id": case.get("id"), "category": case.get("category", "unspecified"),
                                      "language": language, "raw_candidate_document_ids": raw_found,
                                      "retrieved_document_ids": found, "mode_used": result["mode_used"],
+                                     "reference_diagnostics": diagnostic,
                                      "outcome": outcome, "refusal_reason": result["refusal_reason"],
                                      "supported": result["supported"], "admission": result["admission"],
                                      "returned_citation_count": len(citations), "answer_is_null": result["answer"] is None,
@@ -173,6 +231,7 @@ def run(dataset: dict, modes: list[str], k: int = 5, *, generate: bool = False,
                 "temporal_source_accuracy": mean(temporal_checks),
                 "structured_cases": len(structured_checks), "temporal_cases": len(temporal_checks),
                 **{key: value for key, value in refusal_metrics(decisions).items() if key != "cases"},
+                "reference_diagnostics": reference_diagnostic_summary(decisions),
                 "refusal_by_language": {lang: refusal_metrics([d for d in decisions if d["language"] == lang])
                                         for lang in sorted({d["language"] for d in decisions})},
                 "refusal_by_category": {category: refusal_metrics([d for d in decisions if d["category"] == category])
