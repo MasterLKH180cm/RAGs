@@ -2,11 +2,29 @@
 
 This document describes the implemented service. The [v0.4 specification](SPEC_V04.md) adds explicit feature configuration and PostgreSQL/pgvector, extending the [v0.3 specification](SPEC_V03.md) and [v0.2 requirements](SPEC_V02.md); the [v0.3 review](IMPLEMENTATION_REVIEW_V03.md) and historical [v0.2 review](IMPLEMENTATION_REVIEW.md) distinguish actual execution, measured quality and remaining integrations. The [README](../README.md#architecture-and-flows) contains the service, ingestion and retrieval flowcharts.
 
+The current review corrections follow the [data](REVIEW_DATA_FIX_SPEC.md) and
+[runtime](REVIEW_RUNTIME_FIX_SPEC.md) contracts. The optional shared generation
+gateway follows [LITELLM_SPEC.md](LITELLM_SPEC.md) and its
+[deployment guide](LITELLM.md).
+The [review report](REVIEW_LITELLM.md) maps these changes to regression evidence
+and upgrade requirements; [local results](testing-results-review-litellm.json)
+retain their tested source snapshot separately from published CI results.
+
 ## Service boundaries
 
 FastAPI authenticates a bearer credential and derives one tenant before calling the document service or original-image service. The read-only stdio MCP bridge calls that HTTP API. The companion [agentic-system](https://github.com/MasterLKH180cm/agentic-system) has its own API, durable workflow store, and worker; the default full stack gives each service a separate PostgreSQL database and non-superuser application role. RAGs owns the native pgvector knowledge index; the workflow store does not contain that index.
 
 Document ingestion and retrieval live in `RAGService`. `Providers` supplies hashing or trained single-vector embeddings and optional text generation. `BackendManager` supplies actual token-matrix late interaction or an explicitly configured external research protocol. Original image assets have a separate service and paired CLIP encoder; they do not masquerade as text chunks.
+
+The optional LiteLLM deployment sits behind the existing typed router and
+Agentic's separate model adapter. It has its own process/database, verified HTTPS
+and distinct model-restricted service keys. It handles generation through the
+immutable alias `gateway/inkling-2-mini-iq4nl-v1`; it owns no RAG source state,
+tenant authorization, native-agent approval or conversation history. Its shipped
+configuration disables proxy retries, fallback and cache. Default generation
+remains extractive and embeddings remain local hashing. Selecting the optional
+`litellm` starter does not authorize requests until gateway configuration is
+complete; embeddings retain their separate provider and identity.
 
 ## Configuration and feature enforcement
 
@@ -57,6 +75,7 @@ retains the explicit SQLite development and legacy-data path.
 | `graph_relations` | Entity relations with original source-chunk evidence IDs |
 | `audit` | Lifecycle events committed in the same application database |
 | `image_assets` | Tenant-scoped original image bytes, native PostgreSQL `vector` values, revisions, and encoder identity |
+| `agent_runs`, `agent_messages`, `agent_observations` | Native-agent checkpoints and execution fingerprints, owner-scoped conversation order, and evidence-linked observations with expiry |
 
 PostgreSQL stores text and original-image embeddings as native `vector` values.
 Dense ranking executes exact cosine distance with `<=>` in SQL after tenant,
@@ -73,14 +92,26 @@ operational record, not a separate tamper-evident audit system.
 
 The explicit `python -m rags.migrate --sqlite SOURCE` importer reads a source
 SQLite database without modifying it, requires an empty PostgreSQL target, and
-copies current/historical text, derived records and original images in one
-transaction without model calls. It is an operator-run migration, not an
+copies current/historical text, derived records, original images and native-agent
+state in one transaction without model calls. Pending checkpoints, fingerprints,
+owner/session identity, message sequences and observation expiry are preserved
+without approving or resuming runs. Stores with no native-agent tables remain
+supported; partial native schemas, unsupported columns and unknown populated
+application tables fail before target initialization. All application tables
+participate in empty-target checks, locks and count verification. It is an operator-run migration, not an
 implicit startup operation; backups and the rollback boundary are documented
 in the [README](../README.md#database-migration-and-backups).
 
 ### Atomic ingestion and reindexing
 
-Ingestion validates the source and processing configuration, resolves the tokenizer, and constructs exact source spans. The canonical profile includes algorithm/configuration, tokenizer identity, embedding model/endpoint/dimensions, active semantic/context identities, and prompt revision. The unchanged shortcut requires matching source and profile, so a tokenizer or model change cannot silently retain an incompatible index.
+Ingestion validates the source and processing configuration, resolves the tokenizer, and constructs exact source spans. The canonical profile includes algorithm/configuration, tokenizer identity, embedding model/resolved endpoint/dimensions, optional embedding-space version, active semantic/context identities, and prompt revision. The unchanged shortcut requires matching source and profile, so a tokenizer or model change cannot silently retain an incompatible index.
+
+Router embedding identity comes from the active router's canonical gateway URL.
+`RAGS_EMBEDDING_SPACE_ID` can version the deployment behind a stable endpoint and
+alias; it never includes credentials. Endpoint/space changes require reindexing,
+including old router profiles that stored only the marker `router`. Empty space
+IDs preserve existing direct/offline profiles. Generation aliases used by context,
+hierarchy and graph indexes must likewise retain immutable deployment meanings.
 
 Provider calls and derived-index construction happen before the write transaction. A compare-and-swap check verifies that the expected source revision is still current, then commits the source snapshot and derived records atomically. Failed inference or a concurrent change preserves the previous index. Explicit reindexing requires the expected revision. Deleting a document purges its stored revisions and derived evidence as well as its current record.
 
@@ -88,13 +119,29 @@ Additive schema migration marks existing unqualified records as `legacy`; it doe
 
 ### Version selection and evidence lineage
 
-Authorization and version selection precede ranking. For each document, current or `as_of` reads select the latest recorded revision valid at the requested instant, then apply metadata filters. Validity intervals include their start and exclude their end. A filter therefore cannot resurrect an older version. This supports valid-time reads and explicit updates; it does not provide automatic upstream refresh, change-data-capture connectors, or a separate transaction-time query API.
+Authorization and version selection precede ranking. Within each document and
+valid-from interval, reads first choose the newest recorded processing copy,
+then test its validity interval and select the latest valid source revision.
+Only then do metadata filters apply. A later source update closes every earlier
+overlapping processing copy, while read-time selection also protects stores
+written before this correction. An expired latest copy cannot expose an older
+open copy. Intervals include their start and exclude their end. This supports
+valid-time reads and explicit updates; it does not provide automatic upstream
+refresh, change-data-capture connectors or a transaction-time query API.
 
 Leaf and parent records retain exact source offsets. Generated contextual prefixes remain separate from source text. Hierarchy summaries store original-leaf lineage and expand into original leaves for citations. Graph traversal uses relations whose evidence IDs are already in the authorized revision scope. Hypothetical HyDE documents and generated summaries are never accepted as original source citations.
 
 ## Text processing and prompt budgets
 
 The six ingestion strategies are fixed, recursive, structure, parent-child, semantic, and contextual. Semantic boundaries require a trained encoder; contextual prefixes require a generator. Missing required dependencies produce an error. Structure parsing recognizes text/Markdown blocks and heading paths; it is not a PDF layout parser.
+
+Token spans and source ranges are incremental. Before retaining draft strings
+or calling contextual generation, the planner validates a bounded offset plan:
+at most 1,024 source records and 8 MiB of retained UTF-8 chunk text, context and
+distinct embedding strings. Parent/leaf records share these budgets; generated
+context is charged before constructing a combined embedding string. Semantic
+splitting keeps its separate 2,048-unit limit. Later hierarchy summaries retain
+their own bounds rather than being counted as source-plan records.
 
 Unicode code-point counting is an explicit baseline. Tiktoken resolves a known model or explicit encoding and preserves character boundaries when producing source spans. Stored counts identify their tokenizer and counting unit. Source chunking and generation can use different tokenizers; selecting a correct model encoding remains an operator responsibility for custom compatible endpoints.
 
@@ -114,6 +161,11 @@ Before generation, the service packs the rendered instructions, question, citati
 | Multi-vector / ColBERT | Real pretrained query/document token matrices and normalized masked sum-MaxSim |
 | Image assets | Paired CLIP text/image vectors, cosine ranking, and original-image citations through `/assets/*` |
 | Federated | Operator-defined source IDs and per-tenant credentials, bounded parallel reads, source-qualified IDs, and RRF |
+
+Each federation request has a ten-second whole-call deadline through connection,
+headers and body, plus a 2,000,000-byte raw response cap. Any failed branch rejects
+the federated result. Bounded worker scheduling means this is a per-source
+deadline, not a ten-second bound for every multi-source query.
 
 The native hierarchy, native graph and reflection loop keep their own names. Separate `raptor` and `lightrag` identifiers execute pinned upstream implementations through the request-local service below. `full_graphrag`, `hipporag`, `self_rag` and `crag` still expose only the generic external contract. They do not become implemented papers because a native path has a similar purpose. See the [remaining upstream ledger](RESEARCH_ENGINES.md).
 
@@ -204,11 +256,20 @@ support. Tinker/Inkling uses `max_completion_tokens`, optional explicit reasonin
 effort, and independently configured embeddings. UTF-8-byte budgeting preserves
 Unicode boundaries and advertises its conservative counting provenance.
 
-`rags/provider_transport.py` is the direct generation, embedding and vision HTTP
-boundary. It bounds complete JSON requests before I/O (1 MiB, or 3,000,000 bytes
-for image encoding), rejects redirects/compression before body reads, and streams
-at most 512 KiB under one wall deadline. Its synchronous façade owns and closes
-the request event loop, including when called from an existing async context.
+`rags/provider_transport.py` is the shared direct-provider, router and federation
+HTTP boundary. It bounds complete JSON requests before I/O (normally 1 MiB, or
+3,000,000 bytes for image encoding), rejects redirects/compression, and streams
+bounded raw responses under one cancellable wall deadline through connect,
+headers, body and owned cleanup. Direct providers and the router use a 512 KiB
+response cap; federation explicitly uses its 2,000,000-byte cap. The synchronous
+facade owns and closes its event loop. Router calls disable ambient proxy trust;
+an optional bounded nonsymlink `RAGS_ROUTER_CA_FILE` snapshots trusted PEM bytes,
+preserves HTTPS hostname verification and adds the CA hash to approval identity.
+
+Multipart intake stays bounded, then offloads extraction, image validation,
+captioning, embeddings and storage to an eight-slot process-owned pool.
+Cancellation does not release admission until synchronous work finishes; excess
+work returns `503 ingestion_capacity` without starting ingestion.
 
 The router bounds the entire request, including tool schemas, rejects compressed
 responses, duplicate JSON fields, nonfinite numbers, undeclared or inconsistently
@@ -230,3 +291,10 @@ to the current runtime fingerprint.
 Existing tenant scopes, compare-and-swap revisions and idempotent-tool rules
 remain authoritative. See [SPEC_V09](SPEC_V09.md) for the observed defects and
 required regressions.
+
+A terminal native-agent checkpoint and its optional user/assistant history pair
+now commit in one database transaction. SQLite's write transaction or a
+PostgreSQL session advisory lock allocates adjacent message positions; the run
+revision compare-and-swap prevents duplicate finalization. Failure rolls back
+both messages and checkpoint. Owner/tenant scope and verified-citation checks
+remain in force, with no new schema or rewrite of old conversation messages.

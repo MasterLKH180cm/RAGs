@@ -326,9 +326,9 @@ def test_legacy_federated_support_is_boolean_or_null(value):
 def test_federated_invalid_citation_provenance_is_rejected(service, monkeypatch, invalid):
     service.settings = replace(service.settings, federated_sources={"remote": {
         "url": "https://remote.example", "tenant_keys": {"a": "fixed-token"}}})
-    original = httpx.Client
+    original = httpx.AsyncClient
     citation = {"chunk_id": "one", "document_id": "source", "text": "The beacon is amber.", **invalid}
-    monkeypatch.setattr(httpx, "Client", lambda **kwargs: original(
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original(
         transport=httpx.MockTransport(lambda request: httpx.Response(200, json=_remote([citation]))), **kwargs))
     with pytest.raises(CapabilityError) as error:
         service.query("a", "beacon", "federated", generate=False)
@@ -338,11 +338,11 @@ def test_federated_invalid_citation_provenance_is_rejected(service, monkeypatch,
 def test_federated_valid_citation_provenance_is_preserved(service, monkeypatch):
     service.settings = replace(service.settings, federated_sources={"remote": {
         "url": "https://remote.example", "tenant_keys": {"a": "fixed-token"}}})
-    original = httpx.Client
+    original = httpx.AsyncClient
     provenance = {"revision": "rev-1", "profile_id": "p" * 64, "start_char": 12, "end_char": 32,
                   "title": "Coast", "source": "manual", "section": "Navigation"}
     citation = {"chunk_id": "one", "document_id": "source", "text": "The beacon is amber.", **provenance}
-    monkeypatch.setattr(httpx, "Client", lambda **kwargs: original(
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original(
         transport=httpx.MockTransport(lambda request: httpx.Response(200, json=_remote([citation]))), **kwargs))
     result = service.query("a", "beacon", "federated", generate=False)
     assert result["outcome"] == "success"
@@ -352,18 +352,18 @@ def test_federated_valid_citation_provenance_is_preserved(service, monkeypatch):
 def test_federation_drops_refused_branch_and_preserves_independent_evidence(service, monkeypatch):
     service.settings = replace(service.settings, federated_sources={name: {
         "url": f"https://{name}.example", "tenant_keys": {"a": "fixed-token"}} for name in ("empty", "useful")})
-    original = httpx.Client
+    original = httpx.AsyncClient
     citation = {"chunk_id": "one", "document_id": "source", "text": "A buoy rings during rough seas."}
     def respond(request):
         body = _remote([], refuse=True) if request.url.host == "empty.example" else {"citations": [citation]}
         return httpx.Response(200, json=body)
-    monkeypatch.setattr(httpx, "Client", lambda **kwargs: original(transport=httpx.MockTransport(respond), **kwargs))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original(transport=httpx.MockTransport(respond), **kwargs))
     result = service.query("a", "buoy", "federated", generate=False)
     assert [c["chunk_id"] for c in result["citations"]] == ["useful:one"]
     assert result["source_decisions"][0]["outcome"] == "insufficient_evidence"
     assert result["source_decisions"][1]["admission"]["decision"] == "unassessed"
     bad = _remote([citation], refuse=True)
-    monkeypatch.setattr(httpx, "Client", lambda **kwargs: original(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=bad)), **kwargs))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=bad)), **kwargs))
     with pytest.raises(CapabilityError) as error:
         service.query("a", "buoy", "federated", generate=False)
     assert error.value.code == "federated_source_failed"

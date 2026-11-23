@@ -3,16 +3,18 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import hashlib
-from itertools import pairwise
+from itertools import chain, pairwise
 import json
 import math
 import re
-from typing import Callable, Literal, Mapping, Sequence
+from typing import Callable, Iterable, Iterator, Literal, Mapping, Sequence
 
 from rags.tokenization import Tokenizer, resolve_tokenizer
 
 
 ALGORITHM_VERSION = "rags-chunking-v2.0"
+MAX_INDEX_RECORDS = 1024
+MAX_MATERIALIZED_BYTES = 8 * 1024 * 1024
 STRATEGIES = ("fixed", "recursive", "semantic", "structure", "parent_child", "contextual")
 _SEPARATORS = (r"\n[ \t]*\n", r"\n", r"(?<=[.!?。！？])\s*", r"[ \t]+")
 _HEADING = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.+?)\s*$")
@@ -104,11 +106,12 @@ fingerprint = index_fingerprint
 
 
 def _recursive_units(text: str, start: int, end: int, tokenizer: Tokenizer,
-                     limit: int, level: int = 0) -> list[tuple[int, int]]:
+                     limit: int, level: int = 0) -> Iterator[tuple[int, int]]:
     if start == end:
-        return []
+        return
     if tokenizer.count(text[start:end]) <= limit:
-        return [(start, end)]
+        yield start, end
+        return
     for index in range(level, len(_SEPARATORS)):
         boundaries = [start]
         for match in re.finditer(_SEPARATORS[index], text[start:end]):
@@ -117,27 +120,27 @@ def _recursive_units(text: str, start: int, end: int, tokenizer: Tokenizer,
                 boundaries.append(offset)
         boundaries = sorted(set([*boundaries, end]))
         if len(boundaries) > 2:
-            result = []
             for left, right in pairwise(boundaries):
-                result.extend(_recursive_units(text, left, right, tokenizer, limit, index + 1))
-            return result
-    return [(start + span.start_char, start + span.end_char)
-            for span in tokenizer.spans(text[start:end], limit)]
+                yield from _recursive_units(text, left, right, tokenizer, limit, index + 1)
+            return
+    for span in tokenizer.iter_spans(text[start:end], limit):
+        yield start + span.start_char, start + span.end_char
 
 
-def _pack_units(text: str, units: Sequence[tuple[int, int]], tokenizer: Tokenizer,
-                limit: int, overlap: int) -> list[tuple[int, int]]:
-    if not units:
-        return []
-    result = []
-    start, end = units[0]
-    for left, right in units[1:]:
+def _pack_units(text: str, units: Iterable[tuple[int, int]], tokenizer: Tokenizer,
+                limit: int, overlap: int) -> Iterator[tuple[int, int]]:
+    iterator = iter(units)
+    first = next(iterator, None)
+    if first is None:
+        return
+    start, end = first
+    for left, right in iterator:
         if left != end:
             raise ValueError("Chunk units must cover a contiguous source range")
         if tokenizer.count(text[start:right]) <= limit:
             end = right
             continue
-        result.append((start, end))
+        yield start, end
         suffix = tokenizer.suffix(text[start:end], overlap)
         candidate = max(start + 1, end - len(suffix))
         # Keep only overlap that leaves room for the next complete unit. This
@@ -150,8 +153,7 @@ def _pack_units(text: str, units: Sequence[tuple[int, int]], tokenizer: Tokenize
         start, end = candidate, right
         if tokenizer.count(text[start:end]) > limit:
             raise ValueError("A source unit exceeds the chunk budget")
-    result.append((start, end))
-    return result
+    yield start, end
 
 
 def _line_spans(text: str, start: int, end: int) -> list[tuple[int, int, str]]:
@@ -259,16 +261,13 @@ def _blocks(text: str, start: int, end: int) -> list[tuple[int, int, str]]:
 
 
 def _structure_ranges(text: str, tokenizer: Tokenizer, limit: int, overlap: int):
-    result = []
     for start, end, path in _sections(text):
         blocks = _blocks(text, start, end)
-        units = []
-        for left, right, _ in blocks:
-            units.extend(_recursive_units(text, left, right, tokenizer, limit))
+        units = chain.from_iterable(_recursive_units(text, left, right, tokenizer, limit)
+                                    for left, right, _ in blocks)
         for left, right in _pack_units(text, units, tokenizer, limit, overlap):
             kinds = list(dict.fromkeys(kind for a, b, kind in blocks if a < right and b > left))
-            result.append((left, right, path, {"block_types": kinds}))
-    return result
+            yield left, right, path, {"block_types": kinds}
 
 
 def _semantic_ranges(text: str, tokenizer: Tokenizer, config: ChunkConfig,
@@ -277,9 +276,10 @@ def _semantic_ranges(text: str, tokenizer: Tokenizer, config: ChunkConfig,
     points = sorted(set([0, *ends, len(text)]))
     units = []
     for left, right in pairwise(points):
-        units.extend(_recursive_units(text, left, right, tokenizer, config.max_tokens))
-    if len(units) > 2048:
-        raise ValueError("Semantic chunking is limited to 2048 sentence units per document")
+        for unit in _recursive_units(text, left, right, tokenizer, config.max_tokens):
+            if len(units) >= 2048:
+                raise ValueError("Semantic chunking is limited to 2048 sentence units per document")
+            units.append(unit)
     vectors = []
     dimensions = None
     for start, end in units:
@@ -312,13 +312,11 @@ def _semantic_ranges(text: str, tokenizer: Tokenizer, config: ChunkConfig,
         current.append(unit)
     if current:
         groups.append(current)
-    result = []
     for group_number, group in enumerate(groups):
         for left, right in _pack_units(text, group, tokenizer, config.max_tokens, config.overlap_tokens):
-            result.append((left, right, [], {"semantic_model": model_id,
-                                            "semantic_group": group_number,
-                                            "semantic_threshold": config.semantic_threshold}))
-    return result
+            yield left, right, [], {"semantic_model": model_id,
+                                    "semantic_group": group_number,
+                                    "semantic_threshold": config.semantic_threshold}
 
 
 def chunk_document(
@@ -327,7 +325,12 @@ def chunk_document(
     semantic_embedder: Callable[[str], Sequence[float]] | None = None,
     contextualizer: Callable[[str, str, str], str] | None = None,
     semantic_model: str | None = None, context_model: str | None = None,
+    max_records: int = MAX_INDEX_RECORDS,
+    max_materialized_bytes: int = MAX_MATERIALIZED_BYTES,
 ) -> ChunkPlan:
+    for name, value in (("max_records", max_records), ("max_materialized_bytes", max_materialized_bytes)):
+        if type(value) is not int or value < 1:
+            raise ValueError(f"{name} must be a positive integer")
     if config is None:
         config = ChunkConfig()
     if isinstance(config, Mapping):
@@ -358,10 +361,54 @@ def chunk_document(
                "tokenizer": tokenizer.profile,
                "semantic_model": semantic_model if config.strategy == "semantic" else None,
                "context_model": context_model if config.strategy == "contextual" else None}
+
+    def source_ranges():
+        if config.strategy == "fixed":
+            for span in tokenizer.iter_spans(text, config.max_tokens, config.overlap_tokens):
+                yield span.start_char, span.end_char, [], {}, "leaf", None
+        elif config.strategy == "recursive":
+            units = _recursive_units(text, 0, len(text), tokenizer, config.max_tokens)
+            for start, end in _pack_units(text, units, tokenizer, config.max_tokens, config.overlap_tokens):
+                yield start, end, [], {}, "leaf", None
+        elif config.strategy == "semantic":
+            for start, end, path, extra in _semantic_ranges(text, tokenizer, config, semantic_embedder, semantic_model):
+                yield start, end, path, extra, "leaf", None
+        elif config.strategy == "parent_child":
+            # Non-overlapping parents eliminate duplicate expansion across siblings.
+            source_blocks = [block for left, right, _ in _sections(text) for block in _blocks(text, left, right)]
+            parents = _structure_ranges(text, tokenizer, config.parent_max_tokens, 0)
+            for ordinal, (start, end, path, extra) in enumerate(parents):
+                yield start, end, path, extra, "parent", None
+                units = _recursive_units(text, start, end, tokenizer, config.max_tokens)
+                for left, right in _pack_units(text, units, tokenizer, config.max_tokens, config.overlap_tokens):
+                    kinds = list(dict.fromkeys(kind for a, b, kind in source_blocks if a < right and b > left))
+                    yield left, right, path, {"block_types": kinds}, "leaf", f"parent-{ordinal:06d}"
+        else:
+            for start, end, path, extra in _structure_ranges(text, tokenizer, config.max_tokens, config.overlap_tokens):
+                yield start, end, path, extra, "leaf", None
+
+    # Retain only bounded offsets here. In particular, high-overlap fixed
+    # windows never accumulate their potentially gigabyte-sized string copies.
+    ranges = []
+    materialized_bytes = 0
+    for candidate in source_ranges():
+        if len(ranges) >= max_records:
+            raise ValueError(f"Chunk configuration produces more than {max_records} index records")
+        start, end = candidate[:2]
+        remaining = max_materialized_bytes - materialized_bytes
+        if end - start > remaining:
+            raise ValueError("Chunk materialization exceeds the byte budget")
+        size = len(text[start:end].encode("utf-8"))
+        if size > remaining:
+            raise ValueError("Chunk materialization exceeds the byte budget")
+        materialized_bytes += size
+        ranges.append(candidate)
+
     chunks = []
     counters = {"parent": 0, "leaf": 0}
 
     def append(start, end, path, extra, role="leaf", parent_id=None):
+        nonlocal materialized_bytes
         value = text[start:end]
         ordinal = counters[role]
         counters[role] += 1
@@ -374,6 +421,12 @@ def chunk_document(
             context = generated.strip()
             if tokenizer.count(context) > config.context_max_tokens:
                 raise ValueError("Context generator exceeded context_max_tokens")
+            # The retained source is already charged by the offset preflight.
+            # Charge context plus the separate combined string before joining.
+            extra_bytes = len(value.encode("utf-8")) + 2 * len(context.encode("utf-8")) + 2
+            if extra_bytes > max_materialized_bytes - materialized_bytes:
+                raise ValueError("Chunk materialization exceeds the byte budget")
+            materialized_bytes += extra_bytes
         embedding_text = (context + "\n\n" + value) if context else value
         count = tokenizer.count(value)
         limit = config.parent_max_tokens if role == "parent" else config.max_tokens
@@ -393,33 +446,8 @@ def chunk_document(
         chunks.append(draft)
         return draft
 
-    if config.strategy == "fixed":
-        for span in tokenizer.spans(text, config.max_tokens, config.overlap_tokens):
-            append(span.start_char, span.end_char, [], {})
-    elif config.strategy == "recursive":
-        units = _recursive_units(text, 0, len(text), tokenizer, config.max_tokens)
-        for start, end in _pack_units(text, units, tokenizer, config.max_tokens, config.overlap_tokens):
-            append(start, end, [], {})
-    elif config.strategy == "semantic":
-        for start, end, path, extra in _semantic_ranges(text, tokenizer, config, semantic_embedder, semantic_model):
-            append(start, end, path, extra)
-    elif config.strategy == "parent_child":
-        # Non-overlapping parents eliminate duplicate expansion across siblings.
-        source_blocks = [block for left, right, _ in _sections(text) for block in _blocks(text, left, right)]
-        for start, end, path, extra in _structure_ranges(text, tokenizer, config.parent_max_tokens, 0):
-            parent = append(start, end, path, extra, role="parent")
-            units = _recursive_units(text, start, end, tokenizer, config.max_tokens)
-            for left, right in _pack_units(text, units, tokenizer, config.max_tokens, config.overlap_tokens):
-                kinds = list(dict.fromkeys(kind for a, b, kind in source_blocks if a < right and b > left))
-                append(left, right, path, {"block_types": kinds}, parent_id=parent.local_id)
-    else:
-        ranges = _structure_ranges(text, tokenizer, config.max_tokens, config.overlap_tokens)
-        if config.strategy == "contextual" and len(ranges) > 1024:
-            # Enforce the service's index-record limit before any paid generation
-            # calls, rather than discovering the invalid plan after producing it.
-            raise ValueError("Contextual chunking produces more than 1024 index records")
-        for start, end, path, extra in ranges:
-            append(start, end, path, extra)
+    for start, end, path, extra, role, parent_id in ranges:
+        append(start, end, path, extra, role=role, parent_id=parent_id)
     leaves = [chunk for chunk in chunks if chunk.role == "leaf"]
     for previous, current in pairwise(leaves):
         overlap = text[current.start_char:min(previous.end_char, current.end_char)] if current.start_char < previous.end_char else ""

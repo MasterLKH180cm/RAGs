@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+from pathlib import Path
 import sqlite3
 from threading import Barrier
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
@@ -347,6 +348,8 @@ def test_sqlite_import_preserves_history_provenance_images_and_source_read_only(
     add_document(source, tenant="foreign", identifier="private")
     assets = MultimodalService(str(source_path), encoder=ImageEncoder())
     asset = assets.ingest("tenant", image_bytes("red"), asset_id="original")
+    with source.connect() as connection:
+        connection.execute("ANALYZE")
     before = source_path.read_bytes()
     monkeypatch.setattr(Providers, "embedding", lambda *_: pytest.fail("Import must reuse stored vectors"))
     monkeypatch.setattr(Providers, "complete", lambda *_: pytest.fail("Import must not call generation"))
@@ -362,8 +365,9 @@ def test_sqlite_import_preserves_history_provenance_images_and_source_read_only(
     imported_image = target_assets.get("tenant", "original", original=True)
     assert imported_image["revision"] == asset["revision"] and imported_image["original"] == image_bytes("red")
     with closing(sqlite3.connect(source_path.as_uri() + "?mode=ro", uri=True)) as original:
+        present = {row[0] for row in original.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert report["tables"] == {table: original.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-                                    for table in TABLE_FIELDS}
+                                    if table in present else 0 for table in TABLE_FIELDS}
     before_target = snapshot(target)
     with pytest.raises(ValueError, match="target must be empty"):
         import_sqlite(source_path, database)
@@ -460,3 +464,115 @@ def test_benchmark_uses_only_temp_tables_and_reproduces_expected_counts(database
             "SELECT count(*) AS n FROM information_schema.tables "
             "WHERE table_schema=current_schema() AND table_name='rags_bench_chunks'"
         ).fetchone()["n"] == 0
+
+
+@pytest.mark.parametrize("rebuilds,legacy", [(0, False), (1, False), (3, False), (3, True)])
+def test_postgres_reindex_preserves_source_expiry_and_historical_boundaries(database, rebuilds, legacy):
+    from test_review_data import assert_reindex_validity
+
+    assert_reindex_validity(Store(database), rebuilds, legacy=legacy)
+
+
+def test_sqlite_import_preserves_native_pending_runs_history_provenance_and_observations(database, tmp_path):
+    from rags.agents.memory import ConversationStore, ObservationStore, scoped_session
+    from rags.agents.state import StateStore
+
+    source_path = tmp_path / "native-agent.db"
+    source = Store(str(source_path))
+    _, chunk = add_document(source)
+    state = StateStore(source)
+    session = scoped_session("synthetic-subject", "session")
+    checkpoint = state.create("tenant", kind="agent", fingerprint="a" * 64, status="pending_approval",
+                              state={"owner": "synthetic-subject", "session_id": session,
+                                     "approval": {"token": "synthetic-approval", "tool": "bounded.fixture"},
+                                     "nested": {"revision": 3}, "citations": [chunk["id"]]})
+    history = ConversationStore(state)
+    history.append("tenant", session, "user", "Synthetic question")
+    history.append("tenant", session, "assistant", "Synthetic answer", evidence_ids=[chunk["id"]])
+    ObservationStore(state).observe("tenant", session, fact="Synthetic retained fact", source_id="fixture-source", confidence=0.75)
+    state.create("foreign", kind="workflow", fingerprint="b" * 64, state={"owner": "foreign-subject"})
+    names = ("agent_runs", "agent_messages", "agent_observations")
+    with source.connect() as connection:
+        original_rows = {name: sorted(json.dumps(dict(row), sort_keys=True)
+                                     for row in connection.execute(f"SELECT * FROM {name}")) for name in names}
+    before = source_path.read_bytes()
+    report = import_sqlite(source_path, database)
+    assert report["tables"]["agent_runs"] == 2
+    assert report["tables"]["agent_messages"] == 2
+    assert report["tables"]["agent_observations"] == 1
+    assert source_path.read_bytes() == before
+    target = Store(database)
+    with target.connect() as connection:
+        actual_rows = {name: sorted(json.dumps(dict(row), sort_keys=True)
+                                   for row in connection.execute(f"SELECT * FROM {name}")) for name in names}
+    assert actual_rows == original_rows
+    imported = StateStore(target)
+    assert imported.get("tenant", checkpoint.run_id) == checkpoint
+    assert imported.get("foreign", checkpoint.run_id) is None
+    assert ConversationStore(imported).last("tenant", session, with_evidence=True) == history.last("tenant", session, with_evidence=True)
+    assert ObservationStore(imported).recent("tenant", session) == ObservationStore(state).recent("tenant", session)
+    assert ConversationStore(imported).append("tenant", session, "user", "Next question") == 3
+
+
+def test_import_refuses_target_containing_only_native_agent_data(database, tmp_path, monkeypatch):
+    import rags.migrate as migration
+    from rags.agents.state import StateStore
+
+    source = Store(str(tmp_path / "empty-source.db"))
+    target = Store(database)
+    state = StateStore(target)
+    checkpoint = state.create("tenant", kind="workflow", fingerprint="a" * 64, state={"owner": "synthetic-user"})
+    before = snapshot(target)
+    monkeypatch.setattr(migration, "Store", lambda *_: pytest.fail("Nonempty target rejected before schema bootstrap"))
+    with pytest.raises(ValueError, match="target must be empty"):
+        import_sqlite(source.path, database)
+    assert snapshot(target) == before and state.get("tenant", checkpoint.run_id) == checkpoint
+
+
+@pytest.mark.parametrize("problem", ["partial_agent_schema", "future_populated_table", "unsupported_agent_column"])
+def test_import_refuses_unsupported_native_or_future_data_before_target_mutation(database, tmp_path, problem):
+    from rags.agents.state import StateStore
+    from rags.postgres import connect
+
+    source = Store(str(tmp_path / "unsupported-native.db"))
+    StateStore(source)
+    with source.connect() as connection:
+        if problem == "partial_agent_schema":
+            connection.execute("DROP TABLE agent_messages")
+        elif problem == "future_populated_table":
+            connection.execute('CREATE TABLE "future""table" (value TEXT)')
+            connection.execute('INSERT INTO "future""table" VALUES(?)', ("synthetic-preserved-state",))
+        else:
+            connection.execute("ALTER TABLE agent_runs ADD COLUMN future_state TEXT")
+    before = Path(source.path).read_bytes()
+    with pytest.raises(ValueError):
+        import_sqlite(source.path, database)
+    assert Path(source.path).read_bytes() == before
+    with connect(database) as connection:
+        assert connection.execute("SELECT COUNT(*) AS count FROM information_schema.tables "
+                                  "WHERE table_schema=current_schema()").fetchone()["count"] == 0
+
+
+def test_native_agent_copy_failure_rolls_back_all_imported_data(database, tmp_path, monkeypatch):
+    from rags import postgres
+    from rags.agents.memory import ObservationStore
+    from rags.agents.state import StateStore
+
+    source = Store(str(tmp_path / "rollback-native.db"))
+    add_document(source)
+    state = StateStore(source)
+    state.create("tenant", kind="workflow", fingerprint="a" * 64, state={"owner": "synthetic-user"})
+    ObservationStore(state).observe("tenant", "session", fact="Synthetic fact", source_id="fixture")
+    original_execute = postgres.Connection.execute
+
+    def fail_late(connection, statement, parameters=()):
+        if statement.startswith("INSERT INTO agent_observations("):
+            raise RuntimeError("synthetic native-state copy failure")
+        return original_execute(connection, statement, parameters)
+
+    before = Path(source.path).read_bytes()
+    monkeypatch.setattr(postgres.Connection, "execute", fail_late)
+    with pytest.raises(RuntimeError, match="native-state copy failure"):
+        import_sqlite(source.path, database)
+    assert Path(source.path).read_bytes() == before
+    assert all(not rows for rows in snapshot(Store(database)).values())

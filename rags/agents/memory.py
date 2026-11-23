@@ -4,6 +4,7 @@ Observations are explicit facts, not implicit LLM extractions or identity traits
 Memory is marked untrusted when assembled into a model prompt.
 """
 from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
 import hashlib
 import json
 
@@ -36,6 +37,54 @@ def scoped_session(subject: str, session_id: str) -> str:
     return "subject_" + digest
 
 
+def _provenance(role: str, evidence_ids: list[str] | tuple[str, ...] | None) -> str:
+    citations = [] if evidence_ids is None else evidence_ids
+    if (not isinstance(citations, (list, tuple)) or len(citations) > MAX_VERIFIED_CITATIONS
+            or (role != "assistant" and citations) or any(
+                not isinstance(value, str) or not 1 <= len(value) <= 128
+                or any(ch.isspace() or ord(ch) < 32 or ch in "[]" for ch in value)
+                for value in citations
+            ) or len(set(citations)) != len(citations)):
+        raise ValueError("Verified citation IDs must be bounded, unique assistant provenance")
+    return json.dumps(citations, separators=(",", ":"))
+
+
+def _insert_message(db, tenant: str, session_id: str, sequence: int,
+                    role: str, body: str, provenance: str, created_at: str) -> None:
+    db.execute("INSERT INTO agent_messages "
+               "(tenant,session_id,sequence,role,body,evidence_ids,created_at) "
+               "VALUES(?,?,?,?,?,?,?)",
+               (tenant, session_id, sequence, role, body, provenance, created_at))
+
+
+@dataclass(frozen=True)
+class HistoryTurn:
+    """Validated pair to persist in the completed checkpoint's transaction."""
+    session_id: str
+    user: str
+    assistant: str
+    evidence_ids: tuple[str, ...] = ()
+
+    def __post_init__(self):
+        _id(self.session_id, "session")
+        object.__setattr__(self, "user", _fact(self.user, 4000))
+        object.__setattr__(self, "assistant", _fact(self.assistant, 4000))
+        _provenance("assistant", self.evidence_ids)
+        object.__setattr__(self, "evidence_ids", tuple(self.evidence_ids))
+
+    def append_in_transaction(self, db, tenant: str, *, is_postgres: bool) -> None:
+        # Lock order is run, then session. No conversation-only mutation takes
+        # a run lock, so parallel runs can serialize final turns without cycles.
+        if is_postgres:
+            postgres.lock_mutation(db, "agent_messages", tenant, self.session_id)
+        row = db.execute("SELECT COALESCE(MAX(sequence),0) AS n FROM agent_messages "
+                         "WHERE tenant=? AND session_id=?", (tenant, self.session_id)).fetchone()
+        sequence, created_at = row["n"] + 1, _when()
+        _insert_message(db, tenant, self.session_id, sequence, "user", self.user, "[]", created_at)
+        _insert_message(db, tenant, self.session_id, sequence + 1, "assistant", self.assistant,
+                        _provenance("assistant", self.evidence_ids), created_at)
+
+
 class ConversationStore:
     def __init__(self, state: StateStore):
         self.state = state
@@ -47,15 +96,7 @@ class ConversationStore:
         if role not in {"user", "assistant", "tool"}:
             raise ValueError("Invalid history role")
         body = _fact(content, 4000)
-        citations = [] if evidence_ids is None else evidence_ids
-        if (not isinstance(citations, list) or len(citations) > MAX_VERIFIED_CITATIONS
-                or (role != "assistant" and citations) or any(
-                    not isinstance(value, str) or not 1 <= len(value) <= 128
-                    or any(ch.isspace() or ord(ch) < 32 or ch in "[]" for ch in value)
-                    for value in citations
-                ) or len(set(citations)) != len(citations)):
-            raise ValueError("Verified citation IDs must be bounded, unique assistant provenance")
-        provenance = json.dumps(citations, separators=(",", ":"))
+        provenance = _provenance(role, evidence_ids)
         with self.state.store.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             if self.state.store.is_postgres:
@@ -63,10 +104,7 @@ class ConversationStore:
             row = db.execute("SELECT COALESCE(MAX(sequence),0) AS n FROM agent_messages "
                              "WHERE tenant=? AND session_id=?", (tenant, session_id)).fetchone()
             sequence = row["n"] + 1
-            db.execute("INSERT INTO agent_messages "
-                       "(tenant,session_id,sequence,role,body,evidence_ids,created_at) "
-                       "VALUES(?,?,?,?,?,?,?)",
-                       (tenant, session_id, sequence, role, body, provenance, _when()))
+            _insert_message(db, tenant, session_id, sequence, role, body, provenance, _when())
         return sequence
 
     def last(self, tenant: str, session_id: str, *, limit: int = 12,

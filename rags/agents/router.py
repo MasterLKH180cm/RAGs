@@ -5,8 +5,8 @@ OpenAI-compatible HTTP contract. Exact model aliases are operator-approved.
 """
 import json
 import math
-import time
 import re
+import ssl
 from typing import Any
 
 import httpx
@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from rags.agents.config import AgentPlatformConfig
 from rags.model_profiles import chat_profile, normalized_usage, strict_json
+from rags.provider_transport import ResponseRejected, bounded_post
 from rags.registry import CapabilityError
 
 
@@ -84,10 +85,21 @@ class ModelRouter:
         if not config.router_enabled:
             raise CapabilityError("feature_disabled", "Model router is disabled", 403)
         self.config = config
+        self._verify = (ssl.create_default_context(cadata=config.gateway_ca_pem)
+                        if config.gateway_ca_pem else True)
 
-    def _client(self, timeout_seconds: float = 30.) -> httpx.Client:
-        return httpx.Client(timeout=httpx.Timeout(timeout_seconds, connect=min(5., timeout_seconds)),
-                            follow_redirects=False, trust_env=False)
+    def _client(self, timeout_seconds: float = 30.) -> httpx.AsyncClient:
+        return httpx.AsyncClient(timeout=httpx.Timeout(timeout_seconds, connect=min(5., timeout_seconds)),
+                                 follow_redirects=False, trust_env=False, verify=self._verify)
+
+    def _post(self, path: str, payload: dict, timeout_seconds: float) -> httpx.Response:
+        return bounded_post(
+            self.config.gateway_url.rstrip("/") + path,
+            headers=self._headers(), json=payload, timeout=timeout_seconds,
+            max_request_bytes=MAX_CONTEXT_BYTES + 4096,
+            max_response_bytes=MAX_RESPONSE_BYTES, trust_env=False,
+            client_factory=lambda **options: self._client(options["timeout"]),
+        )
 
     def _headers(self) -> dict[str, str]:
         headers = {"Accept": "application/json", "Accept-Encoding": "identity"}
@@ -110,32 +122,17 @@ class ModelRouter:
             raise ValueError("Embedding input exceeds the configured length limit")
         if type(timeout_seconds) not in (int, float) or not 0.05 <= timeout_seconds <= 90.:
             raise ValueError("Embedding timeout must be 0.05..90 seconds")
-        deadline = time.monotonic() + timeout_seconds
         try:
-            with self._client(timeout_seconds) as client:
-                with client.stream(
-                    "POST", self.config.gateway_url.rstrip("/") + "/embeddings",
-                    headers=self._headers(),
-                    json={"model": selected, "input": text},
-                ) as response:
-                    if response.status_code != 200:
-                        raise CapabilityError("embedding_gateway_failed",
-                                              "Gateway rejected the embedding request", 502)
-                    if response.headers.get("content-encoding", "identity").lower() != "identity":
-                        raise CapabilityError("invalid_embedding", "Compressed embedding responses are unsupported", 502)
-                    chunks, size = [], 0
-                    for chunk in response.iter_bytes():
-                        if time.monotonic() >= deadline:
-                            raise CapabilityError("model_timeout", "Embedding deadline exceeded", 504)
-                        size += len(chunk)
-                        if size > MAX_RESPONSE_BYTES:
-                            raise CapabilityError("invalid_embedding", "Embedding response exceeds limit", 502)
-                        chunks.append(chunk)
-            if time.monotonic() >= deadline:
-                raise CapabilityError("model_timeout", "Embedding deadline exceeded", 504)
-            payload = strict_json(b"".join(chunks))
+            response = self._post("/embeddings", {"model": selected, "input": text}, timeout_seconds)
+            if response.status_code != 200:
+                raise CapabilityError("embedding_gateway_failed", "Gateway rejected the embedding request", 502)
+            payload = strict_json(response.content)
         except CapabilityError:
             raise
+        except (TimeoutError, httpx.TimeoutException):
+            raise CapabilityError("model_timeout", "Embedding deadline exceeded", 504) from None
+        except ResponseRejected as exc:
+            raise CapabilityError("invalid_embedding", str(exc), 502) from None
         except (httpx.HTTPError, ValueError, UnicodeError, RecursionError) as exc:
             raise CapabilityError("embedding_gateway_failed",
                                   "Gateway embedding request failed", 502) from exc
@@ -201,32 +198,17 @@ class ModelRouter:
             raise CapabilityError("context_budget_exceeded", "Router request budget exceeded", 422)
         if type(timeout_seconds) not in (int, float) or not 0.05 <= timeout_seconds <= 90.:
             raise ValueError("Model request timeout must be 0.05..90 seconds")
-        deadline = time.monotonic() + timeout_seconds
         try:
-            with self._client(timeout_seconds) as client:
-                with client.stream(
-                    "POST", self.config.gateway_url.rstrip("/") + "/chat/completions",
-                    headers=self._headers(),
-                    json=request,
-                ) as response:
-                    if response.status_code != 200:
-                        raise CapabilityError("model_gateway_failed",
-                                              "Model gateway did not complete the request", 502)
-                    if response.headers.get("content-encoding", "identity").lower() != "identity":
-                        raise CapabilityError("invalid_model_output", "Compressed model responses are unsupported", 502)
-                    payload, size = [], 0
-                    for chunk in response.iter_bytes():
-                        if time.monotonic() >= deadline:
-                            raise CapabilityError("model_timeout", "Model deadline exceeded", 504)
-                        size += len(chunk)
-                        if size > MAX_RESPONSE_BYTES:
-                            raise CapabilityError("invalid_model_output", "Model response exceeds limit", 502)
-                        payload.append(chunk)
-            if time.monotonic() >= deadline:
-                raise CapabilityError("model_timeout", "Model deadline exceeded", 504)
-            data = strict_json(b"".join(payload))
+            response = self._post("/chat/completions", request, timeout_seconds)
+            if response.status_code != 200:
+                raise CapabilityError("model_gateway_failed", "Model gateway did not complete the request", 502)
+            data = strict_json(response.content)
         except CapabilityError:
             raise
+        except (TimeoutError, httpx.TimeoutException):
+            raise CapabilityError("model_timeout", "Model deadline exceeded", 504) from None
+        except ResponseRejected as exc:
+            raise CapabilityError("invalid_model_output", str(exc), 502) from None
         except (httpx.HTTPError, UnicodeError, ValueError, RecursionError) as exc:
             raise CapabilityError("model_gateway_failed",
                                   "Model gateway is unavailable or returned invalid JSON", 502) from exc

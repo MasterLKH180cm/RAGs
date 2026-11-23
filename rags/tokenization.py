@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from importlib.metadata import version
-from typing import Callable, Literal, Mapping, Protocol, Sequence
+from typing import Callable, Iterator, Literal, Mapping, Protocol, Sequence
 
 
 def _integer(value: int, name: str, minimum: int = 0) -> None:
@@ -70,6 +70,9 @@ class Tokenizer(Protocol):
     def count(self, text: str) -> int: ...
     def truncate(self, text: str, budget: int) -> str: ...
     def suffix(self, text: str, budget: int) -> str: ...
+    def iter_spans(self, text: str, max_tokens: int, overlap_tokens: int = 0) -> Iterator[TokenSpan]:
+        """Produce source windows lazily for callers that enforce allocation limits."""
+        raise NotImplementedError
     def spans(self, text: str, max_tokens: int, overlap_tokens: int = 0) -> list[TokenSpan]: ...
 
 
@@ -78,34 +81,39 @@ class _SpanTokenizer:
         return len(self.encode(text))
 
     def spans(self, text: str, max_tokens: int, overlap_tokens: int = 0) -> list[TokenSpan]:
+        """Compatibility list API; bounded ingestion consumes iter_spans instead."""
+        return list(self.iter_spans(text, max_tokens, overlap_tokens))
+
+    def iter_spans(self, text: str, max_tokens: int, overlap_tokens: int = 0) -> Iterator[TokenSpan]:
+        """Yield one source window at a time without retaining overlapping copies."""
         _text(text)
         _integer(max_tokens, "max_tokens", 1)
         _integer(overlap_tokens, "overlap_tokens")
         if overlap_tokens >= max_tokens:
             raise ValueError("overlap_tokens must be smaller than max_tokens")
-        result = []
+        previous_end = 0
         start = 0
         while start < len(text):
-            if result:
+            if previous_end:
                 # Removing a leading character can increase a BPE suffix count.
                 # Revalidate overlap after any progress adjustment below.
-                while start < result[-1].end_char and self.count(text[start:result[-1].end_char]) > overlap_tokens:
+                while start < previous_end and self.count(text[start:previous_end]) > overlap_tokens:
                     start += 1
             value = self.truncate(text[start:], max_tokens)
             if not value:
                 raise ValueError("Token budget is too small for the next Unicode character")
             end = start + len(value)
-            if result and end <= result[-1].end_char:
+            if previous_end and end <= previous_end:
                 # Prefer less overlap to a window that adds no new source text.
                 start += 1
                 continue
-            result.append(TokenSpan(start, end, value, self.count(value)))
+            yield TokenSpan(start, end, value, self.count(value))
+            previous_end = end
             if end == len(text):
                 break
             overlap = self.suffix(value, overlap_tokens)
             # A tiny valid chunk may itself fit the requested overlap. Always advance.
             start = max(start + 1, end - len(overlap))
-        return result
 
 
 class UnicodeTokenizer(_SpanTokenizer):

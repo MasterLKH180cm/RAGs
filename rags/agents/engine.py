@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from rags.agents.config import AgentPlatformConfig
 from rags.agents.deadline import execution_deadline
-from rags.agents.memory import ConversationStore, ObservationStore, context_messages, scoped_session
+from rags.agents.memory import ConversationStore, HistoryTurn, ObservationStore, context_messages, scoped_session
 from rags.agents.router import ModelRouter, ToolCall, TOOL_NAME
 from rags.agents.state import Checkpoint, StateStore, _id
 from rags.auth import Principal
@@ -102,7 +102,8 @@ class AgentEngine:
                        spec.idempotent, spec.schema.model_json_schema())
                       for key, spec in sorted(self.tools._tools.items())],
             "models": config.models, "model_options": config.model_options,
-            "gateway": [config.gateway_url.rstrip("/"), config.gateway_auth_mode],
+            "gateway": ([config.gateway_url.rstrip("/"), config.gateway_auth_mode]
+                        + ([config.gateway_ca_sha256] if config.gateway_ca_sha256 else [])),
             "limits": [config.max_steps, config.max_tool_calls, config.max_runtime_seconds,
                        config.max_output_tokens],
             "memory": [config.memory_enabled, config.max_history_turns, config.memory_ttl_days],
@@ -436,12 +437,15 @@ class AgentEngine:
                     return self._step(cp, status="failed", steps=steps, stop_reason=error.code)
             elif evidence:
                 return self._step(cp, status="failed", steps=steps, stop_reason="missing_citation")
-            cp = self._step(cp, status="completed", steps=steps, answer=answer)
+            turn = None
             if self.config.memory_enabled and "rags:memory" in principal.permissions:
                 memory_id = scoped_session(principal.subject, cp.state["session_id"])
-                self.history.append(cp.tenant, memory_id, "user", cp.state["goal"])
                 retained = set(re.findall(r"\[([^\]\n]+)\]", answer[:4000]))
-                self.history.append(cp.tenant, memory_id, "assistant", answer[:4000],
-                                    evidence_ids=sorted(references & retained))
-            return cp
+                turn = HistoryTurn(memory_id, cp.state["goal"], answer[:4000],
+                                   tuple(sorted(references & retained)))
+            return self.state.update(
+                cp.tenant, cp.run_id, expected_revision=cp.revision,
+                fingerprint=self._fingerprint, status="completed",
+                state={**cp.state, "steps": steps, "answer": answer}, history_turn=turn,
+            )
         return cp

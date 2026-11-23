@@ -15,6 +15,12 @@ configuration, conservative UTF-8 budgeting, and approval checkpoints bound to
 model/tool contracts. See [the specification](docs/SPEC_V09.md). Model fixtures
 verify compatibility; they do not establish live model quality or speed.
 
+The [whole-code review corrections](#whole-code-review-corrections) strengthen
+source validity, migration, resource bounds and durable native-agent state.
+The [optional shared LiteLLM gateway](docs/LITELLM.md) adds a separately deployed
+generation path; the default remains local hashing embeddings and extractive
+answers, with no model credentials required.
+
 ## Contents
 
 - [Quick start](#quick-start)
@@ -22,6 +28,7 @@ verify compatibility; they do not establish live model quality or speed.
 - [Admin Dashboard and OpenTelemetry (v0.7)](#admin-dashboard-and-opentelemetry-v07)
 - [Tenant authorization and OAuth2](#tenant-authorization-and-oauth2)
 - [Inkling 2 Mini](#inkling-2-mini)
+- [Optional shared LiteLLM gateway](#optional-shared-litellm-gateway)
 - [Installable CLI](#installable-cli-no-clone-needed)
 - [uv environment workflow](#uv-environment-workflow)
 - [Ingest and query](#ingest-and-query)
@@ -175,13 +182,15 @@ Existing RAG endpoints now accept `router` as both `RAGS_MODEL_PROVIDER` and
 `RAGS_EMBEDDING_PROVIDER`. The same configured LiteLLM Gateway handles
 chat completion and the standard `/v1/embeddings` interface; no upstream-specific
 request code is needed. Approved aliases are mandatory and changing the
-resolved embedding model creates a distinct embedding index profile.
+resolved embedding model, gateway endpoint or explicit embedding-space version
+creates a distinct embedding index profile.
 
 ```bash
 export RAGS_MODEL_PROVIDER=router
 export RAGS_GENERATION_MODEL=main
 export RAGS_EMBEDDING_PROVIDER=router
 export RAGS_EMBEDDING_MODEL=embed
+export RAGS_EMBEDDING_SPACE_ID=embedding-deployment-v1
 export RAGS_ROUTER_MODELS_JSON='{"main":"anthropic/claude-sonnet-latest","embed":"openai/text-embedding-3-small"}'
 # Set RAGS_ROUTER_GATEWAY_URL and RAGS_ROUTER_API_KEY[_FILE] to your own Gateway.
 rags doctor --no-db
@@ -191,6 +200,12 @@ Select only actual Gateway model groups that your deployment has registered.
 An embedding model must support `/v1/embeddings`; a chat model must support
 `/v1/chat/completions`. The software rejects malformed or non-finite vectors,
 unknown aliases, partial chat completions and model calls without credentials.
+Keep the embedding-space version immutable and reindex when it changes. Old
+router profiles that recorded only the literal `router` endpoint require
+reindexing after this upgrade. The supplied [LiteLLM profile](docs/LITELLM.md)
+routes generation only and retains local embeddings; the embedding example
+above is a separate operator configuration.
+
 ### Bounded agents, scopes and APIs
 
 All three platform switches—`RAGS_AGENT_ENABLED`, `RAGS_ROUTER_ENABLED`, and `RAGS_MEMORY_ENABLED`—default to **true**. Set any of them to `false` to disable that feature. Without a configured Gateway, the service still starts; `router_ready=false` and `503 router_unconfigured` prevent external inference. The built-in local evidence-review workflow works without the Gateway. When memory is enabled **and the caller has `rags:memory` permission**, successful agent runs automatically save their user request and assistant answer, including only verified citation IDs; observation writes require explicit input/approval. To avoid storing any agent conversation history, set `RAGS_MEMORY_ENABLED=false`. `rags agent doctor --json` reports `configuration_required` and exits nonzero until a trusted Gateway is configured.
@@ -416,6 +431,23 @@ for runtime installation, hardware checks, verified model downloads and serving;
 see also the [self-hosted implementation contract](docs/SELF_HOSTED_INKLING_SPEC.md)
 and [benchmark documentation](docs/INKLING_BENCHMARK.md).
 
+### Optional shared LiteLLM gateway
+
+Use `rags init --profile litellm` for a production-mode starter with local
+hashing embeddings and router-based generation. Its gateway URL, service-key
+file and model mappings remain empty until configured together. The shipped
+deployment uses the immutable alias `gateway/inkling-2-mini-iq4nl-v1`, OpenAI
+`max_tokens` semantics, verified HTTPS and an optional explicit private CA.
+Router, agent and memory flags remain default-on without authorizing an
+unconfigured external call.
+
+The [integration guide](docs/LITELLM.md) links the companion repository's
+isolated, pinned proxy deployment, restricted-key bootstrap and direct/proxy
+benchmark procedure. Change the alias when the model/runtime/quantization
+contract changes, including for generation-derived indexes. The gateway does
+not load model weights; synthetic protocol checks do not establish Inkling
+inference speed or quality.
+
 ## Installable CLI (no clone needed)
 
 The Hatch wheel publishes the `rags` console command. The package has **not**
@@ -458,6 +490,7 @@ trusted reverse proxy and an auth gateway before permitting non-loopback binding
 | `anthropic` | SQLite | Deterministic local hash | Anthropic chat | Set `ANTHROPIC_API_KEY` in a secret environment |
 | `inkling` | SQLite | Deterministic local hash | Inkling 2 Mini via Tinker | Set `RAGS_GENERATION_API_KEY` or its `_FILE`; generation and embeddings stay separate |
 | `inkling-local` | SQLite | Deterministic local hash | Local Inkling OpenAI-compatible server | Install supported runtime/weights separately; explicit no-auth literal-loopback generation and router |
+| `litellm` | SQLite | Deterministic local hash | Optional shared generation gateway | Configure verified HTTPS, service-key file and immutable approved alias together; no outbound call from the unconfigured starter |
 
 Choose with `rags init --profile postgres --directory /path/to/existing/dir`.
 For optional PostgreSQL support, install with:
@@ -629,7 +662,7 @@ curl --fail-with-body http://127.0.0.1:8000/documents \
   -d '{"document_id":"session-v1","title":"Session policy","source":"manual","text":"# Sessions\nSessions expire after 30 minutes of inactivity. Refresh tokens rotate on login."}'
 ```
 
-The response includes the document ID, source revision, index profile, and chunk count. Repeating unchanged source content and processing settings returns `unchanged: true`. Reusing an ID with changed content creates a new revision and closes the previous revision's validity interval.
+The response includes the document ID, source revision, index profile, and chunk count. Repeating unchanged source content and processing settings returns `unchanged: true`. Reusing an ID with changed content creates a new revision and closes all earlier overlapping processing copies of the superseded source interval. Index-only reprocessing cannot make an expired source visible again.
 
 ### Retrieve evidence
 
@@ -736,9 +769,16 @@ Pass `chunking` and `tokenizer` on ingestion/reindexing, or set `RAGS_CHUNKING_J
 
 Default source processing uses `structure`, 850 Unicode code points per chunk, and 120 units of overlap. Unicode units are **not model tokens**. For exact encoding counts, select `{"backend":"tiktoken","model":"known-model"}` or an explicit, correct encoding. Unknown model mappings fail. Processing metadata records tokenizer identity, counts, source spans, block types, and generated context separately.
 
+The source-chunk planner validates incremental offsets before creating draft
+strings or calling contextual generation. It permits at most 1,024 source
+index records and 8 MiB of retained UTF-8 chunk/context/embedding text; parent
+and leaf records share those budgets. Semantic splitting also retains its
+2,048-sentence-unit bound. These are construction limits, not a final list-size
+check; later hierarchy generation has its own separate bounds.
+
 Generation has its own `RAGS_GENERATION_TOKENIZER_JSON`. The Tinker profile defaults to conservative UTF-8 bytes; ordinary OpenAI generation defaults to the configured chat model's tiktoken mapping; other defaults explicitly count Unicode units. Select the correct generation encoding when using compatible servers with custom model names. `RAGS_CONTEXT_BUDGET`, `RAGS_OUTPUT_BUDGET`, and `RAGS_ENVELOPE_BUDGET` control full-prompt packing, output reservation, and provider framing allowance. Headers, instructions, question, and delimiters are counted; an oversized question fails instead of being silently dropped.
 
-The index fingerprint includes chunking/tokenizer settings, model identities, embedding endpoint/dimensions, and prompt revision. Legacy rows remain marked `legacy` until explicitly reindexed; incompatible vector profiles return a reindex requirement.
+The index fingerprint includes chunking/tokenizer settings, model identities, the resolved embedding endpoint/dimensions, optional `RAGS_EMBEDDING_SPACE_ID`, and prompt revision. Router endpoint or embedding-space changes invalidate unchanged-ingest reuse and dense compatibility until reindexing. Credentials are excluded. Legacy rows remain marked `legacy` until explicitly reindexed; incompatible vector profiles return a reindex requirement.
 
 ## Twenty-family coverage
 
@@ -991,6 +1031,7 @@ setting change; model/endpoint/tokenizer changes can require explicit reindexing
 | `RAGS_EMBEDDING_API_KEY` | Unset | Dedicated embedding credential; choose this or its _FILE, never both. |
 | `RAGS_EMBEDDING_API_KEY_FILE` | Unset | Container-readable secret path, e.g. /app/config/embedding.key. |
 | `RAGS_EMBEDDING_MODEL` | Unset | Dedicated embedding model; otherwise OPENAI_EMBEDDING_MODEL. |
+| `RAGS_EMBEDDING_SPACE_ID` | Unset | Operator-controlled immutable embedding deployment version; changing it requires reindexing. Empty preserves direct/offline profile compatibility. |
 | `RAGS_GENERATION_BASE_URL` | Unset | Dedicated generation endpoint; otherwise the selected provider's legacy endpoint. |
 | `RAGS_GENERATION_API_KEY` | Unset | Dedicated generation credential; choose this or its _FILE, never both. |
 | `RAGS_GENERATION_API_KEY_FILE` | Unset | Container-readable generation secret path. |
@@ -998,6 +1039,7 @@ setting change; model/endpoint/tokenizer changes can require explicit reindexing
 | `RAGS_GENERATION_PROTOCOL` | `auto` | auto, openai or tinker; controls the supported generation request fields. |
 | `RAGS_REASONING_EFFORT` | Unset | Tinker effort name or numeric 0..0.99; omitted leaves the provider default. |
 | `RAGS_ROUTER_MODEL_OPTIONS_JSON` | `{}` | Per-approved-alias protocol and reasoning effort; unknown aliases/fields fail startup. |
+| `RAGS_ROUTER_CA_FILE` | Unset | Explicit private HTTPS trust bundle: regular nonsymlink PEM, at most 256 KiB. Its content hash binds native-agent approvals. |
 | `RAGS_TOKENIZER_JSON` | Unset | Empty uses the built-in unicode counter; exact option: {"backend":"tiktoken","encoding":"cl100k_base"}. |
 | `RAGS_GENERATION_TOKENIZER_JSON` | Unset | Empty preserves profile defaults; Tinker uses utf8_bytes, ordinary OpenAI generation uses its model tokenizer. |
 | `RAGS_CHUNKING_JSON` | Unset | Empty uses structure/max_tokens=850/overlap_tokens=120; JSON overrides are validated. |
@@ -1081,7 +1123,36 @@ valid Unicode before it can replace a source. JSON, text-upload and image-captio
 ingestion share the same `400` response for invalid processing bounds, while
 provider failures retain their typed status, including `502`.
 
+Multipart extraction, image validation/captioning and ingestion run outside the
+API event loop in a bounded eight-slot pool. Saturation returns
+`503 ingestion_capacity`. Cancelling a request retains its slot until the
+underlying synchronous work returns.
+
 ## Validation and measured limits
+
+### Whole-code review corrections
+
+The [data correction contract](docs/REVIEW_DATA_FIX_SPEC.md) and
+[runtime correction contract](docs/REVIEW_RUNTIME_FIX_SPEC.md) record the
+implemented 2026-11-23 review changes:
+
+| Review finding | Current behavior |
+| --- | --- |
+| CR-01: source resurrection | Source updates close overlapping processing copies; reads choose the newest processing copy before expiry filtering. |
+| CR-02: allocation bounds | Incremental source planning rejects excessive record/text allocation before materializing drafts or generating context. |
+| CR-03: incomplete migration | SQLite-to-PostgreSQL import preserves native runs, pending checkpoints, conversation history and observations. |
+| CR-04: incomplete deadlines | Router chat/embeddings and each federation request use cancellable whole-call deadlines through headers and body. |
+| CR-06: embedding identity | Index profiles use the resolved gateway endpoint and optional immutable embedding-space version. |
+| CR-07: upload blocking | Bounded worker admission keeps synchronous multipart processing off the API event loop. |
+| CR-09: partial conversation turns | A terminal checkpoint and its user/assistant history pair commit in one transaction, fenced against duplicate completion. |
+
+The companion [execution correction contract](https://github.com/MasterLKH180cm/agentic-system/blob/master/docs/REVIEW_EXECUTION_FIX_SPEC.md)
+covers CR-05 namespace-scoped usage, CR-08 nonblocking persistence and CR-10
+shared HTTP/MCP provider validation. The [gateway guide](docs/LITELLM.md)
+keeps proxy protocol evidence separate from real-model performance.
+The [review and upgrade report](docs/REVIEW_LITELLM.md) and
+[local validation record](docs/testing-results-review-litellm.json) record the
+executed checks, source snapshot and remaining deployment/model boundaries.
 
 ### Verified v0.4 implementation
 
@@ -1193,7 +1264,10 @@ For an existing SQLite deployment, stop writers (including Agent workers using
 this RAG), retain a SQLite backup using its backup API, and prepare a fresh
 PostgreSQL database with the `vector` extension. The target must be empty.
 The explicit importer opens SQLite read-only and transactionally preserves
-IDs, revisions, provenance, original image bytes and vectors without model calls:
+IDs, revisions, provenance, original image bytes and vectors without model calls.
+It also preserves native agent runs and pending checkpoints, owner/session
+identity, complete conversation sequences and observations with their expiry.
+Importing a checkpoint does not approve or resume it:
 
 ```bash
 # In an installed Python environment; export the application PostgreSQL DSN first.
@@ -1213,7 +1287,11 @@ docker compose up -d --wait rags
 ```
 
 A nonempty target or unsupported/corrupt data fails without deleting the source.
-Validate source/revision counts and representative historical queries before
+Older stores without native-agent tables remain supported; partial native
+schemas, unsupported columns and unknown populated application tables fail
+before target schema initialization. All application tables participate in the
+empty-target check and copy transaction. Validate source/revision/native-agent
+counts, representative historical queries and session histories before
 switching clients. Keep the original SQLite backup and old deployment available
 for rollback; writes made after switching are not automatically synchronized
 back. Model-profile incompatibility still requires reindexing.

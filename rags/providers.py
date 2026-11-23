@@ -195,6 +195,13 @@ class Providers:
         return context.strip()
 
     @property
+    def embedding_endpoint(self) -> str:
+        """Persist the endpoint actually selected by the active router instance."""
+        if self.settings.embedding_provider == "router":
+            return str(httpx.URL(self.model_router.config.gateway_url)).rstrip("/")
+        return self.settings.embedding_endpoint
+
+    @property
     def embedding_model(self) -> str:
         if self.settings.embedding_provider == "router":
             return "router:" + self.model_router.config.models.get(

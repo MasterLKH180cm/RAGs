@@ -235,7 +235,7 @@ def test_descendants_are_cleaned_even_after_successful_leader_exit(monkeypatch, 
         try:
             if state.read_text().split()[2] in {"Z", "X"}:
                 break
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
             break
         assert time.monotonic() < deadline
         time.sleep(0.005)

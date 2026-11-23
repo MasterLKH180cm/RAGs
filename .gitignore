@@ -17,6 +17,7 @@ build/
 .coverage.*
 htmlcov/
 reports/testing/
+reports/testing-*/
 
 reports/testing-v09/
 reports/testing-self-hosted/

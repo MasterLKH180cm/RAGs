@@ -34,7 +34,7 @@ def envelope(case, *, reason=None, usage=True):
 
 
 def install_transport(monkeypatch, response):
-    real_client = httpx.Client
+    real_client = httpx.AsyncClient
     def respond(request):
         return response(request) if callable(response) else response
     monkeypatch.setattr(ModelRouter, "_client", lambda self, *_args: real_client(
@@ -697,3 +697,137 @@ def test_comparison_discloses_authenticated_hosted_vs_local_conditions(monkeypat
     result = benchmark.compare_reports(hosted, local)
     assert result["different_deployments"] and not result["deployment_information_complete"]
     assert result["different_protocols"] and result["different_auth_modes"]
+
+
+def test_litellm_preset_requires_explicit_deployment_before_credentials_or_network(monkeypatch):
+    options = benchmark.Options.for_preset("inkling-litellm")
+    assert options.model == "gateway/inkling-2-mini-iq4nl-v1"
+    assert options.auth_mode == "required" and options.protocol == "openai" and options.effort is None
+    assert options.require_deployment_manifest and not options.allow_loopback_http
+    assert options.key_env == "LITELLM_BENCHMARK_API_KEY"
+    monkeypatch.setattr(benchmark, "_read_key", lambda *_: pytest.fail("No secret lookup without manifest"))
+    report = benchmark.run_benchmark(options)
+    assert report["status"] == "blocked" and report["block_reason"] == "missing_deployment_manifest"
+
+
+def test_benchmark_passes_explicit_ca_without_disclosing_its_path(monkeypatch, tmp_path):
+    import certifi
+    ca = tmp_path / "private-ca-path.pem"
+    ca.write_bytes(Path(certifi.where()).read_bytes())
+    captured = []
+    real = benchmark.ModelRouter
+    def router(config):
+        captured.append(config)
+        return real(config)
+    monkeypatch.setattr(benchmark, "ModelRouter", router)
+    report = fixture_run(monkeypatch, ca_file=str(ca))
+    assert report["status"] == "passed"
+    assert captured and captured[0].gateway_ca_sha256
+    assert str(ca) not in json.dumps(report)
+
+
+@pytest.mark.parametrize("mode", ["missing", "symlink", "invalid", "http"])
+def test_benchmark_custom_ca_fails_closed(tmp_path, mode):
+    import certifi
+    ca = tmp_path / "ca.pem"
+    if mode == "symlink":
+        ca.symlink_to(certifi.where())
+    elif mode == "invalid":
+        ca.write_text("not a certificate")
+    elif mode == "http":
+        ca.write_bytes(Path(certifi.where()).read_bytes())
+    with pytest.raises(ValueError):
+        benchmark.Options.for_preset("inkling-local", ca_file=str(ca))
+
+
+@pytest.mark.parametrize("change", ["none", "weights", "missing_manifest", "client", "protocol"])
+def test_gateway_comparison_requires_same_deployment_protocol_and_client(
+    monkeypatch, tmp_path, capsys, change,
+):
+    original = _local_live_shaped_fixture(monkeypatch)
+    target = deepcopy(original)
+    target["target"].update(model="gateway/inkling-2-mini-iq4nl-v1", endpoint_kind="operator_endpoint",
+                             auth_mode="required", endpoint_sha256="f" * 64)
+    if change == "weights":
+        target["deployment_manifest"]["model_sha256"] = "b" * 64
+        target["deployment_sha256"] = benchmark._hash(target["deployment_manifest"])
+    elif change == "missing_manifest":
+        target.update(deployment_manifest=None, deployment_sha256=None)
+    elif change == "client":
+        target["runtime"]["python"] = "3.13.0"
+    elif change == "protocol":
+        target["target"]["protocol"] = "tinker"
+    left, right, output = (tmp_path / name for name in ("direct.json", "proxy.json", "comparison.json"))
+    left.write_text(json.dumps(original))
+    right.write_text(json.dumps(target))
+    result = benchmark.main(["compare", str(left), str(right), "--require-same-deployment", "--output", str(output)])
+    if change == "none":
+        assert result == 0
+        assert json.loads(output.read_text())["comparison_scope"] == "same_deployment_gateway_path"
+    else:
+        assert result == 2 and not output.exists()
+    assert "Traceback" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("alteration", [
+    lambda report: report.pop("runtime"),
+    lambda report: report.update(runtime=None),
+    lambda report: report.update(runtime={}),
+    lambda report: report.update(runtime=[]),
+    lambda report: report["runtime"].pop("implementation"),
+    lambda report: report["runtime"].update(extra="private-runtime-value"),
+    lambda report: report["runtime"].update(python=None),
+    lambda report: report["runtime"].update(python="not-a-python-version"),
+    lambda report: report["runtime"].update(implementation=""),
+    lambda report: report["runtime"].update(implementation="x" * 257),
+    lambda report: report["runtime"].update(os=True),
+    lambda report: report["runtime"].update(machine="private-runtime-value\n"),
+    lambda report: report["runtime"].update(package_version=None),
+    lambda report: report["runtime"].update(package_version=""),
+    lambda report: report["runtime"].update(cpu_count=True),
+    lambda report: report["runtime"].update(cpu_count=0),
+    lambda report: report["runtime"].update(cpu_count=-1),
+    lambda report: report["runtime"].update(cpu_count=1.5),
+    lambda report: report["runtime"].update(cpu_count=2**63),
+    lambda report: report["runtime"].update(adapter_sha256="private-runtime-value"),
+    lambda report: report["runtime"].update(harness_sha256=None),
+])
+def test_gateway_comparison_rejects_matching_malformed_runtime_evidence(
+    monkeypatch, tmp_path, capsys, alteration,
+):
+    # Identical missing/invalid evidence on both sides must not count as parity.
+    original = _local_live_shaped_fixture(monkeypatch)
+    alteration(original)
+    target = deepcopy(original)
+    with pytest.raises(ValueError):
+        benchmark.compare_reports(original, target)
+    left, right, output = (tmp_path / name for name in ("direct.json", "proxy.json", "comparison.json"))
+    left.write_text(json.dumps(original))
+    right.write_text(json.dumps(target))
+    result = benchmark.main(["compare", str(left), str(right), "--require-same-deployment", "--output", str(output)])
+    assert result == 2 and not output.exists()
+    captured = capsys.readouterr()
+    assert "private-runtime-value" not in captured.out + captured.err
+    assert "Traceback" not in captured.out + captured.err
+
+
+@pytest.mark.parametrize("source", ["adapter_sha256", "harness_sha256"])
+@pytest.mark.parametrize("changed_section", ["runtime", "measurement"])
+def test_comparison_binds_runtime_source_identity_to_measurement(monkeypatch, source, changed_section):
+    original = _local_live_shaped_fixture(monkeypatch)
+    original[changed_section][source] = "0" * 64
+    original["measurement_sha256"] = benchmark._hash(original["measurement"])
+    # Each side remains internally inconsistent even when both copies agree.
+    with pytest.raises(ValueError):
+        benchmark.compare_reports(original, deepcopy(original))
+
+
+def test_comparison_accepts_generated_runtime_when_platform_information_is_unknown(monkeypatch):
+    monkeypatch.setattr(benchmark.platform, "python_version", lambda: "3.13.0rc1")
+    monkeypatch.setattr(benchmark.platform, "system", lambda: "")
+    monkeypatch.setattr(benchmark.platform, "machine", lambda: "")
+    monkeypatch.setattr(benchmark.os, "cpu_count", lambda: None)
+    original = _local_live_shaped_fixture(monkeypatch)
+    assert original["runtime"]["cpu_count"] is None
+    result = benchmark.compare_reports(original, deepcopy(original))
+    assert result["status"] == "comparable" and not result["different_client_runtime"]

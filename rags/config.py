@@ -75,8 +75,12 @@ class Settings:
     generation_protocol: str = "auto"
     reasoning_effort: str | float | None = None
     generation_auth_mode: str = "required"
+    embedding_space_id: str = ""
 
     def __post_init__(self) -> None:
+        if (not isinstance(self.embedding_space_id, str)
+                or (self.embedding_space_id and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:/@+-]{0,159}", self.embedding_space_id))):
+            raise ValueError("RAGS_EMBEDDING_SPACE_ID must be a bounded deployment/version identifier")
         validate_model_auth_mode(self.generation_auth_mode)
         if self.generation_auth_mode == "none":
             validate_local_no_auth_endpoint(self.generation_base_url)
@@ -306,6 +310,7 @@ class Settings:
             features=features,
             embedding_base_url=embedding_base,
             embedding_api_key=embedding_key,
+            embedding_space_id=os.getenv("RAGS_EMBEDDING_SPACE_ID", ""),
             generation_base_url=generation_base,
             generation_api_key=(secret("RAGS_GENERATION_API_KEY") or None) if not local_generation else None,
             auth_mode=auth_mode,
