@@ -1,0 +1,56 @@
+{
+  "schema_version": "model-contract-benchmark-v1",
+  "status": "blocked",
+  "evidence_kind": "live_model",
+  "created_at": "2026-11-23T02:56:36.657765+00:00",
+  "runtime": {
+    "python": "3.12.16",
+    "implementation": "CPython",
+    "os": "Linux",
+    "machine": "x86_64",
+    "cpu_count": 4,
+    "package_version": "0.9.0",
+    "adapter_sha256": "8234510754a72a38e24e61095eafd4db7f4d3d43ea1f36b7bacc37f44398c556",
+    "harness_sha256": "a9ef11a82fc772d801acd14b99eb213bb1b29bcd52d77c6fb1d8e14a3e591e10"
+  },
+  "target": {
+    "model": "thinkingmachines/Inkling-2-Mini",
+    "protocol": "tinker",
+    "endpoint_kind": "tinker_sampling",
+    "endpoint_sha256": "19597cc9f2991a79c2b5c79063afea68a02e9bbd5ccc2bd0cff4bd7428a667ab"
+  },
+  "measurement": {
+    "dataset_sha256": "94db1bc3ce79dd901902dd2729ef9efb9c0c8a34447c3d2a57fa572eb2d35c8b",
+    "validation_version": "synthetic-exact-contracts-v1",
+    "adapter_sha256": "8234510754a72a38e24e61095eafd4db7f4d3d43ea1f36b7bacc37f44398c556",
+    "harness_sha256": "a9ef11a82fc772d801acd14b99eb213bb1b29bcd52d77c6fb1d8e14a3e591e10",
+    "case_count": 6,
+    "concurrency": [
+      1,
+      2,
+      4
+    ],
+    "repetitions": 2,
+    "warmup_rounds": 1,
+    "max_output_tokens": 512,
+    "reasoning_effort": "low",
+    "temperature": 0,
+    "request_timeout_seconds": 30.0,
+    "max_duration_seconds": 300.0
+  },
+  "measurement_sha256": "65071b34e555f986f0aa744ad3e0fdbf7da046d39b2b040466b5c3c869eaf22a",
+  "block_reason": "missing_model_credential",
+  "warmup": null,
+  "phases": [],
+  "paid_request_upper_bound": 42,
+  "prices": null,
+  "limitations": [
+    "Small synthetic contract/behavior dataset; not a general model-quality score.",
+    "No retrieval, embedding, database, or complete agent workflow is measured.",
+    "No tools execute; selected read-only calls are validated only.",
+    "Successful latency excludes failed requests; throughput includes phase wall time.",
+    "Completion throughput includes reported reasoning tokens when the provider counts them.",
+    "Model IDs are request labels, not independent verification of served weights.",
+    "No streaming is used, so TTFT and decoder-only tokens/second are not measured."
+  ]
+}

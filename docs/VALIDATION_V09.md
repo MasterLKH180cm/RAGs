@@ -67,7 +67,11 @@ production capacity. They do not constitute a before/after release comparison.
 ## Model evidence and quality boundaries
 
 The [Inkling readiness report](../reports/inkling-mini-readiness-v09.json) is
-**blocked / missing_model_credential**, with zero provider requests. No live
+**blocked / missing_model_credential**, with zero provider requests. An
+authorized [remote Actions attempt](https://github.com/MasterLKH180cm/RAGs/actions/runs/45103025522)
+returned the same blocked result. Its [archived report](../reports/inkling-mini-readiness-actions-v09.json)
+was verified against the downloaded artifact digest and matches the local
+adapter, harness, dataset and control hashes. No live
 Inkling latency, throughput, quality or cost result is claimed. The production
 router benchmark, its six synthetic cases, strict comparator and manually
 triggered Actions workflow are documented in

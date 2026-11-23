@@ -1,9 +1,6 @@
 name: Inkling 2 Mini live model benchmark
 
 on:
-  push:
-    branches: [bench/inkling-mini-validation-20261123]
-    paths: [.github/workflows/model-benchmark.yml]
   workflow_dispatch:
     inputs:
       reasoning_effort:
