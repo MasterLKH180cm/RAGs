@@ -1,7 +1,7 @@
 """Behavioral fixtures exercise different mechanisms and their trust boundaries."""
+import asyncio
 from dataclasses import replace
 import json
-from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -147,14 +147,14 @@ def test_federation_uses_distinct_tenant_credentials_and_rejects_unknown_sources
                "catalog": {"url": "https://catalog.example", "tenant_keys": {"a": "catalog-a"}}}
     configured = replace(settings, federated_sources=sources)
     calls = []
-    original_client = httpx.Client
+    original_client = httpx.AsyncClient
     def handler(request):
         calls.append((str(request.url), request.headers["Authorization"]))
         data = json.loads(request.content)
         assert data["generate"] is False and "tenant" not in data
         return httpx.Response(200, request=request, json={"citations": [{"chunk_id": "same-id", "document_id": "doc",
               "title": "Authorized", "source": "archive", "section": "Policy", "text": request.headers["Authorization"] + " policy"}]})
-    monkeypatch.setattr(httpx, "Client", lambda **kwargs: original_client(transport=httpx.MockTransport(handler), **kwargs))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(transport=httpx.MockTransport(handler), **kwargs))
     service = RAGService(Store(settings.db_path), Providers(configured))
     result = service.query("a", "policy", "federated", generate=False, sources=["archive", "catalog"])
     assert {c["chunk_id"] for c in result["citations"]} == {"archive:same-id", "catalog:same-id"}
@@ -302,17 +302,17 @@ def test_migration_marks_legacy_processing_and_requires_real_reindex(tmp_path, m
 def test_federation_stream_limit_closes_oversized_response(system, monkeypatch):
     _, base, settings = system
     state = {"parts": 0, "closed": False}
-    class LargeStream(httpx.SyncByteStream):
-        def __iter__(self):
+    class LargeStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
             for _ in range(100):
                 state["parts"] += 1
                 yield b"x" * 100_000
-        def close(self):
+        async def aclose(self):
             state["closed"] = True
-    original_client = httpx.Client
+    original_client = httpx.AsyncClient
     def handler(request):
         return httpx.Response(200, request=request, stream=LargeStream())
-    monkeypatch.setattr(httpx, "Client", lambda **kwargs: original_client(transport=httpx.MockTransport(handler), **kwargs))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(transport=httpx.MockTransport(handler), **kwargs))
     configured = replace(settings, federated_sources={"archive": {"url": "https://archive.example", "tenant_keys": {"a": "credential-a"}}})
     service = RAGService(base.store, Providers(configured))
     with pytest.raises(CapabilityError, match="no partial result"):
@@ -346,20 +346,21 @@ def test_non_ascii_bearer_is_rejected_without_server_error(system):
 
 def test_federation_checks_deadline_for_each_small_transport_chunk(system, monkeypatch):
     _, base, settings = system
-    state = {"parts": 0, "seconds": 0}
-    def clock():
-        state["seconds"] += 3
-        return state["seconds"]
-    class Trickle(httpx.SyncByteStream):
-        def __iter__(self):
+    state = {"parts": 0, "closed": False}
+    class Trickle(httpx.AsyncByteStream):
+        async def __aiter__(self):
             for _ in range(100):
+                await asyncio.sleep(0.01)
                 state["parts"] += 1
                 yield b"x"
-    original_client = httpx.Client
-    monkeypatch.setattr(httpx, "Client", lambda **kwargs: original_client(
+        async def aclose(self):
+            state["closed"] = True
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(
         transport=httpx.MockTransport(lambda request: httpx.Response(200, stream=Trickle())), **kwargs))
-    monkeypatch.setattr(retrieval_module, "time", SimpleNamespace(monotonic=clock))
+    monkeypatch.setattr(retrieval_module, "FEDERATED_TIMEOUT_SECONDS", 0.05)
     settings = replace(settings, federated_sources={"archive": {"url": "https://archive.example", "tenant_keys": {"a": "key-a"}}})
     with pytest.raises(CapabilityError, match="no partial result"):
         RAGService(base.store, Providers(settings)).query("a", "policy", "federated", generate=False)
-    assert state["parts"] <= 4
+    assert state["parts"] <= 8
+    assert state["closed"] is True

@@ -37,7 +37,7 @@ def config(**changes):
 
 def fake_router(monkeypatch, response, **options):
     router = ModelRouter(config(**options))
-    actual_client = httpx.Client
+    actual_client = httpx.AsyncClient
     captured = []
     def send(request):
         captured.append(json.loads(request.content))

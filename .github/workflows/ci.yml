@@ -90,7 +90,7 @@ jobs:
           --cov-report=html:reports/testing/coverage-html
       - name: Actual PostgreSQL and pgvector contracts included in package coverage
         run: >-
-          python -m pytest -q tests/test_postgres_storage.py tests/test_agent_postgres.py -m postgres --require-no-skips
+          python -m pytest -q -m postgres --require-no-skips
           --test-inventory reports/testing/inventory-postgres.json
           --junitxml reports/testing/junit-postgres.xml
           --cov=rags --cov-branch --cov-config=pyproject.toml --cov-append
@@ -143,7 +143,7 @@ jobs:
               assert len(root.joinpath(name).read_bytes()) > 1000
           package = resources.files("rags")
           for name in ("model_benchmark.py", "model_profiles.py", "provider_transport.py",
-                       "templates/inkling.env", "templates/inkling-local.env"):
+                       "templates/inkling.env", "templates/inkling-local.env", "templates/litellm.env"):
               assert package.joinpath(name).is_file()
           print("Installed wheel contains the dashboard, Inkling profile and benchmark")
           PYTHON

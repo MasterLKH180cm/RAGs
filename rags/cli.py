@@ -19,7 +19,7 @@ from rags.config import Settings
 from rags.features import MANIFEST
 
 
-PROFILES = ("offline", "postgres", "openai", "ollama", "anthropic", "inkling", "inkling-local")
+PROFILES = ("offline", "postgres", "openai", "ollama", "anthropic", "inkling", "inkling-local", "litellm")
 ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 MAX_ENV_SIZE = 65_536
 PROFILE_DISABLED = {
@@ -37,6 +37,8 @@ PROFILE_DISABLED = {
                 "multimodal", "image_captioning", "original_images"),
     "inkling-local": ("embedding.openai", "embedding.fastembed", "research", "federation",
                       "multimodal", "image_captioning", "original_images"),
+    "litellm": ("embedding.openai", "embedding.fastembed", "research", "federation",
+                "multimodal", "image_captioning", "original_images"),
 }
 
 

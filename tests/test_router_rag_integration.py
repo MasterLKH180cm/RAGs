@@ -48,7 +48,7 @@ def test_router_for_rag_chat_and_embedding(settings, monkeypatch):
         return httpx.Response(200, json={"choices": [{"message": {"content": "Routed answer"},
                                                      "finish_reason": "stop"}],
                                          "usage": {"completion_tokens": 5}})
-    actual = httpx.Client
+    actual = httpx.AsyncClient
     monkeypatch.setattr(ModelRouter, "_client",
                         lambda self, *_args: actual(transport=httpx.MockTransport(gateway)))
     provider = Providers(settings)
@@ -64,7 +64,7 @@ def test_router_for_rag_chat_and_embedding(settings, monkeypatch):
 
 
 def test_router_embedding_validation_never_accepts_malformed_vectors(settings, monkeypatch):
-    actual = httpx.Client
+    actual = httpx.AsyncClient
     for vector in ([], [True, 0.1], ["invalid"]):
         monkeypatch.setattr(ModelRouter, "_client", lambda self, *_args:
                             actual(transport=httpx.MockTransport(
@@ -100,7 +100,7 @@ def test_routed_embedding_respects_caller_remaining_tool_deadline(settings, monk
     from rags.agents.deadline import execution_deadline
 
     requested = []
-    real_client = httpx.Client
+    real_client = httpx.AsyncClient
 
     def client_for(self, seconds=30.):
         requested.append(seconds)

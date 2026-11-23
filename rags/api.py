@@ -1,9 +1,13 @@
 """FastAPI service with tenant-scoped key authentication and bounded inputs."""
 from contextlib import asynccontextmanager
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
+import asyncio
 import io
 import json
 import math
 import os
+from threading import BoundedSemaphore
 from typing import Annotated, Literal
 
 import httpx
@@ -180,12 +184,15 @@ class QueryIn(BaseModel):
 def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings or Settings.from_env()
     docs = config.features.enabled("api_docs")
+    upload_workers = ThreadPoolExecutor(max_workers=8, thread_name_prefix="rags-upload")
+    upload_slots = BoundedSemaphore(8)
 
     @asynccontextmanager
     async def lifespan(_application):
         try:
             yield
         finally:
+            await asyncio.to_thread(upload_workers.shutdown, wait=True)
             monitor.shutdown()
     app = FastAPI(title="RAGs", version="0.9.0", docs_url="/docs" if docs else None,
                   redoc_url="/redoc" if docs else None, openapi_url="/openapi.json" if docs else None, lifespan=lifespan)
@@ -353,16 +360,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             rows=data.rows, valid_from=data.valid_from, valid_to=data.valid_to, expected_revision=data.expected_revision,
         )
 
-    @app.post("/documents/upload", status_code=201)
-    async def upload(
-        tenant: Annotated[str, Depends(auth)],
-        file: UploadFile = File(...),
-    ) -> dict:
-        # Uploads are explicitly capped; file formats are allowlisted, no URL fetching.
-        raw = await file.read(2_000_001)
-        if len(raw) > 2_000_000:
-            raise HTTPException(status_code=413, detail="file is too large")
-        filename = os.path.basename(file.filename or "upload")
+    async def run_upload(callback):
+        if not upload_slots.acquire(blocking=False):
+            raise CapabilityError("ingestion_capacity", "Multipart ingestion capacity exhausted", 503)
+        context = copy_context()
+
+        def invoke():
+            try:
+                return context.run(callback)
+            finally:
+                # Cancellation of the awaiting HTTP task does not stop a
+                # synchronous provider or database operation. Keep its slot
+                # until the operation actually finishes.
+                upload_slots.release()
+
+        try:
+            future = asyncio.get_running_loop().run_in_executor(upload_workers, invoke)
+        except BaseException:
+            upload_slots.release()
+            raise
+        try:
+            return await asyncio.shield(future)
+        except asyncio.CancelledError:
+            future.add_done_callback(lambda completed: completed.exception() if not completed.cancelled() else None)
+            raise
+
+    def process_upload(tenant: str, raw: bytes, filename: str) -> dict:
         extension = filename.lower().rsplit(".", 1)[-1]
         if extension in {"txt", "md", "csv", "json"}:
             try:
@@ -391,6 +414,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=413, detail="Extracted text exceeds the document limit")
         return ingest_source(tenant, title=filename, text=body, source="upload:" + filename)
 
+    @app.post("/documents/upload", status_code=201)
+    async def upload(
+        tenant: Annotated[str, Depends(auth)],
+        file: UploadFile = File(...),
+    ) -> dict:
+        # Uploads are explicitly capped; file formats are allowlisted, no URL fetching.
+        raw = await file.read(2_000_001)
+        if len(raw) > 2_000_000:
+            raise HTTPException(status_code=413, detail="file is too large")
+        filename = os.path.basename(file.filename or "upload")
+        return await run_upload(lambda: process_upload(tenant, raw, filename))
+
+    def process_image(tenant: str, raw: bytes, filename: str) -> dict:
+        from rags.vision import describe_image, validate_image
+
+        try:
+            media_type = validate_image(raw)
+            description = describe_image(raw, media_type, config)
+        except CapabilityError:
+            raise
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return ingest_source(
+            tenant, title=filename,
+            text="# Image description (model-generated; verify against original)\n" + description,
+            source="image:" + filename,
+            metadata={"kind": "image", "media_type": media_type,
+                      "caption_generated_by": config.model_provider},
+        )
+
     @app.post("/images", status_code=201)
     async def ingest_image(
         tenant: Annotated[str, Depends(auth)],
@@ -402,23 +455,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         raw = await file.read(2_000_001)
         if not 0 < len(raw) <= 2_000_000:
             raise HTTPException(status_code=413, detail="Image must be 1..2MB")
-        from rags.vision import describe_image, validate_image
-
-        try:
-            media_type = validate_image(raw)
-            description = describe_image(raw, media_type, config)
-        except CapabilityError:
-            raise
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
         filename = os.path.basename(file.filename or "image")
-        return ingest_source(
-            tenant, title=filename,
-            text="# Image description (model-generated; verify against original)\n" + description,
-            source="image:" + filename,
-            metadata={"kind": "image", "media_type": media_type,
-                      "caption_generated_by": config.model_provider},
-        )
+        return await run_upload(lambda: process_image(tenant, raw, filename))
 
     @app.get("/documents")
     def documents(tenant: Annotated[str, Depends(auth)]) -> list[dict]:

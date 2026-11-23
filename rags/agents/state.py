@@ -13,7 +13,6 @@ from rags import postgres
 from rags.registry import CapabilityError
 from rags.storage import Store
 
-
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
 MAX_STATE_BYTES = 256 * 1024
 SCHEMA = """
@@ -131,7 +130,8 @@ class StateStore:
         return self._read(row) if row is not None else None
 
     def update(self, tenant: str, run_id: str, *, expected_revision: int,
-               fingerprint: str, status: str, state: dict) -> Checkpoint:
+               fingerprint: str, status: str, state: dict,
+               history_turn: object | None = None) -> Checkpoint:
         _id(tenant, "tenant")
         _id(run_id, "run")
         if type(expected_revision) is not int or expected_revision < 0:
@@ -139,6 +139,10 @@ class StateStore:
         if status not in {"running", "waiting_for_approval", "needs_resume",
                           "completed", "failed", "stopped"}:
             raise ValueError("Invalid state transition target")
+        if history_turn is not None:
+            from rags.agents.memory import HistoryTurn
+            if not isinstance(history_turn, HistoryTurn) or status != "completed":
+                raise ValueError("History finalization requires a completed agent turn")
         encoded = _state_json(state)
         now = _when()
         with self.store.connect() as db:
@@ -155,6 +159,8 @@ class StateStore:
                 raise CapabilityError("revision_conflict", "Run checkpoint is stale", 409)
             if row["status"] in {"completed", "failed", "stopped"}:
                 raise CapabilityError("run_terminal", "Terminal run cannot be resumed", 409)
+            if history_turn is not None and row["kind"] != "agent":
+                raise ValueError("Only native agent completions can finalize conversation history")
             cursor = db.execute(
                 "UPDATE agent_runs SET revision=?,status=?,state=?,updated_at=? "
                 "WHERE tenant=? AND run_id=? AND revision=?",
@@ -162,5 +168,7 @@ class StateStore:
             )
             if cursor.rowcount != 1:
                 raise CapabilityError("revision_conflict", "Concurrent checkpoint update", 409)
+            if history_turn is not None:
+                history_turn.append_in_transaction(db, tenant, is_postgres=self.store.is_postgres)
         return Checkpoint(tenant, run_id, row["kind"], expected_revision + 1, status,
                           fingerprint, state, now)

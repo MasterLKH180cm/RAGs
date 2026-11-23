@@ -187,11 +187,13 @@ class Store:
             current = conn.execute("SELECT revision,valid_from,valid_to FROM documents WHERE tenant=? AND id=?", (tenant, document["id"])).fetchone()
             if (current["revision"] if current else None) != expected_revision:
                 raise CapabilityError("revision_conflict", "Document changed during indexing; retry against its current revision", 409)
-            if (current and current["valid_from"] < document["valid_from"]
-                    and (current["valid_to"] is None or current["valid_to"] > document["valid_from"])):
+            if current:
+                # Reindexing can produce several processing revisions for one
+                # source interval. Every superseded copy must close together.
                 conn.execute(
-                    "UPDATE document_revisions SET valid_to=? WHERE tenant=? AND id=? AND revision=?",
-                    (document["valid_from"], tenant, document["id"], current["revision"]),
+                    "UPDATE document_revisions SET valid_to=? WHERE tenant=? AND id=? AND valid_from<? "
+                    "AND (valid_to IS NULL OR valid_to>?)",
+                    (document["valid_from"], tenant, document["id"], document["valid_from"], document["valid_from"]),
                 )
             values = (
                 tenant, document["id"], document["revision"], document["title"], document["source"], document["body"],
@@ -273,8 +275,12 @@ class Store:
             if self.is_postgres:
                 conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
             rows = conn.execute(
-                "SELECT * FROM document_revisions WHERE tenant=? AND valid_from<=? "
-                f"AND (valid_to IS NULL OR valid_to>?) ORDER BY recorded_at DESC,{order_column} DESC",
+                "SELECT * FROM (SELECT *,"
+                f"{order_column} AS selection_order,ROW_NUMBER() OVER ("
+                f"PARTITION BY id,valid_from ORDER BY recorded_at DESC,{order_column} DESC) AS processing_order "
+                "FROM document_revisions WHERE tenant=? AND valid_from<=?) AS revisions "
+                "WHERE processing_order=1 AND (valid_to IS NULL OR valid_to>?) "
+                "ORDER BY recorded_at DESC,selection_order DESC",
                 (tenant, at, at),
             ).fetchall()
             docs = {}
@@ -337,7 +343,7 @@ class Store:
         return [c for c in self.scope(tenant) if c["id"] in allowed]
 
     def dense(self, tenant: str, vector: list[float], limit: int, allowed_ids: set[str], *,
-              embedding_model: str, embedding_endpoint: str) -> list[str]:
+              embedding_model: str, embedding_endpoint: str, embedding_space_id: str = "") -> list[str]:
         """Rank precisely the server-authorized revision/filter snapshot."""
         if not allowed_ids:
             return []
@@ -363,6 +369,7 @@ class Store:
                     actual_dimensions = row["dimensions"] if self.is_postgres else len(json.loads(row["embedding"]))
                     if (row["embedding_model"] != embedding_model or profile.get("embedding_model") != embedding_model
                             or profile.get("embedding_endpoint") != embedding_endpoint
+                            or profile.get("embedding_space_id", "") != embedding_space_id
                             or type(profile.get("embedding_dimensions")) is not int
                             or profile["embedding_dimensions"] != len(vector) or actual_dimensions != len(vector)
                             or row["profile_id"] != row["revision_profile_id"]):

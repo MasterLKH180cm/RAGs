@@ -42,10 +42,25 @@ ENV_PATTERN = re.compile(r"[A-Z][A-Z0-9_]{0,127}\Z")
 HASH_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
 KINDS = ("json", "grounded", "tool")
 PUBLIC_LABEL_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.+-]{0,95}$"
+RUNTIME_TEXT_PATTERN = r"^[^\x00-\x1f\x7f]*$"
 
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+
+
+class ClientRuntime(StrictModel):
+    """Complete public client identity recorded by the benchmark generator."""
+
+    python: str = Field(pattern=r"^[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9.+-]*$", max_length=64)
+    implementation: str = Field(min_length=1, max_length=256, pattern=RUNTIME_TEXT_PATTERN)
+    os: str = Field(max_length=256, pattern=RUNTIME_TEXT_PATTERN)
+    machine: str = Field(max_length=256, pattern=RUNTIME_TEXT_PATTERN)
+    # The platform API can report unknown OS/machine labels or CPU count.
+    cpu_count: int | None = Field(ge=1, le=2**31 - 1)
+    package_version: str = Field(min_length=1, max_length=256, pattern=RUNTIME_TEXT_PATTERN)
+    adapter_sha256: str = Field(pattern=r"^[0-9a-f]{64}$", min_length=64, max_length=64)
+    harness_sha256: str = Field(pattern=r"^[0-9a-f]{64}$", min_length=64, max_length=64)
 
 
 class DeploymentManifest(StrictModel):
@@ -249,15 +264,21 @@ class Options:
     allow_loopback_http: bool = False
     prices: Prices | None = None
     deployment_manifest: DeploymentManifest | None = field(default=None, repr=False)
+    ca_file: str = field(default="", repr=False)
+    require_deployment_manifest: bool = False
 
     @classmethod
     def for_preset(cls, preset: str, **overrides) -> Options:
-        if not isinstance(preset, str) or preset not in {"inkling-tinker", "inkling-local"}:
+        if not isinstance(preset, str) or preset not in {"inkling-tinker", "inkling-local", "inkling-litellm"}:
             raise ValueError("Unsupported model benchmark preset")
         defaults = {} if preset == "inkling-tinker" else {
             "base_url": LOCAL_BASE_URL, "auth_mode": "none", "protocol": "openai",
             "effort": None, "allow_loopback_http": True, "key_env": "INKLING_LOCAL_API_KEY",
         }
+        if preset == "inkling-litellm":
+            defaults.update(model="gateway/inkling-2-mini-iq4nl-v1", base_url="https://localhost:4000/v1",
+                            auth_mode="required", allow_loopback_http=False,
+                            key_env="LITELLM_BENCHMARK_API_KEY", require_deployment_manifest=True)
         return cls(**(defaults | overrides))
 
     def __post_init__(self):
@@ -267,6 +288,11 @@ class Options:
             raise ValueError("Invalid credential environment variable name")
         if type(self.allow_loopback_http) is not bool:
             raise ValueError("Loopback permission must be boolean")
+        if type(self.require_deployment_manifest) is not bool:
+            raise ValueError("Deployment manifest requirement must be boolean")
+        from rags.agents.config import _gateway_ca
+        if _gateway_ca(self.ca_file) and urlsplit(self.base_url).scheme != "https":
+            raise ValueError("Custom benchmark CA requires HTTPS")
         if not isinstance(self.base_url, str) or len(self.base_url) > 2048:
             raise ValueError("Invalid benchmark endpoint")
         url = urlsplit(self.base_url)
@@ -520,7 +546,8 @@ def run_benchmark(options: Options, cases=None, *, environment=None,
         ])
     if evidence_kind == "http_contract_fixture":
         report["limitations"].append("HTTP fixture timings are local contract checks, not model-performance evidence.")
-    if evidence_kind == "live_model" and report["target"]["endpoint_kind"] == "loopback" and deployment is None:
+    if (evidence_kind == "live_model" and deployment is None
+            and (report["target"]["endpoint_kind"] == "loopback" or options.require_deployment_manifest)):
         report["block_reason"] = "missing_deployment_manifest"
         return report
     key = ""
@@ -536,6 +563,7 @@ def run_benchmark(options: Options, cases=None, *, environment=None,
     config = AgentPlatformConfig(
         gateway_url=options.base_url.rstrip("/"), gateway_key=key, models={"benchmark": options.model},
         gateway_auth_mode=options.auth_mode,
+        gateway_ca_file=options.ca_file,
         model_options={"benchmark": {"protocol": options.protocol, "reasoning_effort": options.effort}},
         allow_http=options.allow_loopback_http, max_output_tokens=options.output_tokens,
     )
@@ -571,6 +599,12 @@ def _validated_comparison_report(report: dict) -> None:
     for key in ("dataset_sha256", "adapter_sha256", "harness_sha256"):
         if not isinstance(measurement.get(key), str) or not HASH_PATTERN.fullmatch(measurement[key]):
             raise ValueError("Missing benchmark source identity")
+    runtime = report.get("runtime")
+    if not isinstance(runtime, dict):
+        raise ValueError("Missing benchmark client runtime")
+    ClientRuntime.model_validate(runtime)
+    if any(runtime[key] != measurement[key] for key in ("adapter_sha256", "harness_sha256")):
+        raise ValueError("Client runtime source identity does not match measurement")
     target = report.get("target")
     if (not isinstance(target, dict)
             or set(target) != {"model", "protocol", "auth_mode", "endpoint_kind", "endpoint_sha256"}
@@ -704,7 +738,7 @@ def compare_reports(baseline: dict, target: dict) -> dict:
             "different_endpoints": baseline["target"]["endpoint_sha256"] != target["target"]["endpoint_sha256"],
             "different_protocols": baseline["target"]["protocol"] != target["target"]["protocol"],
             "different_auth_modes": baseline["target"]["auth_mode"] != target["target"]["auth_mode"],
-            "different_client_runtime": baseline.get("runtime") != target.get("runtime"),
+            "different_client_runtime": baseline["runtime"] != target["runtime"],
             "baseline_deployment": baseline_deployment, "target_deployment": target_deployment,
             "different_deployments": baseline_deployment != target_deployment,
             "deployment_fields_differ": differences,
@@ -752,7 +786,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = _SafeArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     run = subparsers.add_parser("run", help="Run real model requests; no offline fallback")
-    run.add_argument("--preset", choices=("inkling-tinker", "inkling-local"), default="inkling-tinker")
+    run.add_argument("--preset", choices=("inkling-tinker", "inkling-local", "inkling-litellm"), default="inkling-tinker")
     run.add_argument("--model")
     run.add_argument("--base-url")
     run.add_argument("--key-env", help="Credential variable name; defaults to the selected preset's dedicated key")
@@ -768,6 +802,7 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--allow-loopback-http", action="store_true", default=None)
     run.add_argument("--dataset", type=Path)
     run.add_argument("--deployment-manifest", type=Path)
+    run.add_argument("--ca-file", default="", help="Explicit PEM trust bundle for a verified HTTPS gateway")
     run.add_argument("--input-price", type=float)
     run.add_argument("--output-price", type=float)
     run.add_argument("--cached-input-price", type=float)
@@ -776,10 +811,18 @@ def main(argv: list[str] | None = None) -> int:
     compare.add_argument("baseline", type=Path)
     compare.add_argument("target", type=Path)
     compare.add_argument("--output", type=Path, required=True)
+    compare.add_argument("--require-same-deployment", action="store_true",
+                         help="Require identical complete deployment manifests for a gateway path comparison")
     try:
         args = parser.parse_args(argv)
         if args.command == "compare":
             report = compare_reports(_read_report(args.baseline), _read_report(args.target))
+            if args.require_same_deployment:
+                if not report["deployment_information_complete"] or report["different_deployments"]:
+                    raise ValueError("Gateway comparison requires the same complete deployment manifest")
+                if report["different_protocols"] or report["different_client_runtime"]:
+                    raise ValueError("Gateway comparison requires the same protocol and client runtime")
+                report["comparison_scope"] = "same_deployment_gateway_path"
         else:
             prices = None
             if any(p is not None for p in (args.input_price, args.output_price, args.cached_input_price)):
@@ -796,6 +839,7 @@ def main(argv: list[str] | None = None) -> int:
                 warmup_rounds=args.warmup_rounds, output_tokens=args.output_tokens,
                 timeout_seconds=args.timeout_seconds, max_duration_seconds=args.max_duration_seconds,
                 prices=prices, deployment_manifest=load_deployment_manifest(args.deployment_manifest),
+                ca_file=args.ca_file,
             )
             report = run_benchmark(options, load_cases(args.dataset))
         write_report(args.output, report)

@@ -1,8 +1,11 @@
 """Agent, memory and router are default enabled; external calls require Gateway setup."""
 from dataclasses import dataclass, field
+import hashlib
 import os
 from pathlib import Path
 import re
+import ssl
+import stat
 from urllib.parse import urlsplit
 
 from rags.model_profiles import (
@@ -12,6 +15,30 @@ from rags.model_profiles import (
 
 ALIAS = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,63}\Z")
 MODEL = re.compile(r"[a-z][a-z0-9_-]{0,39}/[A-Za-z0-9][A-Za-z0-9_.:/@+-]{0,159}\Z")
+MAX_CA_BYTES = 256 * 1024
+
+
+def _gateway_ca(filename: str) -> str:
+    if not isinstance(filename, str) or len(filename) > 4096:
+        raise ValueError("Router CA file must be a bounded path")
+    if not filename:
+        return ""
+    try:
+        # Open without following a final symlink, and without blocking on a
+        # special file; validate the same descriptor that supplies the bytes.
+        descriptor = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(descriptor, "rb") as handle:
+            metadata = os.fstat(handle.fileno())
+            if not stat.S_ISREG(metadata.st_mode) or not 0 < metadata.st_size <= MAX_CA_BYTES:
+                raise ValueError("Router CA file must be a bounded, nonempty regular PEM file")
+            content = handle.read(MAX_CA_BYTES + 1)
+        if not content or len(content) > MAX_CA_BYTES:
+            raise ValueError("Router CA file must be a bounded, nonempty regular PEM file")
+        pem = content.decode("ascii")
+        ssl.create_default_context(cadata=pem)
+    except (OSError, UnicodeError) as exc:
+        raise ValueError("Router CA file must be an existing regular nonsymlink PEM file") from exc
+    return pem
 
 
 def _boolean(name: str, default: bool = False) -> bool:
@@ -64,9 +91,18 @@ class AgentPlatformConfig:
     memory_ttl_days: int = 30
     model_options: dict[str, dict] = field(default_factory=dict)
     gateway_auth_mode: str = "required"
+    gateway_ca_file: str = ""
+    gateway_ca_pem: str = field(default="", init=False, repr=False)
+    gateway_ca_sha256: str = field(default="", init=False)
 
     def __post_init__(self) -> None:
         validate_model_auth_mode(self.gateway_auth_mode)
+        ca_pem = _gateway_ca(self.gateway_ca_file)
+        if ca_pem and urlsplit(self.gateway_url).scheme != "https":
+            raise ValueError("Router CA file requires an explicit HTTPS gateway")
+        object.__setattr__(self, "gateway_ca_pem", ca_pem)
+        object.__setattr__(self, "gateway_ca_sha256",
+                           hashlib.sha256(ca_pem.encode("ascii")).hexdigest() if ca_pem else "")
         if not isinstance(self.gateway_key, str) or len(self.gateway_key) > 4096:
             raise ValueError("Router gateway credential must be a bounded string")
         if self.agent_enabled and not self.router_enabled:
@@ -155,6 +191,7 @@ class AgentPlatformConfig:
             gateway_url=os.getenv("RAGS_ROUTER_GATEWAY_URL", "").rstrip("/"),
             gateway_key=_secret("RAGS_ROUTER_API_KEY") if enabled and auth_mode == "required" else "",
             gateway_auth_mode=auth_mode,
+            gateway_ca_file=os.getenv("RAGS_ROUTER_CA_FILE", ""),
             models=models, model_options=model_options, allow_http=allow_http,
             max_steps=_integer("RAGS_AGENT_MAX_STEPS", 6, 1, 8),
             max_tool_calls=_integer("RAGS_AGENT_MAX_TOOL_CALLS", 12, 1, 16),

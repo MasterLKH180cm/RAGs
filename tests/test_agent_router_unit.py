@@ -55,7 +55,7 @@ def test_one_router_contract_accepts_four_provider_aliases(config, monkeypatch, 
             "usage": {"prompt_tokens": 4, "completion_tokens": 3},
         })
     router = ModelRouter(config)
-    real_client = httpx.Client
+    real_client = httpx.AsyncClient
     monkeypatch.setattr(router, "_client",
                         lambda *_args: real_client(transport=httpx.MockTransport(handler)))
     result = router.complete(model=alias, messages=[{"role": "user", "content": "Hello"}])
@@ -75,7 +75,7 @@ def test_router_parses_typed_tool_call_and_forbids_provider_argument_trust(confi
                                  "arguments": '{"question":"records policy","top_k":2}'}}]}}],
         })
     router = ModelRouter(config)
-    real_client = httpx.Client
+    real_client = httpx.AsyncClient
     monkeypatch.setattr(router, "_client",
                         lambda *_args: real_client(transport=httpx.MockTransport(handler)))
     reply = router.complete(model="openai", messages=[{"role": "user", "content": "Search"}],
@@ -99,7 +99,7 @@ def test_router_parses_typed_tool_call_and_forbids_provider_argument_trust(confi
 ])
 def test_router_rejects_malformed_tool_envelopes_without_leaking_payload(config, monkeypatch, response):
     router = ModelRouter(config)
-    real_client = httpx.Client
+    real_client = httpx.AsyncClient
     monkeypatch.setattr(router, "_client", lambda *_args: real_client(
         transport=httpx.MockTransport(lambda _: httpx.Response(200, json=response))))
     with pytest.raises(CapabilityError) as err:
@@ -117,7 +117,7 @@ def test_router_unknown_model_does_not_make_network_request(config, monkeypatch)
 
 def test_gateway_redirect_and_errors_fail_closed(config, monkeypatch):
     router = ModelRouter(config)
-    real_client = httpx.Client
+    real_client = httpx.AsyncClient
     for status in (302, 401, 429, 500):
         monkeypatch.setattr(router, "_client", lambda *_args: real_client(
             transport=httpx.MockTransport(lambda _: httpx.Response(
@@ -189,7 +189,7 @@ def test_gateway_accepts_maximum_supported_agent_history_envelope(config, monkey
         assert len(body["messages"]) == 47
         return httpx.Response(200, json={"choices": [
             {"message": {"content": "ok"}, "finish_reason": "stop"}]})
-    actual = httpx.Client
+    actual = httpx.AsyncClient
     monkeypatch.setattr(router, "_client", lambda *_args:
                         actual(transport=httpx.MockTransport(respond)))
     bounded = [{"role": "user", "content": "x"} for _ in range(47)]
