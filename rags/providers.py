@@ -131,7 +131,7 @@ class Providers:
         return bool(
             self.settings.features.enabled("model_generation")
             and self.settings.model_provider in {"openai", "anthropic"}
-            and self.settings.generation_credential
+            and (self.settings.generation_auth_mode == "none" or self.settings.generation_credential)
         )
 
     def begin_usage(self) -> None:
@@ -153,7 +153,7 @@ class Providers:
     def require_generation(self) -> None:
         self.settings.features.require("model_generation")
         if not self.has_generation:
-            raise CapabilityError("requires_provider", "This mechanism requires a configured generation model and credential")
+            raise CapabilityError("requires_provider", "This mechanism requires a configured generation model and authentication policy")
 
     def json_task(self, task: str, data: dict) -> dict:
         self.require_generation()
@@ -271,7 +271,8 @@ class Providers:
             profile = chat_profile(self.settings.chat_model, self.settings.generation_protocol)
             response = provider_transport.post(
                 self.settings.generation_endpoint + "/chat/completions",
-                headers={"Authorization": "Bearer " + self.settings.generation_credential},
+                headers={} if self.settings.generation_auth_mode == "none" else {
+                    "Authorization": "Bearer " + self.settings.generation_credential},
                 json={
                     "model": self.settings.chat_model,
                     "messages": [
@@ -282,6 +283,7 @@ class Providers:
                                          effort=self.settings.reasoning_effort),
                 },
                 timeout=remaining_timeout(90),
+                trust_env=self.settings.generation_auth_mode != "none",
             )
             payload = response_object(response, "invalid_model_output", "Generation provider returned an invalid response")
             self.record("generation", self.model_identity, payload)

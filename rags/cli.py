@@ -19,7 +19,7 @@ from rags.config import Settings
 from rags.features import MANIFEST
 
 
-PROFILES = ("offline", "postgres", "openai", "ollama", "anthropic", "inkling")
+PROFILES = ("offline", "postgres", "openai", "ollama", "anthropic", "inkling", "inkling-local")
 ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 MAX_ENV_SIZE = 65_536
 PROFILE_DISABLED = {
@@ -35,6 +35,8 @@ PROFILE_DISABLED = {
                   "multimodal", "original_images"),
     "inkling": ("embedding.openai", "embedding.fastembed", "research", "federation",
                 "multimodal", "image_captioning", "original_images"),
+    "inkling-local": ("embedding.openai", "embedding.fastembed", "research", "federation",
+                      "multimodal", "image_captioning", "original_images"),
 }
 
 
@@ -199,7 +201,10 @@ def diagnose(*, check_db: bool = True) -> dict:
     for name, provider, model, url, credential in providers:
         host = urlsplit(url).hostname or "local"
         details = f"{provider}; model={model}; endpoint_host={host}"
-        if (provider == "openai" or provider == "anthropic") and (
+        local_no_auth = name == "generation" and settings.generation_auth_mode == "none"
+        if local_no_auth:
+            details += "; auth=none (explicit loopback)"
+        if not local_no_auth and (provider == "openai" or provider == "anthropic") and (
             not credential or credential == "REPLACE_ME"
         ):
             checks.append(_check(name, "warning", details + "; credentials missing"))
@@ -334,6 +339,7 @@ def main(argv: list[str] | None = None) -> int:
                           "memory_enabled": settings.memory_enabled,
                           "model_aliases": sorted(settings.models),
                           "gateway_configured": settings.router_ready,
+                          "gateway_auth_mode": settings.gateway_auth_mode,
                           "status": ("ready" if settings.router_ready else "configuration_required")}
                 if args.json:
                     print(json.dumps(report, sort_keys=True))

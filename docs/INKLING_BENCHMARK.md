@@ -1,9 +1,12 @@
 # Inkling 2 Mini model testing
 
-The model's official name is **Inkling 2 Mini**. The default benchmark target is
-`thinkingmachines/Inkling-2-Mini`, served through Tinker's OpenAI-compatible
-sampling API. The existing embedding provider, vector index, and PostgreSQL
-configuration remain independent of this generation-model choice.
+The model's official name is **Inkling 2 Mini**. Its Apache-2.0 weights are
+downloadable; a Tinker credential is needed only for the optional hosted API.
+The benchmark supports both a local OpenAI-compatible server and Tinker's
+sampling API. Its existing default remains hosted Tinker; choose
+`--preset inkling-local` for local inference. The existing embedding provider,
+vector index, and PostgreSQL configuration remain independent of this
+generation-model choice.
 
 This runner measures a **small synthetic contract/behavior dataset** through the
 same `ModelRouter` used by RAGs agents and routed generation. It is not a full RAG
@@ -11,17 +14,20 @@ retrieval benchmark, an agent workflow benchmark, or a general model-quality
 ranking. Database throughput and the real RAG-to-agent workflow have separate
 tests. The benchmark never executes model-selected tools.
 
-## Verified provider requirements
+## Verified model and provider references
 
 Official references, checked November 23, 2026:
 
 - [Model card](https://thinkingmachines.ai/model-card/inkling-2-mini/)
 - [Canonical model checkpoint](https://huggingface.co/thinkingmachines/Inkling-2-Mini)
+- [Mainline llama.cpp GGUF weights](https://huggingface.co/ggml-org/Inkling-2-Mini-GGUF)
+- [Pinned llama.cpp b12631 runtime](https://github.com/ggml-org/llama.cpp/releases/tag/b12631)
+- [Pinned server flags and API contract](https://github.com/ggml-org/llama.cpp/blob/e300919cc704ddde3a8a8346a8714f57eeeee71b/tools/server/README.md)
 - [OpenAI-compatible endpoint and authentication](https://tinker-docs.thinkingmachines.ai/inference/openai/overview/)
 - [Chat request and response contract](https://tinker-docs.thinkingmachines.ai/inference/openai/chat-completions/)
 - [Model IDs and pricing](https://tinker-docs.thinkingmachines.ai/tinker/models/models_and_pricing/)
 
-The test endpoint is
+The optional hosted test endpoint is
 `https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1`.
 It authenticates using a Tinker API key. The separately documented production
 endpoint has distinct access/model requirements and is not assumed available.
@@ -32,7 +38,84 @@ Schema does not establish constrained output. The application validates JSON,
 citations, and tool arguments after generation. Reasoning stays separate from
 the final answer. The runner never records reasoning text.
 
-## Run the bounded live benchmark
+## Run local downloadable weights
+
+The local preset uses `http://127.0.0.1:8080/v1` with the canonical model alias
+`thinkingmachines/Inkling-2-Mini`, explicit OpenAI protocol (`max_tokens`), unset
+reasoning effort, and `auth_mode: none`. It sends no Authorization header and
+does not read any ambient key or key file, including `TINKER_API_KEY(_FILE)`.
+The production transport bypasses proxies and does not follow redirects.
+Unauthenticated mode accepts literal loopback addresses only; DNS names,
+private LAN addresses and public endpoints are rejected. HTTP must be explicitly
+enabled; the local preset supplies that permission.
+
+The reference recipe uses mainline llama.cpp **b12631**, revision
+`e300919cc704ddde3a8a8346a8714f57eeeee71b`, with the IQ4_NL artifact from
+`ggml-org/Inkling-2-Mini-GGUF`, revision
+`e8a2cecf0e78914f07cc27b9be711a9b2c7561d9`. The file
+`Inkling-2-Mini-IQ4_NL.gguf` is **17,627,940,768 bytes**, SHA-256
+`cbdf3fa9dc50a4124977980f37da4f1fa764b0cfe800d275cd43d26ce2a81af4`.
+This is a quantized deployment, with different precision from the original
+checkpoint. Its speed and behavior must be measured as that deployment.
+
+Follow the [local deployment guide](INKLING_LOCAL.md) to install the pinned
+runtime and prepare the weights. The [preparation script](../scripts/inkling_local.py)
+checks runtime, model digest and hardware before starting the server. Its
+reference configuration binds to `127.0.0.1`, uses context 4096, one server slot,
+an explicit CPU thread count, the canonical alias, the embedded Jinja template
+and `--reasoning-format deepseek`. The pinned runtime recognizes Inkling's
+specialized tool/reasoning parser from the template. No separate
+`--tool-call-parser` flag is needed. Application tool allowlists, argument
+validation and truncation checks remain in force.
+
+On a machine with the pinned runtime and sufficient resources, start the
+prepared server:
+
+```bash
+python scripts/inkling_local.py serve --server /absolute/path/to/llama-server \
+  --manifest reports/testing/inkling-local-deployment.json
+```
+
+After the server is ready, run the benchmark from another shell:
+
+```bash
+uv run --no-sync python -m rags.model_benchmark run \
+  --preset inkling-local \
+  --deployment-manifest reports/testing/inkling-local-deployment.json \
+  --output reports/inkling-mini-local-live.json
+```
+
+The manifest records the operator's runtime/build, weight repository/revision,
+artifact hash and size, quantization, context, server slots, CPU threads and
+hardware class. Its `source` remains `operator_supplied`, even when the
+preparation script checks a file digest: the benchmark cannot prove which
+weights the server actually loaded. A live loopback run without a manifest
+writes `blocked / missing_deployment_manifest`, exits 2 and makes no request.
+Invalid manifests are rejected without echoing their contents. The strict
+schema is defined in [MODEL_BENCHMARK_SPEC.md](MODEL_BENCHMARK_SPEC.md); use
+public non-secret labels, never a hostname, token, local path or endpoint URL
+in a metadata field. Authenticated remote self-hosted deployments can also
+supply a manifest.
+
+With the reference **one server slot**, client concurrency 2 and 4 measures
+queueing as well as inference. It does not measure simultaneous decoding of two
+or four requests. The benchmark's 42-request bound, six cases, 512-token cap,
+30-second request timeout and 300-second run deadline still apply. A CPU server
+may exceed those limits; timeouts and truncations remain failures. Changing a
+limit creates a different experiment and must be applied equally to paired runs.
+
+For a container-to-host or other network deployment, use `--auth-mode required`
+and explicitly configure the endpoint. With `--preset inkling-local`, required
+authentication reads the dedicated `INKLING_LOCAL_API_KEY` or
+`INKLING_LOCAL_API_KEY_FILE`; it does not fall back to `TINKER_API_KEY` or
+`OPENAI_API_KEY`. Use `--key-env YOUR_LOCAL_KEY_VARIABLE` to explicitly select a
+different dedicated credential name, with its optional `_FILE` companion.
+The hosted preset continues to default to `TINKER_API_KEY`. In `auth_mode: none`,
+no key variable or secret file is read, regardless of its configured name.
+A container's loopback address belongs to that container. The no-auth preset
+does not expose an unauthenticated LAN or public service.
+
+## Run the bounded hosted benchmark
 
 Install the project following the README, then provide a credential through the
 environment or a secret file. Do not put a literal API key on the command line.
@@ -47,7 +130,7 @@ uv run --no-sync python -m rags.model_benchmark run \
 The default run uses six cases, one warmup round, two measured repetitions per
 case at concurrency 1, 2, and 4, a 512-token output cap, explicit `low` reasoning
 effort, a 30-second request timeout, and a 300-second overall deadline. The maximum
-number of provider calls is **42**, including six warmup calls. Provider failures
+number of model requests is **42**, including six warmup calls. Provider failures
 are not retried. Deadline-exhausted cases are recorded as not run. Ordinary CI
 never needs a model key.
 
@@ -136,8 +219,14 @@ Do not describe those results as an experiment with equal effective reasoning.
 The comparator rejects failed, blocked, or fixture reports, incompatible
 measurement settings, different source/dataset hashes, missing samples,
 duplicate samples, nonfinite metrics, and summary values inconsistent with
-the recorded successful samples. It discloses different endpoints/client
-runtimes. Sequential requests still experience different provider load and
+the recorded successful samples. Local live comparisons additionally require
+valid deployment manifests whose hashes match their contents. It includes both
+declared manifests and lists differing fields, as well as different endpoints,
+protocols, authentication modes and client runtimes. If one side is hosted and
+has no deployment manifest, deployment information is marked incomplete.
+Different quantization, hardware, CPU threads, context or server slots can change
+the result; a ratio does not isolate the model architecture or prove model
+equivalence. Sequential requests still experience different provider load and
 cache state; a ratio is not proof of statistical significance.
 
 ## Metrics and report privacy
@@ -155,10 +244,17 @@ decoder-only speed. This nonstreaming runner cannot measure TTFT.
 
 Reports include Python/platform/package metadata, adapter/harness source hashes,
 dataset/control hashes, model ID, an endpoint category and hash, and bounded
-case IDs. They exclude prompts, completions, reasoning, tool arguments, endpoint
+case IDs. Supplied deployment metadata and its hash are included with the
+explicit `operator_supplied` label. They exclude prompts, completions, reasoning, tool arguments, endpoint
 URLs, credentials, secret-file paths, provider bodies, and exception messages.
 Model IDs are request labels rather than independent verification of served
 weights. Report files are written atomically with restrictive permissions.
+
+New reports use `model-contract-benchmark-v2` and `request_upper_bound`; that
+count does not imply that local requests are paid calls. Comparisons use
+`model-contract-comparison-v2` and reject older report schemas. Historical v1
+blocked reports are retained as historical evidence without rewriting their
+source identities or claiming compatibility with the new harness.
 
 Costs stay null without an operator-supplied schedule. To estimate them, add
 `--input-price`, `--output-price`, and optionally `--cached-input-price`, expressed
@@ -181,13 +277,35 @@ missing credentials, malformed JSON, truncation, unsafe tool arguments,
 nonfinite values, workload bounds, usage accounting, comparison parity, and
 report secrecy.
 
+Local contract tests also exercise a real loopback HTTP server with ambient
+proxy and secret variables present. They verify that no credentials are read or
+sent, OpenAI request fields are used, effort is unset, and deployment provenance
+is required for live comparisons. These are transport/contract checks with
+synthetic responses, not measurements of model inference.
+
 ## Current live evidence
 
-If this workspace has no model credential or reachable deployment, only the
-blocked artifact and offline contract tests are available. No throughput,
-latency, quality, cost reduction, or superiority claim can be drawn from a
-blocked artifact. Generate passing live reports with the commands above before
-making a model-performance comparison.
+The historical hosted attempt and current local hardware preflight establish
+different prerequisites. Neither produced live model latency, throughput,
+quality, cost reduction or superiority evidence. Generate passing live reports
+with the commands above before making a model-performance comparison.
+
+### Local hardware preflight on November 23, 2026
+
+The [local readiness report](../reports/inkling-local-readiness-v09.json) records
+the verified b12631 CPU executable and the available host resources. At the
+recorded inspection the host had about 9.73 GiB total RAM, 6.36 GiB available,
+no swap and no GPU. The selected IQ4_NL file is 17,627,940,768 bytes, about
+16.42 GiB before runtime/KV memory. The preparation tool reserves a further
+2 GiB as a conservative preflight allowance, not a measured peak-memory claim.
+It reported a resource blocker; the weights were not downloaded and no model
+inference was run.
+
+This is separate from hosted authentication. Smaller third-party quantizations
+alter numerical behavior and may require a different runtime/file format; they
+are not interchangeable evidence for the pinned IQ4_NL reference. An operating
+system may page memory-mapped weights, but this preflight does not treat disk
+paging as a verified usable or performant deployment.
 
 ### Verified remote attempt on November 23, 2026
 
@@ -196,11 +314,13 @@ executed the unchanged production benchmark on an isolated verification branch.
 It produced **blocked / missing_model_credential**, exited with status 2, and
 uploaded its report successfully. There were zero provider requests. This
 establishes that the workflow did not receive a usable Tinker credential; it
-does not establish whether a credential exists elsewhere in account settings.
+does not establish whether a credential exists elsewhere in account settings,
+and does not prevent downloading or running the open weights locally.
 
 The [downloaded remote report](../reports/inkling-mini-readiness-actions-v09.json)
-has matching adapter, harness, dataset and measurement-control hashes to the
-local readiness run. The downloaded ZIP was verified against its Actions
+matched the adapter, harness, dataset and measurement-control hashes of the
+contemporaneous v1 hosted readiness run. Those historical source identities are
+separate from the current v2 local harness. The downloaded ZIP was verified against its Actions
 artifact SHA-256. No latency, model-quality or token-throughput result can be
 computed from this blocked execution. The temporary branch-specific trigger
 was removed; the maintained workflow uses manual dispatch only.

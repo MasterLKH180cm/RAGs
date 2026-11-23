@@ -40,7 +40,7 @@ def _encode(payload: dict, limit: int) -> bytes:
 
 
 async def _request(url: str, headers: Mapping[str, str], encoded: bytes,
-                   deadline: float, client_factory: Callable[..., httpx.AsyncClient]) -> httpx.Response:
+                   deadline: float, client_factory: Callable[..., httpx.AsyncClient], trust_env: bool) -> httpx.Response:
     remaining = deadline - monotonic()
     if remaining <= 0:
         raise TimeoutError
@@ -49,7 +49,7 @@ async def _request(url: str, headers: Mapping[str, str], encoded: bytes,
     request_headers["Content-Type"] = "application/json"
     request_headers["Content-Length"] = str(len(encoded))
     async with asyncio.timeout(remaining):
-        async with client_factory(timeout=remaining, follow_redirects=False) as client:
+        async with client_factory(timeout=remaining, follow_redirects=False, trust_env=trust_env) as client:
             async with client.stream("POST", url, headers=request_headers, content=encoded) as response:
                 response.raise_for_status()
                 if response.headers.get("content-encoding", "identity").strip().lower() != "identity":
@@ -75,7 +75,8 @@ async def _request(url: str, headers: Mapping[str, str], encoded: bytes,
 
 def post(url: str, *, headers: Mapping[str, str], json: dict, timeout: float,
          max_request_bytes: int = MAX_REQUEST_BYTES,
-         client_factory: Callable[..., httpx.AsyncClient] = httpx.AsyncClient) -> httpx.Response:
+         client_factory: Callable[..., httpx.AsyncClient] = httpx.AsyncClient,
+         trust_env: bool = True) -> httpx.Response:
     """Post bounded JSON with an owned client; a factory is an explicit adapter seam.
 
     Async application paths already calling a synchronous provider use a short-
@@ -86,11 +87,13 @@ def post(url: str, *, headers: Mapping[str, str], json: dict, timeout: float,
         raise ValueError("Provider timeout must be finite and between 0 and 360 seconds")
     if type(max_request_bytes) is not int or not 1 <= max_request_bytes <= MAX_IMAGE_REQUEST_BYTES:
         raise ValueError("Provider request byte limit is invalid")
+    if type(trust_env) is not bool:
+        raise ValueError("Provider proxy policy must be boolean")
     deadline = monotonic() + timeout
     encoded = _encode(json, max_request_bytes)
 
     def run() -> httpx.Response:
-        return asyncio.run(_request(url, headers, encoded, deadline, client_factory))
+        return asyncio.run(_request(url, headers, encoded, deadline, client_factory, trust_env))
 
     try:
         try:

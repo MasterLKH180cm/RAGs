@@ -1,16 +1,43 @@
-"""Operator-selected chat protocols; no endpoint or credential routing here.
+"""Operator-selected chat protocols and pure local authentication validation.
 
 An OpenAI-compatible wire format does not imply identical request semantics.
 Keep provider capabilities explicit and validate structured output locally.
 """
 from dataclasses import dataclass
+from ipaddress import ip_address
 import json
 import math
+from urllib.parse import urlsplit
 
 
 INKLING_MODEL = "thinkingmachines/Inkling-2-Mini"
 TINKER_BASE_URL = "https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1"
 EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
+
+
+def validate_model_auth_mode(value: str) -> str:
+    if not isinstance(value, str) or value not in {"required", "none"}:
+        raise ValueError("Model authentication must be required or none")
+    return value
+
+
+def validate_local_no_auth_endpoint(value: str) -> None:
+    """No-auth inference is an explicit literal-loopback operation, without DNS."""
+    if (not isinstance(value, str) or not value or len(value) > 2048
+            or any(ord(char) <= 32 or ord(char) == 127 for char in value)):
+        raise ValueError("Unauthenticated inference requires an explicit clean loopback endpoint")
+    try:
+        parsed = urlsplit(value)
+        host, port = parsed.hostname, parsed.port
+        address = ip_address(host or "")
+        local = bool("%" not in (host or "") and address.is_loopback
+                     and (address.version == 4 or str(address) == "::1"))
+    except ValueError as exc:
+        raise ValueError("Unauthenticated inference requires a literal loopback IP") from exc
+    if (parsed.scheme not in {"http", "https"} or not local
+            or parsed.username is not None or parsed.password is not None
+            or "?" in value or "#" in value or port == 0):
+        raise ValueError("Unauthenticated inference requires an explicit clean loopback endpoint")
 
 
 def reasoning_effort(value):

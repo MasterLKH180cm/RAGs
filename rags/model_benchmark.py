@@ -29,19 +29,82 @@ from rags.agents.config import AgentPlatformConfig, MODEL
 from rags.agents.router import ModelReply, ModelRouter
 from rags.model_profiles import (
     INKLING_MODEL, TINKER_BASE_URL, chat_profile, effort_from_env, reasoning_effort, strict_json,
+    validate_local_no_auth_endpoint, validate_model_auth_mode,
 )
 from rags.registry import CapabilityError
 
-SCHEMA_VERSION = "model-contract-benchmark-v1"
+SCHEMA_VERSION = "model-contract-benchmark-v2"
 VALIDATION_VERSION = "synthetic-exact-contracts-v1"
+DEPLOYMENT_VERSION = "model-deployment-v1"
+LOCAL_BASE_URL = "http://127.0.0.1:8080/v1"
 ID_PATTERN = r"[a-z][a-z0-9_-]{0,63}"
 ENV_PATTERN = re.compile(r"[A-Z][A-Z0-9_]{0,127}\Z")
 HASH_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
 KINDS = ("json", "grounded", "tool")
+PUBLIC_LABEL_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.+-]{0,95}$"
 
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+
+
+class DeploymentManifest(StrictModel):
+    """Bounded public deployment claims, not an attestation of served weights."""
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    schema_version: Literal["model-deployment-v1"]
+    source: Literal["operator_supplied"]
+    runtime_name: str = Field(pattern=PUBLIC_LABEL_PATTERN, max_length=96)
+    runtime_version: str = Field(pattern=PUBLIC_LABEL_PATTERN, max_length=96)
+    runtime_revision: str = Field(pattern=r"^[0-9a-f]{40}$", min_length=40, max_length=40)
+    model_repository: str = Field(
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+        max_length=193,
+    )
+    model_revision: str = Field(pattern=r"^[0-9a-f]{40}$", min_length=40, max_length=40)
+    model_artifact: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.+-]{0,159}$", max_length=160)
+    model_sha256: str = Field(pattern=r"^[0-9a-f]{64}$", min_length=64, max_length=64)
+    model_bytes: int = Field(ge=1, le=2**50)
+    quantization: str = Field(pattern=PUBLIC_LABEL_PATTERN, max_length=96)
+    context_tokens: int = Field(ge=128, le=1048576)
+    server_parallel_slots: int = Field(ge=1, le=256)
+    server_threads: int = Field(ge=1, le=1024)
+    hardware_class: Literal["cpu", "cuda", "rocm", "metal", "tpu", "other"]
+    hardware_label: str = Field(pattern=PUBLIC_LABEL_PATTERN, max_length=96)
+    host_memory_bytes: int = Field(ge=1, le=2**50)
+    accelerator_count: int = Field(ge=0, le=1024)
+    accelerator_memory_bytes: int = Field(ge=0, le=2**50)
+
+    @model_validator(mode="after")
+    def validate_hardware(self):
+        if self.hardware_class == "cpu" and (self.accelerator_count or self.accelerator_memory_bytes):
+            raise ValueError("CPU deployment cannot declare an accelerator")
+        if bool(self.accelerator_count) != bool(self.accelerator_memory_bytes):
+            raise ValueError("Accelerator count and memory must be supplied together")
+        if self.hardware_class not in {"cpu", "other"} and not self.accelerator_count:
+            raise ValueError("Accelerator deployment requires accelerator information")
+        return self
+
+
+def load_deployment_manifest(path: Path | None) -> DeploymentManifest | None:
+    if path is None:
+        return None
+    if not path.is_file() or path.stat().st_size > 16384:
+        raise ValueError("Deployment manifest must be a bounded JSON file")
+    with path.open("rb") as handle:
+        raw = handle.read(16385)
+    if len(raw) > 16384:
+        raise ValueError("Deployment manifest exceeds byte limit")
+    return DeploymentManifest.model_validate(strict_json(raw))
+
+
+def _is_loopback(hostname: str | None) -> bool:
+    if hostname == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(hostname or "").is_loopback
+    except ValueError:
+        return False
 
 
 class ExtractedValue(StrictModel):
@@ -174,6 +237,7 @@ class Options:
     model: str = INKLING_MODEL
     base_url: str = field(default=TINKER_BASE_URL, repr=False)
     key_env: str = "TINKER_API_KEY"
+    auth_mode: str = "required"
     protocol: str = "auto"
     effort: str | float | None = "low"
     concurrency: tuple[int, ...] = (1, 2, 4)
@@ -184,6 +248,17 @@ class Options:
     max_duration_seconds: float = 300.
     allow_loopback_http: bool = False
     prices: Prices | None = None
+    deployment_manifest: DeploymentManifest | None = field(default=None, repr=False)
+
+    @classmethod
+    def for_preset(cls, preset: str, **overrides) -> Options:
+        if not isinstance(preset, str) or preset not in {"inkling-tinker", "inkling-local"}:
+            raise ValueError("Unsupported model benchmark preset")
+        defaults = {} if preset == "inkling-tinker" else {
+            "base_url": LOCAL_BASE_URL, "auth_mode": "none", "protocol": "openai",
+            "effort": None, "allow_loopback_http": True, "key_env": "INKLING_LOCAL_API_KEY",
+        }
+        return cls(**(defaults | overrides))
 
     def __post_init__(self):
         if not isinstance(self.model, str) or not MODEL.fullmatch(self.model):
@@ -195,14 +270,15 @@ class Options:
         if not isinstance(self.base_url, str) or len(self.base_url) > 2048:
             raise ValueError("Invalid benchmark endpoint")
         url = urlsplit(self.base_url)
-        local = url.hostname == "localhost"
-        try:
-            local = local or ipaddress.ip_address(url.hostname or "").is_loopback
-        except ValueError:
-            pass
+        local = _is_loopback(url.hostname)
         if (url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password
                 or url.query or url.fragment or (url.scheme == "http" and not (local and self.allow_loopback_http))):
             raise ValueError("Endpoint requires clean HTTPS or explicitly allowed loopback HTTP")
+        validate_model_auth_mode(self.auth_mode)
+        if self.auth_mode == "none":
+            validate_local_no_auth_endpoint(self.base_url)
+            if self.protocol != "openai" or self.effort is not None:
+                raise ValueError("Unauthenticated local inference requires explicit OpenAI protocol and unset effort")
         if not isinstance(self.concurrency, tuple) or not 1 <= len(self.concurrency) <= 3 or any(
             type(value) is not int or value not in (1, 2, 4) for value in self.concurrency
         ) or len(set(self.concurrency)) != len(self.concurrency):
@@ -217,6 +293,11 @@ class Options:
         chat_profile(self.model, self.protocol).parameters(max_output_tokens=self.output_tokens, effort=self.effort)
         if self.prices is not None and not isinstance(self.prices, Prices):
             raise ValueError("Invalid price schedule")
+        if self.deployment_manifest is not None:
+            if not isinstance(self.deployment_manifest, DeploymentManifest):
+                raise ValueError("Invalid deployment manifest")
+            object.__setattr__(self, "deployment_manifest", DeploymentManifest.model_validate(
+                self.deployment_manifest.model_dump()))
 
 
 def _hash(value) -> str:
@@ -227,7 +308,7 @@ def _hash(value) -> str:
 def _runtime() -> dict:
     root = Path(__file__).parent
     sources = {}
-    for relative in ("agents/router.py", "agents/config.py", "model_profiles.py"):
+    for relative in ("agents/router.py", "agents/config.py", "model_profiles.py", "provider_transport.py"):
         path = root / relative
         sources[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
     try:
@@ -406,14 +487,18 @@ def run_benchmark(options: Options, cases=None, *, environment=None,
     runtime = _runtime()
     measurement = _measurement(options, cases, runtime)
     hostname = urlsplit(options.base_url).hostname
+    deployment = None if options.deployment_manifest is None else options.deployment_manifest.model_dump()
     report = {"schema_version": SCHEMA_VERSION, "status": "blocked", "evidence_kind": evidence_kind,
               "created_at": datetime.now(timezone.utc).isoformat(), "runtime": runtime,
               "target": {"model": options.model, "protocol": chat_profile(options.model, options.protocol).protocol,
+                         "auth_mode": options.auth_mode,
                          "endpoint_kind": "tinker_sampling" if options.base_url.rstrip("/") == TINKER_BASE_URL else
-                                          "loopback" if hostname in {"localhost", "127.0.0.1", "::1"} else "operator_endpoint",
+                                          "loopback" if _is_loopback(hostname) else "operator_endpoint",
                          "endpoint_sha256": hashlib.sha256(options.base_url.rstrip("/").encode()).hexdigest()},
+              "deployment_manifest": deployment,
+              "deployment_sha256": None if deployment is None else _hash(deployment),
               "measurement": measurement, "measurement_sha256": _hash(measurement), "block_reason": None,
-              "warmup": None, "phases": [], "paid_request_upper_bound": len(cases) * (
+              "warmup": None, "phases": [], "request_upper_bound": len(cases) * (
                   options.warmup_rounds + options.repetitions * len(options.concurrency)),
               "prices": None if options.prices is None else {
                   "input_per_million": options.prices.input_per_million,
@@ -427,16 +512,30 @@ def run_benchmark(options: Options, cases=None, *, environment=None,
                               "Completion throughput includes reported reasoning tokens when the provider counts them.",
                               "Model IDs are request labels, not independent verification of served weights.",
                               "No streaming is used, so TTFT and decoder-only tokens/second are not measured."]}
-    try:
-        key = _read_key(options.key_env, os.environ if environment is None else environment)
-    except (ValueError, OSError, UnicodeError):
-        report["block_reason"] = "credential_configuration_invalid"
+    if deployment is not None:
+        report["limitations"].extend([
+            "Deployment metadata is operator supplied; it does not attest which weights the HTTP server loaded.",
+            "Quantized deployment results do not establish native-checkpoint or hosted-service equivalence.",
+            "Client concurrency above declared server_parallel_slots includes queueing, not parallel decoding.",
+        ])
+    if evidence_kind == "http_contract_fixture":
+        report["limitations"].append("HTTP fixture timings are local contract checks, not model-performance evidence.")
+    if evidence_kind == "live_model" and report["target"]["endpoint_kind"] == "loopback" and deployment is None:
+        report["block_reason"] = "missing_deployment_manifest"
         return report
-    if not key:
-        report["block_reason"] = "missing_model_credential"
-        return report
+    key = ""
+    if options.auth_mode == "required":
+        try:
+            key = _read_key(options.key_env, os.environ if environment is None else environment)
+        except (ValueError, OSError, UnicodeError):
+            report["block_reason"] = "credential_configuration_invalid"
+            return report
+        if not key:
+            report["block_reason"] = "missing_model_credential"
+            return report
     config = AgentPlatformConfig(
         gateway_url=options.base_url.rstrip("/"), gateway_key=key, models={"benchmark": options.model},
+        gateway_auth_mode=options.auth_mode,
         model_options={"benchmark": {"protocol": options.protocol, "reasoning_effort": options.effort}},
         allow_http=options.allow_loopback_http, max_output_tokens=options.output_tokens,
     )
@@ -449,8 +548,6 @@ def run_benchmark(options: Options, cases=None, *, environment=None,
         item["summary"]["passed"] == item["summary"]["planned"]
         for item in [report["warmup"], *report["phases"]]
     ) else "failed"
-    if evidence_kind == "http_contract_fixture":
-        report["limitations"].append("HTTP fixture timings are local contract checks, not model-performance evidence.")
     return report
 
 
@@ -475,16 +572,42 @@ def _validated_comparison_report(report: dict) -> None:
         if not isinstance(measurement.get(key), str) or not HASH_PATTERN.fullmatch(measurement[key]):
             raise ValueError("Missing benchmark source identity")
     target = report.get("target")
-    if not isinstance(target, dict) or not isinstance(target.get("model"), str) or not MODEL.fullmatch(target["model"]):
+    if (not isinstance(target, dict)
+            or set(target) != {"model", "protocol", "auth_mode", "endpoint_kind", "endpoint_sha256"}
+            or not isinstance(target.get("model"), str) or not MODEL.fullmatch(target["model"])):
         raise ValueError("Invalid benchmark target")
+    validate_model_auth_mode(target["auth_mode"])
+    if not isinstance(target["protocol"], str) or target["protocol"] not in {"openai", "tinker"}:
+        raise ValueError("Benchmark target must record a resolved protocol")
+    if (not isinstance(target["endpoint_kind"], str)
+            or target["endpoint_kind"] not in {"tinker_sampling", "loopback", "operator_endpoint"}):
+        raise ValueError("Invalid endpoint category")
+    if target["auth_mode"] == "none" and target["endpoint_kind"] != "loopback":
+        raise ValueError("Unauthenticated benchmark must use literal loopback")
     if not isinstance(target.get("endpoint_sha256"), str) or not HASH_PATTERN.fullmatch(target["endpoint_sha256"]):
         raise ValueError("Invalid endpoint identity")
+    if "deployment_manifest" not in report or "deployment_sha256" not in report:
+        raise ValueError("Missing deployment provenance fields")
+    deployment = report["deployment_manifest"]
+    if deployment is None:
+        if report["deployment_sha256"] is not None or target["endpoint_kind"] == "loopback":
+            raise ValueError("Missing local deployment manifest")
+    elif (DeploymentManifest.model_validate(deployment).model_dump() != deployment
+          or report["deployment_sha256"] != _hash(deployment)):
+        raise ValueError("Deployment manifest identity is invalid")
     if not isinstance(measurement["concurrency"], list):
         raise ValueError("Invalid benchmark concurrency controls")
     Options(model=target["model"], protocol=target.get("protocol"), effort=measurement["reasoning_effort"],
+            auth_mode=target["auth_mode"],
+            base_url=LOCAL_BASE_URL if target["auth_mode"] == "none" else TINKER_BASE_URL,
+            allow_loopback_http=target["auth_mode"] == "none",
             concurrency=tuple(measurement["concurrency"]), repetitions=measurement["repetitions"],
             warmup_rounds=measurement["warmup_rounds"], output_tokens=measurement["max_output_tokens"],
             timeout_seconds=measurement["request_timeout_seconds"], max_duration_seconds=measurement["max_duration_seconds"])
+    expected_bound = measurement["case_count"] * (
+        measurement["warmup_rounds"] + measurement["repetitions"] * len(measurement["concurrency"]))
+    if type(report.get("request_upper_bound")) is not int or report["request_upper_bound"] != expected_bound:
+        raise ValueError("Request upper bound does not match measurement controls")
     phases = report.get("phases")
     if not isinstance(phases, list) or not 1 <= len(phases) <= 3:
         raise ValueError("Invalid benchmark phases")
@@ -572,14 +695,26 @@ def compare_reports(baseline: dict, target: dict) -> dict:
                         "p50_latency_ratio_baseline_over_target": left["p50_ms"] / right["p50_ms"]
                             if right["p50_ms"] else None,
                         "small_sample_warning": left["passed"] < 20 or right["passed"] < 20})
-    return {"schema_version": "model-contract-comparison-v1", "status": "comparable",
+    baseline_deployment, target_deployment = baseline["deployment_manifest"], target["deployment_manifest"]
+    differences = sorted(key for key in set(baseline_deployment or {}) | set(target_deployment or {})
+                         if (baseline_deployment or {}).get(key) != (target_deployment or {}).get(key))
+    return {"schema_version": "model-contract-comparison-v2", "status": "comparable",
             "baseline_model": baseline["target"]["model"], "target_model": target["target"]["model"],
             "measurement_sha256": target["measurement_sha256"],
             "different_endpoints": baseline["target"]["endpoint_sha256"] != target["target"]["endpoint_sha256"],
+            "different_protocols": baseline["target"]["protocol"] != target["target"]["protocol"],
+            "different_auth_modes": baseline["target"]["auth_mode"] != target["target"]["auth_mode"],
             "different_client_runtime": baseline.get("runtime") != target.get("runtime"),
+            "baseline_deployment": baseline_deployment, "target_deployment": target_deployment,
+            "different_deployments": baseline_deployment != target_deployment,
+            "deployment_fields_differ": differences,
+            "deployment_information_complete": baseline_deployment is not None and target_deployment is not None,
             "reasoning_effort_unset": target["measurement"]["reasoning_effort"] is None,
             "phases": results,
             "limitations": ["Sequential runs can differ because of provider load and prompt caching.",
+                            "Deployment claims are operator supplied and do not attest served weights.",
+                            "Different quantization, hardware, context or server slots affect performance.",
+                            "Client concurrency above server slots includes queueing, not parallel decoding.",
                             "Parity does not prove statistical significance or model equivalence."]}
 
 
@@ -617,19 +752,22 @@ def main(argv: list[str] | None = None) -> int:
     parser = _SafeArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     run = subparsers.add_parser("run", help="Run real model requests; no offline fallback")
-    run.add_argument("--model", default=INKLING_MODEL)
-    run.add_argument("--base-url", default=TINKER_BASE_URL)
-    run.add_argument("--key-env", default="TINKER_API_KEY")
-    run.add_argument("--protocol", choices=("auto", "openai", "tinker"), default="auto")
-    run.add_argument("--reasoning-effort", default="low", help="Supported name, 0..0.99, or unset")
+    run.add_argument("--preset", choices=("inkling-tinker", "inkling-local"), default="inkling-tinker")
+    run.add_argument("--model")
+    run.add_argument("--base-url")
+    run.add_argument("--key-env", help="Credential variable name; defaults to the selected preset's dedicated key")
+    run.add_argument("--auth-mode", choices=("required", "none"))
+    run.add_argument("--protocol", choices=("auto", "openai", "tinker"))
+    run.add_argument("--reasoning-effort", help="Supported name, 0..0.99, or unset; preset supplies the default")
     run.add_argument("--concurrency", nargs="+", type=int, default=[1, 2, 4])
     run.add_argument("--repetitions", type=int, default=2)
     run.add_argument("--warmup-rounds", type=int, default=1)
     run.add_argument("--output-tokens", type=int, default=512)
     run.add_argument("--timeout-seconds", type=float, default=30.)
     run.add_argument("--max-duration-seconds", type=float, default=300.)
-    run.add_argument("--allow-loopback-http", action="store_true")
+    run.add_argument("--allow-loopback-http", action="store_true", default=None)
     run.add_argument("--dataset", type=Path)
+    run.add_argument("--deployment-manifest", type=Path)
     run.add_argument("--input-price", type=float)
     run.add_argument("--output-price", type=float)
     run.add_argument("--cached-input-price", type=float)
@@ -646,12 +784,19 @@ def main(argv: list[str] | None = None) -> int:
             prices = None
             if any(p is not None for p in (args.input_price, args.output_price, args.cached_input_price)):
                 prices = Prices(args.input_price, args.output_price, args.cached_input_price)
-            options = Options(model=args.model, base_url=args.base_url, key_env=args.key_env, protocol=args.protocol,
-                              effort=None if args.reasoning_effort == "unset" else effort_from_env(args.reasoning_effort),
-                              concurrency=tuple(args.concurrency), repetitions=args.repetitions,
-                              warmup_rounds=args.warmup_rounds, output_tokens=args.output_tokens,
-                              timeout_seconds=args.timeout_seconds, max_duration_seconds=args.max_duration_seconds,
-                              allow_loopback_http=args.allow_loopback_http, prices=prices)
+            overrides = {key: getattr(args, key) for key in (
+                "model", "base_url", "key_env", "auth_mode", "protocol", "allow_loopback_http")
+                if getattr(args, key) is not None}
+            if args.reasoning_effort is not None:
+                overrides["effort"] = (None if args.reasoning_effort == "unset"
+                                       else effort_from_env(args.reasoning_effort))
+            options = Options.for_preset(
+                args.preset, **overrides,
+                concurrency=tuple(args.concurrency), repetitions=args.repetitions,
+                warmup_rounds=args.warmup_rounds, output_tokens=args.output_tokens,
+                timeout_seconds=args.timeout_seconds, max_duration_seconds=args.max_duration_seconds,
+                prices=prices, deployment_manifest=load_deployment_manifest(args.deployment_manifest),
+            )
             report = run_benchmark(options, load_cases(args.dataset))
         write_report(args.output, report)
         print(json.dumps({"status": report["status"], "block_reason": report.get("block_reason")}, allow_nan=False))

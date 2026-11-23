@@ -51,13 +51,14 @@ def describe_image(raw: bytes, media_type: str, settings: Settings) -> str:
     )
     if settings.model_provider == "openai":
         profile = chat_profile(settings.chat_model, settings.generation_protocol)
-        if not settings.generation_credential:
+        if settings.generation_auth_mode == "required" and not settings.generation_credential:
             credential = ("RAGS_GENERATION_API_KEY or RAGS_GENERATION_API_KEY_FILE"
                           if profile.protocol == "tinker" else "RAGS_GENERATION_API_KEY or OPENAI_API_KEY")
             raise ValueError(credential + " is required for image description")
         response = provider_transport.post(
             settings.generation_endpoint + "/chat/completions",
-            headers={"Authorization": "Bearer " + settings.generation_credential},
+            headers={} if settings.generation_auth_mode == "none" else {
+                "Authorization": "Bearer " + settings.generation_credential},
             json={
                 "model": settings.chat_model,
                 "messages": [{
@@ -75,6 +76,7 @@ def describe_image(raw: bytes, media_type: str, settings: Settings) -> str:
             },
             timeout=remaining_timeout(90),
             max_request_bytes=provider_transport.MAX_IMAGE_REQUEST_BYTES,
+            trust_env=settings.generation_auth_mode != "none",
         )
     else:
         if not settings.generation_credential:

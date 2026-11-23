@@ -1,0 +1,48 @@
+{
+  "schema_version": "inkling-local-readiness-v1",
+  "evidence_kind": "hardware_preflight",
+  "created_at": "2026-11-23T03:49:22.692559+00:00",
+  "status": "blocked",
+  "block_reasons": [
+    "insufficient_available_memory",
+    "model_weights_missing"
+  ],
+  "provider_requests": 0,
+  "model_inference_executed": false,
+  "host": {
+    "system": "Linux",
+    "architecture": "x86_64",
+    "logical_cpus": 9,
+    "memory_total_bytes": 10451427328,
+    "memory_available_bytes": 6828683264,
+    "disk_free_bytes": 61571731456,
+    "accelerator_policy": "cpu_only"
+  },
+  "runtime": {
+    "status": "matched",
+    "expected_version": "b12631",
+    "expected_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+    "executable_sha256": "0a8a55cd771298988dbf7773ff0459a8f51e36f55db2552f6ab7bcd5f76df349"
+  },
+  "model": {
+    "repository": "ggml-org/Inkling-2-Mini-GGUF",
+    "revision": "e8a2cecf0e78914f07cc27b9be711a9b2c7561d9",
+    "artifact": "Inkling-2-Mini-IQ4_NL.gguf",
+    "bytes": 17627940768,
+    "sha256": "cbdf3fa9dc50a4124977980f37da4f1fa764b0cfe800d275cd43d26ce2a81af4",
+    "quantization": "IQ4_NL",
+    "status": "missing"
+  },
+  "policy": {
+    "memory_reserve_bytes": 2147483648,
+    "disk_reserve_bytes": 268435456,
+    "context_tokens": 4096,
+    "server_parallel_slots": 1
+  },
+  "notes": [
+    "This preflight is not a model latency, throughput or quality measurement.",
+    "The memory reserve is a conservative recipe policy, not a universal hardware minimum.",
+    "IQ4_NL is a quantized artifact, not the native NVFP4/MXFP8 checkpoint.",
+    "This recipe uses CPU RAM only; it does not add GPU memory to available RAM."
+  ]
+}

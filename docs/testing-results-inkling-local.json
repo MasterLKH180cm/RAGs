@@ -1,0 +1,243 @@
+{
+  "schema_version": "rags-inkling-local-validation-v1",
+  "recorded_at_utc": "2026-11-23T04:02:21.765776+00:00",
+  "scope": "Self-hosted Inkling follow-up; final complete core and actual PostgreSQL pytest run",
+  "source_identity": {
+    "base_revision": "3620f77e6fbabd6fd59076a0ecac735dd8bcf9fa",
+    "tested_tree": "working_tree_follow_up_to_base_revision",
+    "manifest_hash_algorithm": "SHA-256 of UTF-8 JSON path-to-file-SHA256 object, sort_keys=True, separators=(comma,colon), ensure_ascii=True",
+    "production_files": 49,
+    "production_source_sha256": "ec26112da7aa4d2f377e4f54cc74278f84ecb1d060020fbec42da2d718952d07",
+    "production_file_sha256": {
+      "rags/__init__.py": "eb421d96c421e8977ce6970f51f13d67d7b88da34996f6370bf5bc80408c96c2",
+      "rags/__main__.py": "47bea09506b87026270063771d6660147e220b5a9a0e47a7bec4ddcbc3cfeaf9",
+      "rags/admin.py": "6767120b1695a6004fa9eac97bdd44023c63ec1f769d4106ef750e918d5268ab",
+      "rags/admission.py": "3bbd1906a976ebef13bf6c9e54c837af68b48a88537976fa63d5a0d74a0d380b",
+      "rags/admission_eval.py": "a99abc96bbf74884cb1f77cb31b5f97eeb202e1a01642c5d6a561be5b119c319",
+      "rags/agents/__init__.py": "095d5fc505a5edd2352d70201017f1854cf21f50eb35bb501477902c00d5dbc3",
+      "rags/agents/api.py": "cf2ef18216085a99157af991e7ec57d55eeaee783adb6afe572e90f839f966c9",
+      "rags/agents/config.py": "f1db66fb6cb2e6e342759b453576d376bd5e3a2bb76d4770245dfcea0cd28ec7",
+      "rags/agents/deadline.py": "30b2ac4c50ab68525c4b56a73172226e581bab4ebd616d1b9808ec8ce0ceb671",
+      "rags/agents/engine.py": "918fc2fabb166a3412c7829caa0bca4b54d1390809e46a9a28ebc017fb123083",
+      "rags/agents/memory.py": "f879ddf26506e19702e8a8339a4ddd56c84f1ba3651f04547d875c117c442ee1",
+      "rags/agents/router.py": "2c1b3858179fa9ab3b21c06ce54fa031cbc05a0da5bbb84fc4321cd84c7cd955",
+      "rags/agents/state.py": "b3e00810cbdf31e53a81b564f9432ef735afd4af9169ab6e846bdc4558e6b1ff",
+      "rags/agents/templates.py": "c7e1f6b194e0532c1eb461a39f6063122c303a9b17761235547878100bd6f00f",
+      "rags/agents/workflow.py": "836627aa263fe253762490bfbc2d08277fa98381c5e07cc0428c3a9cd567c646",
+      "rags/answerability.py": "8b0c107bb16be006fbe49c2118be97cc673970882390c23f4c616737b361345e",
+      "rags/api.py": "2d776cdb527ae568bca5804752dada5c447fafacce9c25a46badbcd2e30305f5",
+      "rags/auth.py": "74902025161b3432d293155bb0d2dc5d7b567fb43119a8bc0e7dd44f472a551d",
+      "rags/backends.py": "294d28f4dc330ab7eca6789f6172dd7a5c406f7f80879268d9738b6c177a725a",
+      "rags/benchmark.py": "2940b417b7ede3bdcba17f7e025b4338157386c5f2e019c08436896bd734879e",
+      "rags/chunking.py": "a785c6c44bf3d614bbdfef375b82db778e1524d51eade55aa32665e16c1d0c06",
+      "rags/cli.py": "e7bf582a21992def432e7976be52490be38418eeb831d2c08f2ce846295d2e5f",
+      "rags/config.py": "c95d2672de133f49fdde8e5e4b38806ed2dd537aa92654be801c85884abfed5c",
+      "rags/evaluate.py": "4c9706ad22e8fe07c3aa374586fcd969356868797aafe79a20f5158fc854018a",
+      "rags/features.py": "9c5f07f6fae2a7615e57e8cae052f0163a1316d847cd477f0ac7074b9ac21ae1",
+      "rags/limits.py": "ee20a69c4c3057e5c2e4b9bb245dd42b1b5ebd597007a5c9b0a46209598059de",
+      "rags/mcp_server.py": "28fd9315513763acf2279fd18c64ac72ec0c22c5cee4128f99ed3fadc5b84a3f",
+      "rags/migrate.py": "34da959c49bb316e54c385d2a64ad289f3216902aa1478b63ebb39c2c98f6a05",
+      "rags/model_benchmark.py": "7204eaf0ce55fb644ae043e7e4513574d177ca2cffdbad883aa259289ba06ed9",
+      "rags/model_profiles.py": "c1977e25a425e7b502848e0c550ba4c04326716326a3f5e730f638d9e2f9ed28",
+      "rags/monitoring.py": "d44e303ae630cf69378b5919d1ebf304a6c01b9bd6e2e25db2dd61ea590bb67b",
+      "rags/multimodal.py": "8b728901107882d3f01d68a3f3310affba7a4ca68063ef88ecfa788c8e5eb982",
+      "rags/native.py": "2cde4f35242120df7c671f48d3da03911ac679fa764add9d8fd1c7937de34e46",
+      "rags/postgres.py": "88012879aff9343250b0b772a47e5b80157629f4bd8c510e0900d5af13dc562b",
+      "rags/provider_transport.py": "4d6004b15f132593c199e0b9b56baa359b70363bea94415b538a7083a1bc62da",
+      "rags/providers.py": "5bb3cd252e49a939d0f549227ccfe121b0500898a81a36b1ce9c1a58a310f39f",
+      "rags/registry.py": "125ba7209a2b503be7b1253e1b5c3c2d474133132eccf4034b212be76ca41418",
+      "rags/research/__init__.py": "7166dd4d357e8625fdfdb5ac49b7a030993de3b791ad1b87ba920ba0fbf927fc",
+      "rags/research/common.py": "d63cba81438cf528fb08eb0bd04322324c33194d9ba219b1cd8dffa81abf7eb3",
+      "rags/research/lightrag_adapter.py": "f21835b3c20ab57dc8743a1259def4ca14172ceadd921d34835a86bdf17dfec9",
+      "rags/research/raptor_adapter.py": "e5b4dd013a35dfacc2e24c595fdbf7bfa679d758bb30087cfaac3557062e1420",
+      "rags/research_protocol.py": "5d8eba40e4d1cc371827d75c62e60ccbb48c36895aa11f40a3c50df749c5b870",
+      "rags/research_service.py": "abccffa7ed744893b14b9eb200c0be70a47cad4568b92fd2162ceb6ae3cb3c1a",
+      "rags/research_worker.py": "63c74da9d8d42a9e83852b39332b3b8c6dc8cb272b280996df0ccfb8a3ece85d",
+      "rags/retrieval.py": "76c45ac0b6b2787e4908c239c8d07ca0d26adc6dd14348bc9faea01d9a6ce8f0",
+      "rags/storage.py": "f6467e87584a969fec12bf360b04bc7878f49f8ac2abbf06191b8a46ddcde025",
+      "rags/tokenization.py": "f70e67391d8cab706bd6123db95c356e83043850ffe3623d9af1fcadef4b25a1",
+      "rags/verify_admission.py": "284e0f583dc95382e45a4ed88dee87b2b5ba6c8f0910e347109905dcfb40be4d",
+      "rags/vision.py": "7bbac95a663a409fd5f897b0d452e4bb67217ca320268089b163df1a2c7c0f1f"
+    },
+    "test_inputs_files": 56,
+    "test_inputs_sha256": "9f9103d8ebc8836bf9a65afe5f0d9804e3e942a9db1a5b03c358a57521d22801",
+    "supplemental_file_sha256": {
+      ".env.example": "4859d9a61056c6aba5c924e73c259ce27f5152da57d10e80961151614004f5c2",
+      "compose.yaml": "c294115a631471e8f8208884630768a6544a2ba424d3e4760b4b1afc9d2bc1ab",
+      "pyproject.toml": "52ea25ed79610346b2daa4dfe9f592596fda18c5b18d893fcd3e680c877612ce",
+      "rags/templates/inkling-local.env": "654c13f8fd32ae481bb886131ad58fc522fbfab4ae4976c2bf231c023953f6b9",
+      "scripts/check_coverage.py": "3ca07c59d35d92c61db0cb8bedbef9544556baf837e7774df6e8305d62f7b43c",
+      "scripts/inkling_local.py": "b05b8c4973c1ef4bde1c92ae372d74e2f147cee3092c100b11ce6689584ff0fc",
+      "uv.lock": "34971d7f5e1e87473196f23870eaf525c4591b016b4a40e2623fe418360def02"
+    }
+  },
+  "pytest": {
+    "status": "passed",
+    "python_version": "3.12.14",
+    "selection": "not external or postgres",
+    "require_no_skips": true,
+    "collected": 1338,
+    "selected": 1333,
+    "passed": 1333,
+    "unit": 903,
+    "integration_including_postgres": 430,
+    "postgres_included": 27,
+    "ordinary_core": 1306,
+    "deselected_external": 5,
+    "skipped": 0,
+    "failures": 0,
+    "errors": 0,
+    "junit_elapsed_seconds": 47.763,
+    "feature_suite_cases_included": {
+      "tests/test_inkling_local_setup.py": 18,
+      "tests/test_model_benchmark.py": 142,
+      "tests/test_local_model_auth.py": 45,
+      "tests/test_agent_engine_integration.py": 39,
+      "tests/test_postgres_storage.py": 23,
+      "tests/test_agent_postgres.py": 4
+    },
+    "deselected_cases": [
+      {
+        "nodeid": "tests/test_backends.py::test_real_colbert_checkpoint_query_document_encoding_and_maxsim",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_multimodal.py::test_real_clip_text_image_and_image_image_retrieval",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_research_upstreams.py::test_actual_raptor_umap_gmm_summary_retrieval_and_source_lineage",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_raptor"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_research_upstreams.py::test_actual_lightrag_extracts_and_retrieves_hybrid_graph_with_source_mapping",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_lightrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_semantic_encoder.py::test_real_bge_semantic_boundaries_and_dense_retrieval",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external"
+        ],
+        "selected": false
+      }
+    ]
+  },
+  "postgresql": {
+    "postgresql": "17.12",
+    "pgvector": "0.8.7",
+    "deployment": "disposable_local_process",
+    "test_cases_included_in_pytest": 27,
+    "versions_queried_from_executing_service": true
+  },
+  "coverage": {
+    "scope": "complete production Python package; ordinary parent-process unit+integration",
+    "files": 49,
+    "line_percent": 84.93589743589743,
+    "branch_percent": 77.45302713987473,
+    "minimum_lines": 80,
+    "minimum_branches": 72,
+    "passed": true
+  },
+  "static_checks": {
+    "ruff_E4_E7_E9_F": "passed",
+    "ruff_B_RUF021": "passed",
+    "git_diff_check": "passed",
+    "coverage_omissions_or_lowered_floors": false
+  },
+  "local_fixture_contracts": {
+    "evidence_kind": "synthetic_local_http_integration",
+    "actual_model_inference": false,
+    "verified": [
+      "direct_generation",
+      "vision_adapter_transport",
+      "native_router_tool_selection",
+      "explicit_openai_max_tokens_contract",
+      "authorization_header_absent_in_auth_none",
+      "ambient_proxy_bypass",
+      "unused_hosted_secret_files_not_read",
+      "tenant_authorization_before_generation",
+      "invalid_or_truncated_output_rejected",
+      "local_benchmark_dedicated_credential_selection",
+      "strict_deployment_manifest_and_comparison"
+    ],
+    "limits": "HTTP fixtures do not certify Inkling weights, parser compatibility, latency, throughput, quality or cost; the CPU recipe does not claim vision support."
+  },
+  "approval_compatibility": {
+    "fingerprint_binds": [
+      "gateway_endpoint",
+      "gateway_auth_mode"
+    ],
+    "pre_patch_pending_approvals": "cannot_resume_under_changed_fingerprint; start a new run and approve again",
+    "historical_read_access": "preserved with tenant and owner authorization",
+    "credential_rotation_same_patched_contract": "compatible"
+  },
+  "local_model_readiness": {
+    "report": "reports/inkling-local-readiness-v09.json",
+    "sha256": "a585e65ce922239ef3fd02d05bf76d51c07bd56829e38bcdac4e31c9c8ba9d2f",
+    "evidence_kind": "hardware_preflight",
+    "status": "blocked",
+    "block_reasons": [
+      "insufficient_available_memory",
+      "model_weights_missing"
+    ],
+    "provider_requests": 0,
+    "model_inference_executed": false,
+    "host_memory_total_bytes": 10451427328,
+    "host_memory_available_bytes": 6828683264,
+    "model_artifact": "Inkling-2-Mini-IQ4_NL.gguf",
+    "model_bytes": 17627940768,
+    "runtime_status": "matched",
+    "performance_or_quality_result": null
+  },
+  "historical_hosted_evidence_preserved": {
+    "docs/testing-results-v09.json": {
+      "sha256": "fe4b2670e1f1a4e88641c9636915814f6a3303b9d31b1aab073661d4efa9e878",
+      "unchanged_from_base_revision": true
+    },
+    "reports/inkling-mini-readiness-v09.json": {
+      "sha256": "88cb16ca3e2d5f04d2bf5bda3d1c6ef60ccc354926a4b3abfedf287f51de1e9a",
+      "unchanged_from_base_revision": true
+    },
+    "reports/inkling-mini-readiness-actions-v09.json": {
+      "sha256": "af671b52ca3bbb2eea3df740bef283cb5f42e6cdba9edfbcdba46b459c6caec2",
+      "unchanged_from_base_revision": true
+    }
+  },
+  "generated_evidence": {
+    "git_ignored_directory": "reports/testing-self-hosted/",
+    "files_sha256": {
+      "reports/testing-self-hosted/coverage-complete.json": "7f57361853ededf2aa2c27cd5a33cf27519061f390bb78cfd406a87b4bf8cee0",
+      "reports/testing-self-hosted/inventory-complete.json": "ae15e6dc310d3b1b935b6cff6f02bb1c51682e3df64f40d89564ab3d9eb9a271",
+      "reports/testing-self-hosted/junit-complete.xml": "2af92199f111af321f7c162fbab18ab45f86c041c66565ba348db94236945575",
+      "reports/testing-self-hosted/services.json": "1ba6116d649e97fe901a4133f6592e105cae80f7a1b9c69f19ce7f1ae4373651"
+    }
+  },
+  "excluded_from_local_pass_counts": [
+    "real ColBERT, CLIP, BGE, RAPTOR and LightRAG resource tests",
+    "live Inkling model performance or quality measurement",
+    "browser, Docker, isolated wheel and cross-repository process acceptance gates",
+    "historical admission quality and hosted credential-readiness attempts"
+  ]
+}

@@ -142,7 +142,8 @@ jobs:
           for name in ("index.html", "style.css", "app.js"):
               assert len(root.joinpath(name).read_bytes()) > 1000
           package = resources.files("rags")
-          for name in ("model_benchmark.py", "model_profiles.py", "provider_transport.py", "templates/inkling.env"):
+          for name in ("model_benchmark.py", "model_profiles.py", "provider_transport.py",
+                       "templates/inkling.env", "templates/inkling-local.env"):
               assert package.joinpath(name).is_file()
           print("Installed wheel contains the dashboard, Inkling profile and benchmark")
           PYTHON
@@ -155,6 +156,11 @@ jobs:
           mkdir -p "$RUNNER_TEMP/rags-wheel-inkling"
           "$RUNNER_TEMP/rags-wheel/bin/rags" init --profile inkling \
             --directory "$RUNNER_TEMP/rags-wheel-inkling"
+          mkdir -p "$RUNNER_TEMP/rags-wheel-inkling-local"
+          "$RUNNER_TEMP/rags-wheel/bin/rags" init --profile inkling-local \
+            --directory "$RUNNER_TEMP/rags-wheel-inkling-local"
+          "$RUNNER_TEMP/rags-wheel/bin/rags" doctor \
+            --env-file "$RUNNER_TEMP/rags-wheel-inkling-local/.env" --no-db --json
       - name: Enforce complete-package line and branch floors
         run: python scripts/check_coverage.py
       - name: Publish test inventory, JUnit and coverage evidence

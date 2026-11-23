@@ -652,6 +652,33 @@ def test_reordered_equivalent_model_configuration_preserves_contract(components)
     assert engine(state, first, FakeRouter())._fingerprint == engine(state, second, FakeRouter())._fingerprint
 
 
+@pytest.mark.parametrize("change", ["endpoint", "authentication"])
+def test_local_gateway_contract_change_requires_new_approval(components, change):
+    state, config = components
+    config = replace(config, gateway_url="https://127.0.0.1:8080/v1",
+                     model_options={"main": {"protocol": "openai"}})
+    invoked = []
+    registry = ToolRegistry()
+    registry.register(ToolSpec("record", Args, lambda *_: invoked.append(True),
+                               permission="rags:memory", approval_required=True))
+    service = engine(state, config, FakeRouter(reply("", call("record", {"amount": 1}))), registry)
+    waiting = service.start(principal(), goal="Review observation before saving", model="main", session_id="local")
+    updated = (replace(config, gateway_url="https://127.0.0.1:8081/v1") if change == "endpoint" else
+               replace(config, gateway_auth_mode="none", gateway_key=""))
+    restarted = engine(state, updated, FakeRouter(), registry)
+    assert restarted.get(principal(), waiting.run_id).status == "waiting_for_approval"
+    with pytest.raises(CapabilityError) as error:
+        restarted.resume(principal(), waiting.run_id, expected_revision=waiting.revision, approved=True)
+    assert error.value.code == "definition_mismatch" and invoked == []
+
+
+def test_gateway_credential_rotation_preserves_approval_contract(components):
+    state, config = components
+    first = engine(state, config, FakeRouter())
+    rotated = engine(state, replace(config, gateway_key="rotated-secret"), FakeRouter())
+    assert first._fingerprint == rotated._fingerprint
+
+
 def test_tool_reasoning_continuation_is_private_across_approval_and_restart(components):
     state, config = components
     registry = ToolRegistry()

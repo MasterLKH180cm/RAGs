@@ -288,6 +288,10 @@ See [v0.8 spec](docs/SPEC_V08.md) and [implementation review](docs/REVIEW_V08.md
 
 ### Inkling 2 Mini
 
+Inkling 2 Mini has downloadable open weights. The `inkling` profile below selects
+the optional hosted Tinker service; [`inkling-local`](#self-hosted-inkling) uses
+an independently installed local model server without a hosted API key.
+
 The published model ID is `thinkingmachines/Inkling-2-Mini`. The official Tinker
 endpoint is `https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1`.
 Its OpenAI-compatible protocol uses **`max_completion_tokens`** and accepts
@@ -368,6 +372,50 @@ and other resumable agent checkpoints from v0.8 must be replaced with new runs
 and reviewed again, even when operator configuration is unchanged.
 Existing history remains readable by its original tenant and owner.
 
+### Self-hosted Inkling
+
+After installing the model's supported runtime, weights and chat/tool parsers,
+bind its OpenAI-compatible server to `127.0.0.1:8080` on the same host as RAGs.
+Create the local configuration in an empty directory:
+
+```bash
+rags init --profile inkling-local --directory /path/to/existing/empty-directory
+rags doctor --env-file /path/to/existing/empty-directory/.env --no-db --json
+rags agent doctor --env-file /path/to/existing/empty-directory/.env --json
+rags serve --env-file /path/to/existing/empty-directory/.env
+```
+
+This profile configures direct generation and the router's `inkling` alias at
+`http://127.0.0.1:8080/v1`. It explicitly selects `openai` wire semantics
+(`max_tokens`) and leaves reasoning effort unset. Direct generation uses a
+conservative UTF-8-byte budget within a 4,096-unit context limit, and embeddings
+remain independent. Configure the server's template and reasoning/tool parsers
+for the exact runtime and model artifact being served.
+
+`RAGS_GENERATION_AUTH_MODE=none` and `RAGS_ROUTER_AUTH_MODE=none` are explicit
+local choices; both default to `required`. Local mode sends no Authorization
+header, uses no dummy key, and bypasses ambient HTTP proxies. Remove explicit
+generation/router credentials and secret-file settings before selecting it;
+contradictory settings fail validation. Unused hosted-provider secrets are not
+read. Separately configured embeddings retain their own credential policy.
+
+Unauthenticated inference accepts only literal loopback IP endpoints and explicit
+`openai` protocol with unset reasoning effort. DNS names, private-LAN addresses,
+remote services, and URLs containing credentials, queries or fragments are
+rejected. Router HTTP remains explicitly enabled by `RAGS_ROUTER_ALLOW_HTTP=true`
+in the development profile. A container's loopback address belongs to that
+container; container-to-host or service inference requires an explicitly
+configured, authenticated endpoint. Gateway endpoint/authentication changes
+invalidate pending agent approvals; credential rotation alone does not.
+
+The doctor commands validate configuration only. They do not download weights,
+start the model server, prove that the hardware can load it, or measure model
+quality/performance. Runtime and artifact readiness are separate from a passing
+live inference report. Follow the [pinned local deployment guide](docs/INKLING_LOCAL.md)
+for runtime installation, hardware checks, verified model downloads and serving;
+see also the [self-hosted implementation contract](docs/SELF_HOSTED_INKLING_SPEC.md)
+and [benchmark documentation](docs/INKLING_BENCHMARK.md).
+
 ## Installable CLI (no clone needed)
 
 The Hatch wheel publishes the `rags` console command. The package has **not**
@@ -409,6 +457,7 @@ trusted reverse proxy and an auth gateway before permitting non-loopback binding
 | `ollama` | SQLite | Ollama OpenAI-compatible API | Ollama local chat | Run Ollama and fetch matching embedding/chat models separately |
 | `anthropic` | SQLite | Deterministic local hash | Anthropic chat | Set `ANTHROPIC_API_KEY` in a secret environment |
 | `inkling` | SQLite | Deterministic local hash | Inkling 2 Mini via Tinker | Set `RAGS_GENERATION_API_KEY` or its `_FILE`; generation and embeddings stay separate |
+| `inkling-local` | SQLite | Deterministic local hash | Local Inkling OpenAI-compatible server | Install supported runtime/weights separately; explicit no-auth literal-loopback generation and router |
 
 Choose with `rags init --profile postgres --directory /path/to/existing/dir`.
 For optional PostgreSQL support, install with:
