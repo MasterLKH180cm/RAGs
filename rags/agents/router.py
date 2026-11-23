@@ -89,6 +89,12 @@ class ModelRouter:
         return httpx.Client(timeout=httpx.Timeout(timeout_seconds, connect=min(5., timeout_seconds)),
                             follow_redirects=False, trust_env=False)
 
+    def _headers(self) -> dict[str, str]:
+        headers = {"Accept": "application/json", "Accept-Encoding": "identity"}
+        if self.config.gateway_auth_mode == "required":
+            headers["Authorization"] = "Bearer " + self.config.gateway_key
+        return headers
+
     def embedding(self, *, model: str, text: str,
                   timeout_seconds: float = 30.) -> EmbeddingReply:
         """One OpenAI-compatible embeddings endpoint for approved Gateway models."""
@@ -108,9 +114,8 @@ class ModelRouter:
         try:
             with self._client(timeout_seconds) as client:
                 with client.stream(
-                    "POST", self.config.gateway_url + "/embeddings",
-                    headers={"Authorization": "Bearer " + self.config.gateway_key,
-                             "Accept": "application/json", "Accept-Encoding": "identity"},
+                    "POST", self.config.gateway_url.rstrip("/") + "/embeddings",
+                    headers=self._headers(),
                     json={"model": selected, "input": text},
                 ) as response:
                     if response.status_code != 200:
@@ -200,9 +205,8 @@ class ModelRouter:
         try:
             with self._client(timeout_seconds) as client:
                 with client.stream(
-                    "POST", self.config.gateway_url + "/chat/completions",
-                    headers={"Authorization": "Bearer " + self.config.gateway_key,
-                             "Accept": "application/json", "Accept-Encoding": "identity"},
+                    "POST", self.config.gateway_url.rstrip("/") + "/chat/completions",
+                    headers=self._headers(),
                     json=request,
                 ) as response:
                     if response.status_code != 200:

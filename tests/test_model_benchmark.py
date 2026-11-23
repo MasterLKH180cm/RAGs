@@ -51,6 +51,22 @@ def fixture_run(monkeypatch, **options):
         environment={"TINKER_API_KEY": "not-a-real-secret"}, evidence_kind="http_contract_fixture")
 
 
+def deployment_manifest(**changes):
+    return benchmark.DeploymentManifest.model_validate({
+        "schema_version": "model-deployment-v1", "source": "operator_supplied",
+        "runtime_name": "llama.cpp", "runtime_version": "b12631",
+        "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+        "model_repository": "ggml-org/Inkling-2-Mini-GGUF",
+        "model_revision": "e8a2cecf0e78914f07cc27b9be711a9b2c7561d9",
+        "model_artifact": "Inkling-2-Mini-IQ4_NL.gguf",
+        "model_sha256": "cbdf3fa9dc50a4124977980f37da4f1fa764b0cfe800d275cd43d26ce2a81af4",
+        "model_bytes": 17627940768, "quantization": "IQ4_NL", "context_tokens": 4096,
+        "server_parallel_slots": 1, "server_threads": 8, "hardware_class": "cpu", "hardware_label": "x86_64",
+        "host_memory_bytes": 32 * 2**30, "accelerator_count": 0, "accelerator_memory_bytes": 0,
+        **changes,
+    })
+
+
 def test_default_dataset_snapshot_is_identical():
     path = Path(__file__).parents[1] / "examples" / "benchmark_cases.json"
     assert benchmark.load_cases(path) == benchmark.default_cases()
@@ -95,7 +111,8 @@ def test_no_credentials_blocks_before_router_or_network(monkeypatch):
     assert result["status"] == "blocked" and result["block_reason"] == "missing_model_credential"
     assert result["warmup"] is None and result["phases"] == []
     assert result["target"]["model"] == INKLING_MODEL
-    assert result["paid_request_upper_bound"] == 42
+    assert result["request_upper_bound"] == 42
+    assert "paid_request_upper_bound" not in result
     assert TINKER_BASE_URL not in json.dumps(result)
 
 
@@ -418,3 +435,265 @@ def test_options_hide_endpoint_from_repr():
     assert TINKER_BASE_URL not in repr(benchmark.Options())
     with pytest.raises(ValueError):
         replace(benchmark.Options(), protocol="openai")
+
+
+def test_local_preset_is_explicit_openai_no_auth_and_unset_effort():
+    local = benchmark.Options.for_preset("inkling-local")
+    assert local.base_url == "http://127.0.0.1:8080/v1"
+    assert local.model == INKLING_MODEL and local.auth_mode == "none"
+    assert local.protocol == "openai" and local.effort is None and local.allow_loopback_http
+    assert local.key_env == "INKLING_LOCAL_API_KEY"
+    hosted = benchmark.Options.for_preset("inkling-tinker")
+    assert hosted == benchmark.Options()
+    assert hosted.auth_mode == "required" and hosted.effort == "low"
+    assert hosted.key_env == "TINKER_API_KEY"
+
+
+def test_authenticated_local_default_never_reads_hosted_credentials(monkeypatch):
+    monkeypatch.setattr(benchmark, "ModelRouter", lambda *_: pytest.fail("No router without dedicated local key"))
+    class HostedSecretsMustNotBeRead(dict):
+        def get(self, name, default=None):
+            assert name in {"INKLING_LOCAL_API_KEY", "INKLING_LOCAL_API_KEY_FILE"}
+            return super().get(name, default)
+    environment = HostedSecretsMustNotBeRead({
+        "TINKER_API_KEY": "unused-hosted-key", "TINKER_API_KEY_FILE": "/private/tinker-key",
+        "OPENAI_API_KEY": "unused-openai-key", "OPENAI_API_KEY_FILE": "/private/openai-key",
+    })
+    report = benchmark.run_benchmark(
+        benchmark.Options.for_preset("inkling-local", auth_mode="required",
+                                     deployment_manifest=deployment_manifest()), environment=environment)
+    assert report["status"] == "blocked" and report["block_reason"] == "missing_model_credential"
+    assert report["warmup"] is None and report["phases"] == []
+
+
+@pytest.mark.parametrize("key_name,arguments", [
+    ("INKLING_LOCAL_API_KEY", []),
+    ("DEDICATED_LOCAL_TEST_KEY", ["--key-env", "DEDICATED_LOCAL_TEST_KEY"]),
+])
+def test_cli_authenticated_local_selects_only_dedicated_or_explicit_key(
+    tmp_path, monkeypatch, capsys, key_name, arguments,
+):
+    path = tmp_path / "deployment.json"
+    path.write_text(deployment_manifest().model_dump_json())
+    output = tmp_path / "result.json"
+    for name in ("TINKER_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.setenv(name, "unused-hosted-key")
+        monkeypatch.setenv(name + "_FILE", "/private/never-read")
+    monkeypatch.setenv(key_name, "dedicated-local-fixture-key")
+    monkeypatch.delenv(key_name + "_FILE", raising=False)
+    calls = []
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(503, text="synthetic provider failure")
+    install_transport(monkeypatch, respond)
+    assert benchmark.main([
+        "run", "--preset", "inkling-local", "--auth-mode", "required", *arguments,
+        "--deployment-manifest", str(path), "--warmup-rounds", "0", "--repetitions", "1",
+        "--concurrency", "1", "--output", str(output),
+    ]) == 1
+    # A deliberate HTTP failure verifies credential selection without producing
+    # passing fixture timings labeled as live-model evidence.
+    report = json.loads(output.read_text())
+    assert report["status"] == "failed" and len(calls) == 6
+    assert {request.headers.get("Authorization") for request in calls} == {"Bearer dedicated-local-fixture-key"}
+    assert report["target"]["auth_mode"] == "required"
+    serialized = output.read_text() + capsys.readouterr().out
+    for secret in ("dedicated-local-fixture-key", "unused-hosted-key", "/private/never-read"):
+        assert secret not in serialized
+
+
+@pytest.mark.parametrize("changes", [
+    {"base_url": "http://localhost:8080/v1"},
+    {"base_url": "https://example.test/v1"},
+    {"base_url": "http://192.168.1.1:8080/v1"},
+    {"base_url": "http://127.0.0.1:8080/v1?secret=private-value"},
+    {"base_url": "http://127.0.0.1:8080/v1#secret"},
+    {"base_url": "http://key@127.0.0.1:8080/v1"},
+    {"base_url": "http://127.0.0.1:8080/v1", "allow_loopback_http": False},
+    {"protocol": "auto"}, {"protocol": "tinker"}, {"effort": "low"}, {"effort": 0},
+    {"auth_mode": True}, {"auth_mode": "optional"},
+])
+def test_no_auth_requires_clean_literal_loopback_and_explicit_wire_contract(changes):
+    with pytest.raises(ValueError):
+        benchmark.Options.for_preset("inkling-local", **changes)
+
+
+@pytest.mark.parametrize("url", ["http://127.0.0.2:8080/v1", "http://[::1]:8080/v1"])
+def test_other_literal_loopback_addresses_are_explicitly_classified(url, monkeypatch):
+    monkeypatch.setattr(benchmark, "ModelRouter", lambda *_: pytest.fail("No request without manifest"))
+    report = benchmark.run_benchmark(benchmark.Options.for_preset("inkling-local", base_url=url), environment={})
+    assert report["block_reason"] == "missing_deployment_manifest"
+    assert report["target"]["endpoint_kind"] == "loopback"
+
+
+def test_local_live_without_manifest_blocks_without_reading_secrets_or_network(monkeypatch):
+    monkeypatch.setattr(benchmark, "_read_key", lambda *_: pytest.fail("No local key lookup"))
+    monkeypatch.setattr(benchmark, "ModelRouter", lambda *_: pytest.fail("No router before provenance"))
+    report = benchmark.run_benchmark(benchmark.Options.for_preset("inkling-local"),
+        environment={"TINKER_API_KEY": "private-unused-secret", "TINKER_API_KEY_FILE": "/private/unused-secret"})
+    assert report["status"] == "blocked" and report["block_reason"] == "missing_deployment_manifest"
+    assert report["request_upper_bound"] == 42 and report["warmup"] is None and report["phases"] == []
+    assert report["target"]["auth_mode"] == "none" and "private-unused-secret" not in json.dumps(report)
+
+
+def test_real_local_no_auth_fixture_omits_auth_and_ignores_ambient_secrets_and_proxies(monkeypatch):
+    cases = benchmark.default_cases()
+    by_request = {case.request: case for case in cases}
+    requests = []
+    monkeypatch.setattr(benchmark, "_read_key", lambda *_: pytest.fail("No local credential lookup"))
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        monkeypatch.setenv(name, "http://127.0.0.1:1")
+    monkeypatch.setenv("NO_PROXY", "")
+    monkeypatch.setenv("no_proxy", "")
+    monkeypatch.setenv("TINKER_API_KEY", "private-ambient-key")
+    monkeypatch.setenv("TINKER_API_KEY_FILE", "/private/not-read")
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            requests.append((self.path, self.headers.get("Authorization"), body))
+            encoded = json.dumps(envelope(by_request[body["messages"][-1]["content"]])).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        def log_message(self, *_args):
+            pass
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        options = benchmark.Options.for_preset("inkling-local", base_url=f"http://127.0.0.1:{server.server_port}/v1",
+            concurrency=(1, 2, 4), repetitions=1, warmup_rounds=0)
+        report = benchmark.run_benchmark(options, cases, evidence_kind="http_contract_fixture")
+        assert report["status"] == "passed" and len(requests) == 18
+        for path, auth, body in requests:
+            assert path == "/v1/chat/completions" and auth is None
+            assert body["model"] == INKLING_MODEL and body["max_tokens"] == 512
+            assert "max_completion_tokens" not in body and "reasoning_effort" not in body
+        assert report["evidence_kind"] == "http_contract_fixture" and report["deployment_manifest"] is None
+        serialized = json.dumps(report)
+        assert "private-ambient-key" not in serialized and "/private/not-read" not in serialized
+        with pytest.raises(ValueError, match="live-model"):
+            benchmark.compare_reports(report, report)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+@pytest.mark.parametrize("changes", [
+    {"source": "verified"}, {"schema_version": "unknown"}, {"secret": "never-log-me"},
+    {"runtime_revision": "main"}, {"model_revision": "e8a2cec"},
+    {"model_sha256": "a" * 63}, {"model_sha256": "A" * 64},
+    {"model_repository": "https://huggingface.co/example/model"},
+    {"model_artifact": "/private/weights.gguf"}, {"model_artifact": "../weights.gguf"},
+    {"hardware_label": "https://private.example"}, {"hardware_label": "x" * 97},
+    {"hardware_label": "host\nsecret"}, {"hardware_class": "unknown"},
+    {"model_bytes": True}, {"model_bytes": 0}, {"model_bytes": 2**51},
+    {"context_tokens": 0}, {"context_tokens": True}, {"context_tokens": 1048577},
+    {"server_parallel_slots": 0}, {"server_parallel_slots": True}, {"server_parallel_slots": 257},
+    {"server_threads": 0}, {"server_threads": True}, {"server_threads": 1025},
+    {"host_memory_bytes": math.inf}, {"accelerator_count": 1},
+    {"hardware_class": "cuda"}, {"accelerator_memory_bytes": 1},
+])
+def test_deployment_manifest_is_strict_and_bounded(changes):
+    with pytest.raises(ValueError):
+        deployment_manifest(**changes)
+
+
+def test_deployment_file_rejects_duplicate_keys_oversize_and_unknown_fields_without_echo(tmp_path, capsys):
+    path = tmp_path / "operator.json"
+    output = tmp_path / "report.json"
+    original = deployment_manifest().model_dump_json()
+    for text in (original[:-1] + ',"source":"operator_supplied"}', " " * 16385,
+                 original[:-1] + ',"api_key":"private-never-log"}'):
+        path.write_text(text)
+        assert benchmark.main(["run", "--preset", "inkling-local", "--deployment-manifest", str(path),
+                               "--output", str(output)]) == 2
+        assert not output.exists()
+    captured = capsys.readouterr()
+    assert "private-never-log" not in captured.out + captured.err and "Traceback" not in captured.out + captured.err
+    path.write_text(original)
+    assert benchmark.load_deployment_manifest(path) == deployment_manifest()
+
+
+def test_cli_local_preset_preserves_manifest_and_reaches_router_without_key(tmp_path, monkeypatch, capsys):
+    path = tmp_path / "deployment.json"
+    path.write_text(deployment_manifest().model_dump_json())
+    output = tmp_path / "result.json"
+    monkeypatch.setattr(benchmark, "_read_key", lambda *_: pytest.fail("No local key lookup"))
+    calls = []
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(503, text="synthetic-private-provider-body")
+    install_transport(monkeypatch, respond)
+    assert benchmark.main(["run", "--preset", "inkling-local", "--deployment-manifest", str(path),
+                           "--warmup-rounds", "0", "--repetitions", "1", "--concurrency", "1",
+                           "--output", str(output)]) == 1
+    report = json.loads(output.read_text())
+    # Deliberately failing transport: no passing live-model fixture evidence is written.
+    assert report["status"] == "failed" and len(calls) == 6
+    assert report["target"]["auth_mode"] == "none" and report["measurement"]["reasoning_effort"] is None
+    assert report["deployment_manifest"] == deployment_manifest().model_dump()
+    assert report["deployment_sha256"] == benchmark._hash(report["deployment_manifest"])
+    assert "synthetic-private-provider-body" not in output.read_text() + capsys.readouterr().out
+
+
+def _local_live_shaped_fixture(monkeypatch):
+    report = fixture_run(monkeypatch, base_url=benchmark.LOCAL_BASE_URL, allow_loopback_http=True,
+                         auth_mode="none", protocol="openai", effort=None, deployment_manifest=deployment_manifest())
+    # Comparator input only, never saved or presented as a real model measurement.
+    report["evidence_kind"] = "live_model"
+    return report
+
+
+def test_comparison_discloses_valid_deployment_differences(monkeypatch):
+    original = _local_live_shaped_fixture(monkeypatch)
+    target = deepcopy(original)
+    target["deployment_manifest"] = deployment_manifest(
+        runtime_version="b12632", runtime_revision="f" * 40, quantization="Q8_0",
+        model_artifact="Inkling-2-Mini-Q8_0.gguf", model_sha256="e" * 64, model_bytes=27800000000,
+        context_tokens=8192, server_parallel_slots=2, server_threads=16, hardware_label="x86_64-avx512",
+    ).model_dump()
+    target["deployment_sha256"] = benchmark._hash(target["deployment_manifest"])
+    report = benchmark.compare_reports(original, target)
+    assert report["status"] == "comparable" and report["different_deployments"]
+    assert report["deployment_information_complete"]
+    assert {"quantization", "model_sha256", "context_tokens", "server_parallel_slots", "server_threads", "hardware_label"} <= set(
+        report["deployment_fields_differ"])
+    assert report["baseline_deployment"]["source"] == report["target_deployment"]["source"] == "operator_supplied"
+    assert report["reasoning_effort_unset"]
+    assert "not parallel decoding" in " ".join(report["limitations"])
+
+
+@pytest.mark.parametrize("alteration", [
+    lambda r: r.update(schema_version="model-contract-benchmark-v1"),
+    lambda r: r.update(deployment_manifest=None, deployment_sha256=None),
+    lambda r: r.update(deployment_sha256="0" * 64),
+    lambda r: r["deployment_manifest"].update(server_parallel_slots=True),
+    lambda r: r["deployment_manifest"].update(unknown="private-value"),
+    lambda r: r["target"].update(endpoint_kind="operator_endpoint"),
+    lambda r: r["target"].update(protocol="auto"),
+    lambda r: r["target"].update(auth_mode="optional"),
+    lambda r: r.update(request_upper_bound=True),
+    lambda r: r.update(request_upper_bound=0),
+])
+def test_local_comparison_rejects_missing_or_tampered_provenance(monkeypatch, alteration):
+    original = _local_live_shaped_fixture(monkeypatch)
+    target = deepcopy(original)
+    alteration(target)
+    with pytest.raises(ValueError):
+        benchmark.compare_reports(original, target)
+
+
+def test_comparison_discloses_authenticated_hosted_vs_local_conditions(monkeypatch):
+    local = _local_live_shaped_fixture(monkeypatch)
+    hosted = deepcopy(local)
+    hosted["target"].update(endpoint_kind="tinker_sampling", protocol="tinker", auth_mode="required",
+                            endpoint_sha256="f" * 64)
+    hosted.update(deployment_manifest=None, deployment_sha256=None)
+    result = benchmark.compare_reports(hosted, local)
+    assert result["different_deployments"] and not result["deployment_information_complete"]
+    assert result["different_protocols"] and result["different_auth_modes"]

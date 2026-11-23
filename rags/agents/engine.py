@@ -102,6 +102,7 @@ class AgentEngine:
                        spec.idempotent, spec.schema.model_json_schema())
                       for key, spec in sorted(self.tools._tools.items())],
             "models": config.models, "model_options": config.model_options,
+            "gateway": [config.gateway_url.rstrip("/"), config.gateway_auth_mode],
             "limits": [config.max_steps, config.max_tool_calls, config.max_runtime_seconds,
                        config.max_output_tokens],
             "memory": [config.memory_enabled, config.max_history_turns, config.memory_ttl_days],

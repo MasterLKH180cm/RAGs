@@ -1,5 +1,12 @@
 # v0.9 validation review
 
+The later self-hosted Inkling implementation has a separate
+[review](SELF_HOSTED_INKLING_REVIEW.md) and
+[machine-readable validation record](testing-results-inkling-local.json).
+The v0.9 results and hosted-attempt evidence below remain historical records;
+they do not describe the hardware requirements or authentication policy of a
+self-hosted deployment.
+
 ## Completed upgrade
 
 RAGs v0.9 adds explicit Inkling/Tinker request semantics, independent embedding

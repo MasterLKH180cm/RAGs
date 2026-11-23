@@ -9,7 +9,10 @@ from urllib.parse import urlparse
 from rags.auth import OAuth2Config, ROLES, TENANT
 from rags.chunking import ChunkConfig
 from rags.features import FeatureFlags
-from rags.model_profiles import TINKER_BASE_URL, chat_profile, effort_from_env
+from rags.model_profiles import (
+    TINKER_BASE_URL, chat_profile, effort_from_env,
+    validate_local_no_auth_endpoint, validate_model_auth_mode,
+)
 from rags.tokenization import TokenizerConfig
 
 
@@ -71,6 +74,16 @@ class Settings:
     otel_service_name: str = "rags-platform"
     generation_protocol: str = "auto"
     reasoning_effort: str | float | None = None
+    generation_auth_mode: str = "required"
+
+    def __post_init__(self) -> None:
+        validate_model_auth_mode(self.generation_auth_mode)
+        if self.generation_auth_mode == "none":
+            validate_local_no_auth_endpoint(self.generation_base_url)
+            if self.model_provider != "openai" or self.generation_protocol != "openai" or self.reasoning_effort is not None:
+                raise ValueError("Unauthenticated generation requires explicit OpenAI protocol without reasoning effort")
+            if self.generation_api_key is not None and self.generation_api_key != "":
+                raise ValueError("Unauthenticated generation cannot configure a generation credential")
 
     @property
     def embedding_endpoint(self) -> str:
@@ -94,6 +107,8 @@ class Settings:
 
     @property
     def generation_credential(self) -> str:
+        if self.generation_auth_mode == "none":
+            return ""
         if (self.generation_api_key is None and self.model_provider == "openai"
                 and chat_profile(self.chat_model, self.generation_protocol).protocol == "tinker"):
             return ""
@@ -179,6 +194,11 @@ class Settings:
             raise ValueError("Unsupported embedding provider")
         if model_provider not in {"extractive", "openai", "anthropic", "router"}:
             raise ValueError("Unsupported model provider")
+        generation_auth_mode = validate_model_auth_mode(os.getenv("RAGS_GENERATION_AUTH_MODE", "required"))
+        if generation_auth_mode == "none" and any(os.getenv(name) for name in (
+            "RAGS_GENERATION_API_KEY", "RAGS_GENERATION_API_KEY_FILE",
+        )):
+            raise ValueError("Unauthenticated generation cannot configure a generation credential")
         database_url = os.getenv("RAGS_DATABASE_URL")
         if database_url and not database_url.startswith(("postgresql://", "postgres://")):
             raise ValueError("RAGS_DATABASE_URL must select PostgreSQL")
@@ -252,18 +272,25 @@ class Settings:
             raise ValueError("RAGS_ADMISSION_POLICY must be compatibility or calibrated_required")
         if admission_policy == "calibrated_required" and not features.enabled("admission_scoring"):
             raise ValueError("Required evidence policy needs admission_scoring")
+        # A local generation run never reads ambient hosted secrets. Separately
+        # configured OpenAI embeddings may still need their own explicit/legacy key.
+        local_generation = generation_auth_mode == "none"
+        embedding_key = (secret("RAGS_EMBEDDING_API_KEY") or None
+                         if not local_generation or embedding_provider == "openai" else None)
+        openai_key = (secret("OPENAI_API_KEY")
+                      if not local_generation or (embedding_provider == "openai" and not embedding_key) else "")
         return cls(
             db_path=db_path,
             keys=keys,
             embedding_provider=embedding_provider,
             model_provider=model_provider,
-            openai_key=secret("OPENAI_API_KEY"),
+            openai_key=openai_key,
             openai_base_url=openai_base,
             embedding_model=os.getenv("RAGS_EMBEDDING_MODEL") or (
                 "embeddings" if embedding_provider == "router" else
                 os.getenv("OPENAI_EMBEDDING_MODEL") or "text-embedding-3-small"),
             chat_model=chat_model,
-            anthropic_key=secret("ANTHROPIC_API_KEY"),
+            anthropic_key=secret("ANTHROPIC_API_KEY") if not local_generation else "",
             anthropic_model=os.getenv("RAGS_GENERATION_MODEL") or os.getenv("ANTHROPIC_CHAT_MODEL") or "claude-sonnet-4-5",
             tokenizer_config=tokenizer,
             chunking_config=chunking,
@@ -278,9 +305,9 @@ class Settings:
             admission_profile=os.getenv("RAGS_ADMISSION_PROFILE") or None,
             features=features,
             embedding_base_url=embedding_base,
-            embedding_api_key=secret("RAGS_EMBEDDING_API_KEY") or None,
+            embedding_api_key=embedding_key,
             generation_base_url=generation_base,
-            generation_api_key=secret("RAGS_GENERATION_API_KEY") or None,
+            generation_api_key=(secret("RAGS_GENERATION_API_KEY") or None) if not local_generation else None,
             auth_mode=auth_mode,
             key_roles=key_roles,
             oauth2=oauth2,
@@ -292,4 +319,5 @@ class Settings:
             otel_service_name=otel_service_name,
             generation_protocol=generation_protocol,
             reasoning_effort=effort,
+            generation_auth_mode=generation_auth_mode,
         )

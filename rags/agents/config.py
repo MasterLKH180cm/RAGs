@@ -5,7 +5,9 @@ from pathlib import Path
 import re
 from urllib.parse import urlsplit
 
-from rags.model_profiles import chat_profile, strict_json
+from rags.model_profiles import (
+    chat_profile, strict_json, validate_local_no_auth_endpoint, validate_model_auth_mode,
+)
 
 
 ALIAS = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,63}\Z")
@@ -61,8 +63,12 @@ class AgentPlatformConfig:
     max_history_turns: int = 12
     memory_ttl_days: int = 30
     model_options: dict[str, dict] = field(default_factory=dict)
+    gateway_auth_mode: str = "required"
 
     def __post_init__(self) -> None:
+        validate_model_auth_mode(self.gateway_auth_mode)
+        if not isinstance(self.gateway_key, str) or len(self.gateway_key) > 4096:
+            raise ValueError("Router gateway credential must be a bounded string")
         if self.agent_enabled and not self.router_enabled:
             raise ValueError("Agent engine requires an enabled model router")
         if not isinstance(self.models, dict) or len(self.models) > 32 or any(
@@ -78,6 +84,16 @@ class AgentPlatformConfig:
                 raise ValueError("Model options support protocol and reasoning_effort only")
             profile = chat_profile(self.models[alias], options.get("protocol", "auto"))
             profile.parameters(max_output_tokens=1, effort=options.get("reasoning_effort"))
+        if self.gateway_auth_mode == "none":
+            validate_local_no_auth_endpoint(self.gateway_url)
+            if self.gateway_key:
+                raise ValueError("Unauthenticated router cannot configure a gateway credential")
+            if not self.models or any(
+                self.model_options.get(alias, {}).get("protocol") != "openai"
+                or self.model_options.get(alias, {}).get("reasoning_effort") is not None
+                for alias in self.models
+            ):
+                raise ValueError("Unauthenticated router requires explicit OpenAI protocol without reasoning effort")
         # A default-on interface is not permission to invent an external model
         # endpoint or secret. Until configured, Gateway calls fail closed.
         supplied = bool(self.gateway_url or self.gateway_key or self.models)
@@ -87,7 +103,7 @@ class AgentPlatformConfig:
                     or url.username or url.password or url.query or url.fragment
                     or (url.scheme == "http" and not self.allow_http)):
                 raise ValueError("Router gateway must use HTTPS without credentials or URL query")
-            if not self.gateway_key or len(self.gateway_key) > 4096 or not self.models:
+            if (self.gateway_auth_mode == "required" and not self.gateway_key) or len(self.gateway_key) > 4096 or not self.models:
                 raise ValueError("Router requires gateway credentials and approved model aliases")
         for name, number, low, high in (
             ("max_steps", self.max_steps, 1, 8),
@@ -102,13 +118,19 @@ class AgentPlatformConfig:
 
     @property
     def router_ready(self) -> bool:
-        return bool(self.router_enabled and self.gateway_url and self.gateway_key and self.models)
+        return bool(self.router_enabled and self.gateway_url and self.models
+                    and (self.gateway_auth_mode == "none" or self.gateway_key))
 
     @classmethod
     def from_env(cls) -> "AgentPlatformConfig":
         enabled = _boolean("RAGS_ROUTER_ENABLED", True)
         agent = _boolean("RAGS_AGENT_ENABLED", True)
         memory = _boolean("RAGS_MEMORY_ENABLED", True)
+        auth_mode = validate_model_auth_mode(os.getenv("RAGS_ROUTER_AUTH_MODE", "required"))
+        if auth_mode == "none" and any(os.getenv(name) for name in (
+            "RAGS_ROUTER_API_KEY", "RAGS_ROUTER_API_KEY_FILE",
+        )):
+            raise ValueError("Unauthenticated router cannot configure a gateway credential")
         allow_http = _boolean("RAGS_ROUTER_ALLOW_HTTP")
         if allow_http and os.getenv("RAGS_ENV", "production") not in {"test", "development"}:
             raise ValueError("Plaintext router connections only allowed in development/test")
@@ -131,7 +153,8 @@ class AgentPlatformConfig:
         return cls(
             router_enabled=enabled, agent_enabled=agent, memory_enabled=memory,
             gateway_url=os.getenv("RAGS_ROUTER_GATEWAY_URL", "").rstrip("/"),
-            gateway_key=_secret("RAGS_ROUTER_API_KEY") if enabled else "",
+            gateway_key=_secret("RAGS_ROUTER_API_KEY") if enabled and auth_mode == "required" else "",
+            gateway_auth_mode=auth_mode,
             models=models, model_options=model_options, allow_http=allow_http,
             max_steps=_integer("RAGS_AGENT_MAX_STEPS", 6, 1, 8),
             max_tool_calls=_integer("RAGS_AGENT_MAX_TOOL_CALLS", 12, 1, 16),
