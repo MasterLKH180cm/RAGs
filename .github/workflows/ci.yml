@@ -97,6 +97,12 @@ jobs:
           --cov-report=json:reports/testing/coverage-core.json
           --cov-report=xml:reports/testing/coverage-core.xml
           --cov-report=html:reports/testing/coverage-html
+      - name: Actual PostgreSQL Agent Platform process and restart contracts
+        env:
+          RAGS_E2E_POSTGRES_URL: ${{ env.RAGS_TEST_POSTGRES_URL }}
+        run: >-
+          python scripts/e2e_agent_platform.py --postgres
+          --report reports/testing/agent-platform-postgres.json
       - name: Synthetic pgvector scoped retrieval performance evidence
         run: |
           mkdir -p reports/testing
@@ -127,19 +133,28 @@ jobs:
           uv venv --python 3.12 "$RUNNER_TEMP/rags-wheel"
           uv pip install --python "$RUNNER_TEMP/rags-wheel/bin/python" dist/*.whl
           "$RUNNER_TEMP/rags-wheel/bin/rags" --help
-          "$RUNNER_TEMP/rags-wheel/bin/python" - <<'PYTHON'
+          "$RUNNER_TEMP/rags-wheel/bin/python" -I - <<'PYTHON'
           from importlib import resources
+          from pathlib import Path
+          import sys
           root = resources.files("rags").joinpath("admin_static")
+          assert Path(str(root)).resolve().is_relative_to(Path(sys.prefix).resolve())
           for name in ("index.html", "style.css", "app.js"):
               assert len(root.joinpath(name).read_bytes()) > 1000
-          print("Installed wheel contains the standalone self-hosted dashboard")
+          package = resources.files("rags")
+          for name in ("model_benchmark.py", "model_profiles.py", "provider_transport.py", "templates/inkling.env"):
+              assert package.joinpath(name).is_file()
+          print("Installed wheel contains the dashboard, Inkling profile and benchmark")
           PYTHON
-          "$RUNNER_TEMP/rags-wheel/bin/rags" --version | grep -F '0.8.0'
+          "$RUNNER_TEMP/rags-wheel/bin/rags" --version | grep -F '0.9.0'
           mkdir -p "$RUNNER_TEMP/rags-wheel-profile"
           "$RUNNER_TEMP/rags-wheel/bin/rags" init --profile offline \
             --directory "$RUNNER_TEMP/rags-wheel-profile"
           "$RUNNER_TEMP/rags-wheel/bin/rags" doctor \
             --env-file "$RUNNER_TEMP/rags-wheel-profile/.env" --no-db --json
+          mkdir -p "$RUNNER_TEMP/rags-wheel-inkling"
+          "$RUNNER_TEMP/rags-wheel/bin/rags" init --profile inkling \
+            --directory "$RUNNER_TEMP/rags-wheel-inkling"
       - name: Enforce complete-package line and branch floors
         run: python scripts/check_coverage.py
       - name: Publish test inventory, JUnit and coverage evidence
@@ -164,6 +179,37 @@ jobs:
         with:
           name: synthetic-evaluation
           path: evaluation-v02.json
+
+  agent-platform-browser:
+    name: Agent Platform HTTP and actual browser acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+        with:
+          version: "0.13.9"
+          enable-cache: true
+          cache-suffix: agent-platform-browser
+      - name: Install locked runtime and actual Chromium
+        run: |
+          uv sync --locked --extra e2e
+          uv run --no-sync playwright install --with-deps chromium
+      - name: Verify live API, model contract, tools, workflow restart and dashboard
+        run: >-
+          uv run --no-sync python scripts/e2e_agent_platform.py --browser
+          --report reports/testing/agent-platform-browser.json
+      - name: Publish explicit acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rags-agent-platform-browser
+          path: reports/testing/agent-platform-browser.json
+          if-no-files-found: error
 
   docker-compose:
     name: Standalone PostgreSQL and pgvector deployment

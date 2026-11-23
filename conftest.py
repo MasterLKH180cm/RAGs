@@ -1,9 +1,11 @@
 """Explicit test layers, inventory and fail-closed resource gates."""
 import json
+from ipaddress import ip_address
 import os
 from pathlib import Path
 
 import pytest
+import httpx
 
 os.environ.setdefault("RAGS_ENV", "test")
 
@@ -12,6 +14,45 @@ LAYERS = {"unit", "integration", "e2e"}
 RESOURCES = {"external", "encoders", "research_raptor", "research_lightrag", "postgres", "redis", "s3", "browser"}
 INVENTORY = pytest.StashKey[list]()
 INCOMPLETE = pytest.StashKey[list]()
+
+
+@pytest.fixture(autouse=True)
+def isolate_core_http(request):
+    """Core tests use injected HTTP or literal loopback servers, never live models.
+
+    Guard the real transport methods, including clients captured at import time;
+    MockTransport/ASGITransport and PostgreSQL sockets remain unaffected. Only
+    explicitly selected external-resource tests may use nonlocal HTTP.
+    """
+    if request.node.get_closest_marker("external") is not None:
+        yield
+        return
+    sync_request = httpx.HTTPTransport.handle_request
+    async_request = httpx.AsyncHTTPTransport.handle_async_request
+
+    def permitted(outbound):
+        try:
+            loopback = ip_address(outbound.url.host).is_loopback
+        except ValueError:
+            loopback = False
+        if not loopback:
+            pytest.fail("Core tests cannot access nonlocal HTTP; inject a transport "
+                        "or explicitly select an external-resource test", pytrace=False)
+
+    def guarded_sync(self, outbound):
+        permitted(outbound)
+        return sync_request(self, outbound)
+
+    async def guarded_async(self, outbound):
+        permitted(outbound)
+        return await async_request(self, outbound)
+
+    # Own this patch scope; depending on the shared monkeypatch fixture would
+    # change teardown ordering for tests which restore process env themselves.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(httpx.HTTPTransport, "handle_request", guarded_sync)
+        patch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", guarded_async)
+        yield
 
 
 def pytest_addoption(parser):

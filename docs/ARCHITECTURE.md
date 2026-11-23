@@ -1,4 +1,4 @@
-# RAGs v0.4 architecture
+# RAGs architecture
 
 This document describes the implemented service. The [v0.4 specification](SPEC_V04.md) adds explicit feature configuration and PostgreSQL/pgvector, extending the [v0.3 specification](SPEC_V03.md) and [v0.2 requirements](SPEC_V02.md); the [v0.3 review](IMPLEMENTATION_REVIEW_V03.md) and historical [v0.2 review](IMPLEMENTATION_REVIEW.md) distinguish actual execution, measured quality and remaining integrations. The [README](../README.md#architecture-and-flows) contains the service, ingestion and retrieval flowcharts.
 
@@ -193,3 +193,40 @@ The historical [36-question synthetic report](evaluation-v02-summary.json) recor
 Actual BGE, ColBERT, and paired CLIP checkpoints were exercised separately. These small fixtures verify encoder/adapter execution and selected invariants; they are not domain-quality benchmarks. Ordinary tests also distinguish deterministic control-flow fixtures from real-model inference.
 
 Exact pgvector scans, the serialized application transaction paths, on-demand late-interaction encoding and local federation threads retain workload-dependent scaling limits. SQLite remains a development and legacy-storage option. The service does not currently implement a distributed vector index, automatic streaming refresh, production identity gateway, quotas, or semantic answer-verification guarantees. Scaling and public deployment require those concerns to be addressed explicitly; they are not implied by passing local integration tests.
+
+
+## v0.9 model capability and checkpoint boundaries
+
+`rags/model_profiles.py` owns the selected provider's supported request fields,
+strict JSON decoder and normalized usage. Both `Providers` and `ModelRouter`
+consume that contract; an OpenAI-compatible URL alone never implies JSON-schema
+support. Tinker/Inkling uses `max_completion_tokens`, optional explicit reasoning
+effort, and independently configured embeddings. UTF-8-byte budgeting preserves
+Unicode boundaries and advertises its conservative counting provenance.
+
+`rags/provider_transport.py` is the direct generation, embedding and vision HTTP
+boundary. It bounds complete JSON requests before I/O (1 MiB, or 3,000,000 bytes
+for image encoding), rejects redirects/compression before body reads, and streams
+at most 512 KiB under one wall deadline. Its synchronous façade owns and closes
+the request event loop, including when called from an existing async context.
+
+The router bounds the entire request, including tool schemas, rejects compressed
+responses, duplicate JSON fields, nonfinite numbers, undeclared or inconsistently
+terminated tool calls and malformed envelopes. Cache or reasoning usage is
+reported only if actually supplied by the provider. Bounded reasoning continuation text is kept only in the private run checkpoint
+and replayed to the model; public reply/checkpoint serialization, agent API
+summaries and conversation/observation memory exclude it. This preserves tool
+continuity through approval/restart without exposing internal reasoning in the
+product interface.
+
+The execution plane checks truncation before any tool action and binds durable
+approvals to the complete registered schema/policy/model contract. A changed
+contract requires a new run; a retry cannot silently authorize a changed tool.
+The versioned v0.9 fingerprint intentionally invalidates v0.8 pending agent
+approvals and resumable agent checkpoints; operators must start new runs and
+review new approval requests after upgrading.
+Read-only history access retains tenant/owner checks without requiring a match
+to the current runtime fingerprint.
+Existing tenant scopes, compare-and-swap revisions and idempotent-tool rules
+remain authoritative. See [SPEC_V09](SPEC_V09.md) for the observed defects and
+required regressions.

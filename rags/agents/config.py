@@ -1,10 +1,11 @@
 """Agent, memory and router are default enabled; external calls require Gateway setup."""
 from dataclasses import dataclass, field
-import json
 import os
 from pathlib import Path
 import re
 from urllib.parse import urlsplit
+
+from rags.model_profiles import chat_profile, strict_json
 
 
 ALIAS = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,63}\Z")
@@ -59,6 +60,7 @@ class AgentPlatformConfig:
     max_output_tokens: int = 1024
     max_history_turns: int = 12
     memory_ttl_days: int = 30
+    model_options: dict[str, dict] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.agent_enabled and not self.router_enabled:
@@ -69,6 +71,13 @@ class AgentPlatformConfig:
             for k, v in self.models.items()
         ):
             raise ValueError("Router models require operator-approved alias to provider/model mapping")
+        if not isinstance(self.model_options, dict) or set(self.model_options) - set(self.models):
+            raise ValueError("Model options must name approved model aliases")
+        for alias, options in self.model_options.items():
+            if not isinstance(options, dict) or set(options) - {"protocol", "reasoning_effort"}:
+                raise ValueError("Model options support protocol and reasoning_effort only")
+            profile = chat_profile(self.models[alias], options.get("protocol", "auto"))
+            profile.parameters(max_output_tokens=1, effort=options.get("reasoning_effort"))
         # A default-on interface is not permission to invent an external model
         # endpoint or secret. Until configured, Gateway calls fail closed.
         supplied = bool(self.gateway_url or self.gateway_key or self.models)
@@ -107,16 +116,23 @@ class AgentPlatformConfig:
         if len(mapping.encode("utf-8")) > 8192:
             raise ValueError("Router models config is too large")
         try:
-            models = json.loads(mapping)
+            models = strict_json(mapping)
         except ValueError as exc:
             raise ValueError("RAGS_ROUTER_MODELS_JSON requires a JSON object") from exc
         if not isinstance(models, dict):
             raise ValueError("RAGS_ROUTER_MODELS_JSON requires a JSON object")
+        options = os.getenv("RAGS_ROUTER_MODEL_OPTIONS_JSON") or "{}"
+        if len(options.encode("utf-8")) > 8192:
+            raise ValueError("Router model options config is too large")
+        try:
+            model_options = strict_json(options)
+        except ValueError as exc:
+            raise ValueError("RAGS_ROUTER_MODEL_OPTIONS_JSON requires a JSON object") from exc
         return cls(
             router_enabled=enabled, agent_enabled=agent, memory_enabled=memory,
             gateway_url=os.getenv("RAGS_ROUTER_GATEWAY_URL", "").rstrip("/"),
             gateway_key=_secret("RAGS_ROUTER_API_KEY") if enabled else "",
-            models=models, allow_http=allow_http,
+            models=models, model_options=model_options, allow_http=allow_http,
             max_steps=_integer("RAGS_AGENT_MAX_STEPS", 6, 1, 8),
             max_tool_calls=_integer("RAGS_AGENT_MAX_TOOL_CALLS", 12, 1, 16),
             max_runtime_seconds=_integer("RAGS_AGENT_MAX_RUNTIME_SECONDS", 60, 5, 90),

@@ -10,7 +10,9 @@ from functools import cached_property, lru_cache
 
 import httpx
 
+from rags import provider_transport
 from rags.config import Settings
+from rags.model_profiles import chat_profile, normalized_usage, strict_json
 from rags.registry import CapabilityError
 from rags.agents.deadline import remaining_timeout
 
@@ -21,8 +23,8 @@ def response_object(response: httpx.Response, code: str, reason: str) -> dict:
     """Validate an upstream success envelope without exposing its body to callers."""
     response.raise_for_status()
     try:
-        payload = response.json()
-    except ValueError as exc:
+        payload = strict_json(response.content)
+    except (ValueError, RecursionError) as exc:
         raise CapabilityError(code, reason, 502) from exc
     if not isinstance(payload, dict):
         raise CapabilityError(code, reason, 502)
@@ -37,9 +39,19 @@ def _first_object(payload: dict, field: str) -> dict:
 def response_text(payload: dict, provider: str) -> str:
     """Read validated text from shared chat and vision provider envelopes."""
     if provider == "openai":
-        message = _first_object(payload, "choices").get("message")
+        choices = payload.get("choices")
+        if not isinstance(choices, list) or len(choices) != 1:
+            raise CapabilityError("invalid_model_output", "Generation returned an unexpected result count", 502)
+        choice = _first_object(payload, "choices")
+        if choice.get("finish_reason", "stop") != "stop":
+            raise CapabilityError("invalid_model_output", "Generation did not finish with a text answer", 502)
+        message = choice.get("message")
+        if isinstance(message, dict) and message.get("tool_calls"):
+            raise CapabilityError("invalid_model_output", "Unexpected tool calls in text generation", 502)
         answer = message.get("content") if isinstance(message, dict) else None
     else:
+        if payload.get("stop_reason", "end_turn") not in {"end_turn", "stop_sequence"}:
+            raise CapabilityError("invalid_model_output", "Generation did not finish with a text answer", 502)
         blocks = payload.get("content")
         if not isinstance(blocks, list) or any(not isinstance(block, dict) for block in blocks):
             raise CapabilityError("invalid_model_output", "Generation provider returned invalid content blocks", 502)
@@ -135,11 +147,7 @@ class Providers:
     def record(self, kind: str, model: str, payload: dict) -> None:
         calls = _calls.get()
         if calls is not None:
-            usage = payload.get("usage")
-            allowed = {"input_tokens", "output_tokens", "prompt_tokens", "completion_tokens", "total_tokens",
-                       "cache_creation_input_tokens", "cache_read_input_tokens"}
-            sanitized = {key: value for key, value in usage.items()
-                         if key in allowed and type(value) is int and 0 <= value <= 10**12} if isinstance(usage, dict) else {}
+            sanitized = normalized_usage(payload)
             calls.append({"kind": kind, "model": model, "usage": sanitized or None})
 
     def require_generation(self) -> None:
@@ -157,8 +165,8 @@ class Providers:
         if not isinstance(result, str) or len(result) > 60_000:
             raise CapabilityError("invalid_model_output", "Model output exceeds the structured-output limit", 502)
         try:
-            parsed = json.loads(result)
-        except (ValueError, TypeError) as exc:
+            parsed = strict_json(result)
+        except (ValueError, TypeError, RecursionError) as exc:
             raise CapabilityError("invalid_model_output", "Model did not return a valid JSON object", 502) from exc
         if not isinstance(parsed, dict):
             raise CapabilityError("invalid_model_output", "Model did not return a JSON object", 502)
@@ -212,7 +220,9 @@ class Providers:
             return next(_semantic_encoder(self.settings.fastembed_model, os.getenv("RAGS_MODEL_CACHE") or None).embed([text])).tolist()
         if not self.settings.embedding_credential:
             raise ValueError("RAGS_EMBEDDING_API_KEY or OPENAI_API_KEY required for OpenAI embeddings")
-        response = httpx.post(
+        if not chat_profile(self.settings.embedding_model).supports_embeddings:
+            raise CapabilityError("unsupported_model_operation", "Selected model does not provide embeddings", 422)
+        response = provider_transport.post(
             self.settings.embedding_endpoint + "/embeddings",
             headers={"Authorization": "Bearer " + self.settings.embedding_credential},
             json={"model": self.settings.embedding_model, "input": text},
@@ -258,7 +268,8 @@ class Providers:
             self.record("generation", self.model_identity, {"usage": result.usage})
             return result.content
         if self.settings.model_provider == "openai":
-            response = httpx.post(
+            profile = chat_profile(self.settings.chat_model, self.settings.generation_protocol)
+            response = provider_transport.post(
                 self.settings.generation_endpoint + "/chat/completions",
                 headers={"Authorization": "Bearer " + self.settings.generation_credential},
                 json={
@@ -267,15 +278,15 @@ class Providers:
                         {"role": "system", "content": system},
                         {"role": "user", "content": user},
                     ],
-                    "temperature": 0,
-                    "max_tokens": self.settings.output_budget,
+                    **profile.parameters(max_output_tokens=self.settings.output_budget,
+                                         effort=self.settings.reasoning_effort),
                 },
                 timeout=remaining_timeout(90),
             )
             payload = response_object(response, "invalid_model_output", "Generation provider returned an invalid response")
             self.record("generation", self.model_identity, payload)
             return response_text(payload, self.settings.model_provider)
-        response = httpx.post(
+        response = provider_transport.post(
             self.settings.generation_endpoint + "/messages",
             headers={
                 "x-api-key": self.settings.generation_credential,

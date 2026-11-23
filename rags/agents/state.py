@@ -75,9 +75,14 @@ class Checkpoint:
     updated_at: str
 
     def public(self) -> dict:
+        state = dict(self.state)
+        if self.kind == "agent" and isinstance(state.get("messages"), list):
+            state["messages"] = [{key: value for key, value in message.items()
+                                  if key != "reasoning_content"}
+                                 for message in state["messages"]]
         return {"run_id": self.run_id, "kind": self.kind, "revision": self.revision,
                 "status": self.status, "updated_at": self.updated_at,
-                "state": self.state}
+                "state": state}
 
 
 class StateStore:

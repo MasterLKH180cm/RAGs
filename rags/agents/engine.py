@@ -94,12 +94,18 @@ class AgentEngine:
         self.history = ConversationStore(state)
         self.observations = ObservationStore(state, ttl_days=config.memory_ttl_days)
         self.tools = registry or self._default_tools()
-        self._fingerprint = hashlib.sha256(
-            json.dumps(["agent-runtime-v08", [(key, spec.permission, spec.approval_required,
-                                               spec.read_only)
-                      for key, spec in sorted(self.tools._tools.items())]],
-                      separators=(",", ":")).encode()
-        ).hexdigest()
+        # An old approval must not authorize a changed schema, model mapping or
+        # execution policy after deployment. Secrets are deliberately excluded.
+        self._fingerprint = hashlib.sha256(json.dumps({
+            "runtime": "agent-runtime-v09",
+            "tools": [(key, spec.permission, spec.approval_required, spec.read_only,
+                       spec.idempotent, spec.schema.model_json_schema())
+                      for key, spec in sorted(self.tools._tools.items())],
+            "models": config.models, "model_options": config.model_options,
+            "limits": [config.max_steps, config.max_tool_calls, config.max_runtime_seconds,
+                       config.max_output_tokens],
+            "memory": [config.memory_enabled, config.max_history_turns, config.memory_ttl_days],
+        }, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
 
     def _default_tools(self) -> ToolRegistry:
         registry = ToolRegistry()
@@ -198,8 +204,6 @@ class AgentEngine:
         cp = self.state.get(principal.tenant, run_id)
         if cp is None or cp.kind != "agent" or cp.state["subject"] != principal.subject:
             raise CapabilityError("not_found", "Agent run not found", 404)
-        if cp.fingerprint != self._fingerprint:
-            raise CapabilityError("definition_mismatch", "Agent tool registry changed", 409)
         return cp
 
     @staticmethod
@@ -214,6 +218,8 @@ class AgentEngine:
                approved: bool, feedback: str = "") -> Checkpoint:
         self._preflight(principal)
         cp = self.get(principal, run_id)
+        if cp.fingerprint != self._fingerprint:
+            raise CapabilityError("definition_mismatch", "Agent execution contract changed", 409)
         if cp.status != "waiting_for_approval":
             raise CapabilityError("invalid_state", "Run is not awaiting an approval", 409)
         if type(approved) is not bool or not isinstance(feedback, str) or len(feedback) > 500:
@@ -345,6 +351,8 @@ class AgentEngine:
         return cp
 
     def _advance(self, cp: Checkpoint, principal: Principal) -> Checkpoint:
+        if cp.fingerprint != self._fingerprint:
+            raise CapabilityError("definition_mismatch", "Agent execution contract changed", 409)
         deadline = time.monotonic() + self.config.max_runtime_seconds
         while cp.status not in {"completed", "failed", "stopped", "waiting_for_approval"}:
             if cp.state["pending"]:
@@ -370,7 +378,13 @@ class AgentEngine:
             if time.monotonic() >= deadline:
                 return self._step(cp, status="stopped", stop_reason="wall_time_budget")
             steps = cp.state["steps"] + 1
+            if reply.finish_reason == "length":
+                return self._step(cp, status="stopped", steps=steps,
+                                  stop_reason="model_output_limit")
             if reply.tool_calls:
+                if reply.finish_reason != "tool_calls":
+                    return self._step(cp, status="failed", steps=steps,
+                                      stop_reason="invalid_model_output")
                 if cp.state["calls"] + len(reply.tool_calls) > self.config.max_tool_calls:
                     return self._step(cp, status="stopped", steps=steps, stop_reason="tool_budget")
                 allowed = self.tools.allowed(principal)
@@ -396,13 +410,15 @@ class AgentEngine:
                     {"id": c.id, "type": "function",
                      "function": {"name": c.name, "arguments": json.dumps(c.arguments)}}
                     for c in reply.tool_calls]}
+                if reply.reasoning_content is not None:
+                    # Tinker recommends replaying the preceding reasoning on
+                    # tool continuation. Keep it in this private run only;
+                    # summaries and conversation history never expose it.
+                    assistant["reasoning_content"] = reply.reasoning_content
                 cp = self._step(cp, status="running", steps=steps,
                                 seen=signatures, messages=[*cp.state["messages"], assistant],
                                 pending=[c.model_dump() for c in reply.tool_calls])
                 continue
-            if reply.finish_reason == "length":
-                return self._step(cp, status="stopped", steps=steps,
-                                  stop_reason="model_output_limit")
             answer = reply.content.strip()
             if not answer:
                 return self._step(cp, status="failed", steps=steps,

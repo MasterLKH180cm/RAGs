@@ -78,6 +78,8 @@ const localStorage = {
 };
 
 let current = null;
+let deferredBootstrap, deferredLoginSession;
+let initialSessionPending = true, firstLoginSessionPending = true;
 let deferred = null;
 let makeNextQueryDeferred = false;
 let queryRequests = 0;
@@ -109,6 +111,18 @@ async function fetch(url, options = {}) {
     return reply(204);
   }
   if (url === "/admin/api/session" && method === "GET") {
+    // Ignore abort deliberately: an already delivered anonymous response must
+    // not invalidate an overlapping authenticated login in the newer epoch.
+    if (initialSessionPending) {
+      initialSessionPending = false;
+      return new Promise(resolve => {
+        deferredBootstrap = () => resolve(reply(401, {detail: {code: "session_required"}}));
+      });
+    }
+    if (firstLoginSessionPending && current) {
+      firstLoginSessionPending = false;
+      return new Promise(resolve => { deferredLoginSession = () => resolve(reply(200, session())); });
+    }
     return current ? reply(200, session()) : reply(401, {detail: {code: "session_required"}});
   }
   if (!current) return reply(401);
@@ -209,6 +223,23 @@ function assertNoOldTenant() {
 }
 
 await microtasks();
+element("#admin-token").value = "admin-A";
+const overlappingLogin = element("#login-form").events.submit({preventDefault() {}});
+await microtasks();
+assert.equal(typeof deferredBootstrap, "function");
+assert.equal(typeof deferredLoginSession, "function");
+deferredBootstrap();
+await microtasks();
+deferredLoginSession();
+await overlappingLogin;
+await microtasks();
+assert.equal(element("#workspace").hidden, false, "Late bootstrap 401 must not undo a newer login");
+assert.equal(element("#tenant-sidebar").textContent, "tenant-A");
+assert.equal(element("#login-error").hidden, true);
+assert.equal(element("#login-submit").disabled, false, "Successful login must restore its submit control");
+await trigger("#logout-button");
+assert.equal(element("#login-submit").disabled, false, "Logout must permit another login");
+
 await login("A");
 element("#query-question").value = "Confidential source request A";
 await trigger("#query-form", "submit");

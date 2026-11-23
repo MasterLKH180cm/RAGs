@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from rags.auth import OAuth2Config, ROLES, TENANT
 from rags.chunking import ChunkConfig
 from rags.features import FeatureFlags
+from rags.model_profiles import TINKER_BASE_URL, chat_profile, effort_from_env
 from rags.tokenization import TokenizerConfig
 
 
@@ -68,6 +69,8 @@ class Settings:
     otel_endpoint: str = ""
     otel_allow_insecure: bool = False
     otel_service_name: str = "rags-platform"
+    generation_protocol: str = "auto"
+    reasoning_effort: str | float | None = None
 
     @property
     def embedding_endpoint(self) -> str:
@@ -83,11 +86,17 @@ class Settings:
     def generation_endpoint(self) -> str:
         if self.model_provider == "router":
             return "router"
+        if (not self.generation_base_url and self.model_provider == "openai"
+                and chat_profile(self.chat_model, self.generation_protocol).protocol == "tinker"):
+            return TINKER_BASE_URL
         return self.generation_base_url or (self.openai_base_url if self.model_provider == "openai"
                                            else "https://api.anthropic.com/v1")
 
     @property
     def generation_credential(self) -> str:
+        if (self.generation_api_key is None and self.model_provider == "openai"
+                and chat_profile(self.chat_model, self.generation_protocol).protocol == "tinker"):
+            return ""
         return self.generation_api_key if self.generation_api_key is not None else (
             self.openai_key if self.model_provider == "openai" else self.anthropic_key)
 
@@ -184,6 +193,10 @@ class Settings:
             generation_base = endpoint(generation_base, "RAGS_GENERATION_BASE_URL")
         chat_model = os.getenv("RAGS_GENERATION_MODEL") or (
             "main" if model_provider == "router" else os.getenv("OPENAI_CHAT_MODEL") or "gpt-4.1-mini")
+        generation_protocol = os.getenv("RAGS_GENERATION_PROTOCOL", "auto")
+        selected_profile = chat_profile(chat_model, generation_protocol)
+        effort = effort_from_env(os.getenv("RAGS_REASONING_EFFORT"))
+        selected_profile.parameters(max_output_tokens=1, effort=effort)
         features = FeatureFlags.from_env()
         def object_env(name: str, fallback: str) -> dict:
             try:
@@ -195,7 +208,10 @@ class Settings:
             return value
 
         tokenizer = object_env("RAGS_TOKENIZER_JSON", '{"backend":"unicode"}')
-        generation_default = json.dumps({"backend": "tiktoken", "model": chat_model}) if model_provider == "openai" else '{"backend":"unicode"}'
+        generation_default = (json.dumps({"backend": "utf8_bytes"})
+                              if selected_profile.protocol == "tinker" else
+                              json.dumps({"backend": "tiktoken", "model": chat_model})
+                              if model_provider == "openai" else '{"backend":"unicode"}')
         generation_tokenizer = object_env("RAGS_GENERATION_TOKENIZER_JSON", generation_default)
         chunking = object_env("RAGS_CHUNKING_JSON", '{"strategy":"structure","max_tokens":850,"overlap_tokens":120}')
         try:
@@ -274,4 +290,6 @@ class Settings:
             otel_endpoint=otel_endpoint,
             otel_allow_insecure=otel_allow_insecure,
             otel_service_name=otel_service_name,
+            generation_protocol=generation_protocol,
+            reasoning_effort=effort,
         )

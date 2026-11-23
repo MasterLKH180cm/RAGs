@@ -34,7 +34,7 @@ def respond(monkeypatch, payload, *, content=None, status=200):
         body = {"json": payload} if content is None else {"content": content}
         return httpx.Response(status, request=httpx.Request("POST", url), **body)
 
-    monkeypatch.setattr(provider_module.httpx, "post", post)
+    monkeypatch.setattr(provider_module.provider_transport, "post", post)
     return requests
 
 

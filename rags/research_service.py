@@ -80,6 +80,7 @@ def worker_environment(config: ResearchSettings) -> dict:
         "ANTHROPIC_BASE_URL", "OPENAI_API_KEY_FILE", "ANTHROPIC_API_KEY_FILE",
         "RAGS_EMBEDDING_BASE_URL", "RAGS_EMBEDDING_API_KEY", "RAGS_EMBEDDING_API_KEY_FILE", "RAGS_EMBEDDING_MODEL",
         "RAGS_GENERATION_BASE_URL", "RAGS_GENERATION_API_KEY", "RAGS_GENERATION_API_KEY_FILE", "RAGS_GENERATION_MODEL",
+        "RAGS_GENERATION_PROTOCOL", "RAGS_REASONING_EFFORT",
     }
     environment = {key: value for key, value in os.environ.items() if key in allowed}
     environment.update(OMP_NUM_THREADS="2", OPENBLAS_NUM_THREADS="2", NUMBA_NUM_THREADS="2",

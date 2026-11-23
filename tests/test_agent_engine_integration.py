@@ -569,3 +569,113 @@ def test_combined_fresh_and_previous_citations_over_eighty_are_persisted(compone
     assert final["content"] == answer
     assert len(final["evidence_ids"]) == 81
     assert set(final["evidence_ids"]) == set(prior + new_sources)
+
+
+@pytest.mark.parametrize("approved_tool", [True, False])
+def test_truncated_tool_response_never_runs_or_requests_approval(components, approved_tool):
+    state, config = components
+    invocations = []
+    tools = ToolRegistry()
+    tools.register(ToolSpec("record", Args, lambda *_: invocations.append(True),
+                            permission="rags:memory", approval_required=approved_tool))
+    partial = ModelReply(content="", tool_calls=[call("record", {"amount": 1})],
+                         finish_reason="length", model="thinkingmachines/Inkling-2-Mini")
+    result = engine(state, config, FakeRouter(partial), tools).start(
+        principal(), goal="Execute only a complete valid request", model="main", session_id="truncated")
+    assert result.status == "stopped" and result.state["stop_reason"] == "model_output_limit"
+    assert result.state["pending"] == [] and result.state["calls"] == 0
+    assert invocations == []
+
+
+@pytest.mark.parametrize("change", ["schema", "model", "effort", "limits", "idempotency", "runtime"])
+def test_approval_cannot_resume_under_changed_execution_contract(components, change):
+    state, config = components
+    invoked = []
+    registry = ToolRegistry()
+    # A non-approval read tool also contributes its idempotency to the contract.
+    registry.register(ToolSpec("read", Args, lambda *_: {"value": 1}, permission="rags:query"))
+    registry.register(ToolSpec("record", Args, lambda *_: invoked.append(1),
+                               permission="rags:memory", approval_required=True))
+    service = engine(state, config, FakeRouter(reply("", call("record", {"amount": 1}))), registry)
+    waiting = service.start(principal(), goal="Record one observation", model="main", session_id="update")
+    assert waiting.status == "waiting_for_approval"
+
+    if change == "schema":
+        class ChangedArgs(BaseModel):
+            model_config = ConfigDict(extra="forbid")
+            amount: int = Field(ge=0, le=100)
+        registry._tools["record"] = replace(registry._tools["record"], schema=ChangedArgs)
+    elif change == "model":
+        config = replace(config, models={"main": "thinkingmachines/Inkling-2-Mini"})
+    elif change == "effort":
+        config = replace(config, model_options={"main": {"protocol": "tinker", "reasoning_effort": "low"}})
+    elif change == "limits":
+        config = replace(config, max_tool_calls=8)
+    elif change == "idempotency":
+        registry._tools["read"] = replace(registry._tools["read"], idempotent=False)
+    else:
+        waiting = state.create(principal().tenant, kind="agent", fingerprint="0" * 64,
+                               state=waiting.state, status="waiting_for_approval")
+    restarted = engine(StateStore(Store(state.store.path)), config, FakeRouter(), registry)
+    assert restarted.get(principal(), waiting.run_id).status == "waiting_for_approval"
+    with pytest.raises(CapabilityError) as error:
+        restarted.resume(principal(), waiting.run_id, expected_revision=waiting.revision, approved=True)
+    assert error.value.code == "definition_mismatch"
+    assert invoked == []
+    assert state.get(principal().tenant, waiting.run_id).status == "waiting_for_approval"
+
+
+@pytest.mark.parametrize("status", ["completed", "failed", "stopped"])
+def test_upgrade_keeps_old_agent_history_readable_only_to_its_tenant_and_owner(components, status):
+    state, config = components
+    bot = FakeRouter(reply("Historical answer"))
+    service = engine(state, config, bot)
+    completed = service.start(principal(), goal="Read a historical answer", model="main", session_id="history")
+    legacy = state.create(principal().tenant, kind="agent", fingerprint="0" * 64,
+                          state=completed.state, status=status)
+    read_only_owner = principal(permissions={"rags:agent"})
+    restored = engine(StateStore(Store(state.store.path)), config, FakeRouter())
+    historical = restored.get(read_only_owner, legacy.run_id)
+    assert historical.status == status
+    assert restored.summary(historical)["answer"] == "Historical answer"
+    for unauthorized in (principal("tenant-b"), principal(subject="other-owner")):
+        with pytest.raises(CapabilityError) as error:
+            restored.get(unauthorized, legacy.run_id)
+        assert error.value.status_code == 404
+    assert len(bot.calls) == 1
+
+
+def test_reordered_equivalent_model_configuration_preserves_contract(components):
+    state, baseline = components
+    first = replace(baseline, models={"a": "openai/a", "b": "openai/b"})
+    second = replace(baseline, models={"b": "openai/b", "a": "openai/a"})
+    assert engine(state, first, FakeRouter())._fingerprint == engine(state, second, FakeRouter())._fingerprint
+
+
+def test_tool_reasoning_continuation_is_private_across_approval_and_restart(components):
+    state, config = components
+    registry = ToolRegistry()
+    registry.register(ToolSpec("record", Args, lambda *_: {"saved": True},
+                               permission="rags:memory", approval_required=True))
+    continuation = "PRIVATE upstream continuation fixture"
+    first_reply = ModelReply(content="", tool_calls=[call("record", {"amount": 1})],
+        finish_reason="tool_calls", model="thinkingmachines/Inkling-2-Mini", reasoning_content=continuation)
+    assert continuation not in first_reply.model_dump_json() and continuation not in repr(first_reply)
+    service = engine(state, config, FakeRouter(first_reply), registry)
+    waiting = service.start(principal(), goal="Save an approved observation",
+                            model="main", session_id="continuation")
+    assert waiting.status == "waiting_for_approval"
+    assert continuation not in str(service.summary(waiting))
+    assert continuation not in str(waiting.public())
+    assert waiting.state["messages"][-1]["reasoning_content"] == continuation
+
+    following = FakeRouter(reply("Saved after approval"))
+    restarted = engine(StateStore(Store(state.store.path)), config, following, registry)
+    finished = restarted.resume(principal(), waiting.run_id,
+                                 expected_revision=waiting.revision, approved=True)
+    assert finished.status == "completed"
+    assert following.calls[0][1][-2]["reasoning_content"] == continuation
+    assert continuation not in str(restarted.summary(finished))
+    assert continuation not in str(finished.public())
+    assert continuation not in str(restarted.history.last("tenant-a", scoped_session(
+        principal().subject, "continuation")))
