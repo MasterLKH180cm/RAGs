@@ -3,14 +3,13 @@
 Values always use bound parameters. Only the application's static SQLite SQL
 vocabulary is translated; vector ranking is explicit PostgreSQL SQL.
 """
-from contextlib import contextmanager
 import json
 import math
 import re
 import struct
+from contextlib import contextmanager
 
 from rags.registry import CapabilityError
-
 
 MAX_VECTOR_DIMENSIONS = 16_000
 SCHEMA_LOCK = 731824204
@@ -63,8 +62,10 @@ def translate_schema(schema: str) -> str:
     """Adapt the two fixed application schemas, never request-supplied DDL."""
     schema = schema.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY")
     schema = schema.replace("original BLOB NOT NULL", "original BYTEA NOT NULL")
-    schema = schema.replace("embedding TEXT NOT NULL", "embedding vector NOT NULL")
-    schema = schema.replace("vector TEXT NOT NULL", "vector vector NOT NULL")
+    # Match complete application column names: a JSON sparse_embedding column
+    # must not become pgvector merely because its name ends in "embedding".
+    schema = re.sub(r"(?<!\w)embedding TEXT NOT NULL", "embedding vector NOT NULL", schema)
+    schema = re.sub(r"(?<!\w)vector TEXT NOT NULL", "vector vector NOT NULL", schema)
     return schema.replace(
         "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(chunk_id UNINDEXED,content,tokenize='unicode61')",
         "CREATE TABLE IF NOT EXISTS chunks_fts (chunk_id TEXT PRIMARY KEY, content TEXT NOT NULL, "

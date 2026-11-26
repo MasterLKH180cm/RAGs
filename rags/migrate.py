@@ -1,17 +1,18 @@
 """Explicit, offline SQLite-to-PostgreSQL import without provider execution."""
 import argparse
-from contextlib import closing
 import json
 import os
-from pathlib import Path
 import sqlite3
+from contextlib import closing
+from pathlib import Path
 
 from rags import postgres
 from rags.agents.state import StateStore
+from rags.collection_store import TABLE_FIELDS as COLLECTION_FIELDS
+from rags.collection_store import CollectionStore
 from rags.multimodal import ASSET_FIELDS, AssetStore
 from rags.registry import CapabilityError
 from rags.storage import CHUNK_FIELDS, DOC_COLUMNS, REVISION_FIELDS, Store
-
 
 TABLE_FIELDS = {
     "document_revisions": REVISION_FIELDS,
@@ -20,6 +21,7 @@ TABLE_FIELDS = {
     "chunks_fts": ("chunk_id", "content"),
     "edges": ("tenant", "document_id", "source", "target"),
     "graph_relations": ("tenant", "document_id", "revision", "source", "predicate", "target", "evidence_id"),
+    **COLLECTION_FIELDS,
     "audit": ("id", "timestamp", "tenant", "action", "document_id", "detail"),
     "image_assets": ASSET_FIELDS,
     "agent_runs": ("tenant", "run_id", "kind", "revision", "status", "fingerprint", "state", "updated_at"),
@@ -27,6 +29,7 @@ TABLE_FIELDS = {
     "agent_observations": ("tenant", "session_id", "digest", "fact", "source_id", "confidence", "expires_at", "updated_at"),
 }
 AGENT_TABLES = {"agent_runs", "agent_messages", "agent_observations"}
+COLLECTION_TABLES = set(COLLECTION_FIELDS)
 SQLITE_INTERNAL_TABLES = {"sqlite_sequence", "sqlite_stat1", "sqlite_stat2", "sqlite_stat3", "sqlite_stat4",
                          "chunks_fts_data", "chunks_fts_idx", "chunks_fts_content",
                          "chunks_fts_docsize", "chunks_fts_config"}
@@ -34,10 +37,12 @@ SQLITE_INTERNAL_TABLES = {"sqlite_sequence", "sqlite_stat1", "sqlite_stat2", "sq
 
 def _source_tables(source) -> set[str]:
     tables = {row["name"] for row in source.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    if set(TABLE_FIELDS) - {"image_assets"} - AGENT_TABLES - tables:
+    if set(TABLE_FIELDS) - {"image_assets"} - AGENT_TABLES - COLLECTION_TABLES - tables:
         raise ValueError("Source must contain the complete migrated RAG SQLite schema")
     if tables & AGENT_TABLES and not AGENT_TABLES <= tables:
         raise ValueError("Source must contain the complete native agent schema")
+    if tables & COLLECTION_TABLES and not COLLECTION_TABLES <= tables:
+        raise ValueError("Source must contain the complete collection schema")
     for table, fields in TABLE_FIELDS.items():
         if table not in tables:
             continue
@@ -85,6 +90,7 @@ Schema bootstrap may persist on failure; imported application rows never do.
         store = Store(target_dsn)
         AssetStore(target_dsn)
         StateStore(store)
+        collections = CollectionStore(store)
         counts = {}
         with store.connect() as connection:
             connection.execute("LOCK TABLE " + ",".join(sorted(TABLE_FIELDS)) + " IN ACCESS EXCLUSIVE MODE")
@@ -99,7 +105,7 @@ Schema bootstrap may persist on failure; imported application rows never do.
                     # Preserve the exact SQLite tie-breaker, not UUID ordering.
                     selected += ",rowid AS revision_order"
                     target_fields = (*fields, "revision_order")
-                vector_column = {"chunks": "embedding", "image_assets": "vector"}.get(table)
+                vector_column = {"chunks": "embedding", "image_assets": "vector", "rag_collection_versions": "embedding"}.get(table)
                 placeholders = ["?::vector" if name == vector_column else "?" for name in target_fields]
                 statement = (f"INSERT INTO {table}(" + ",".join(target_fields) + ") VALUES(" +
                              ",".join(placeholders) + ")")
@@ -113,6 +119,7 @@ Schema bootstrap may persist on failure; imported application rows never do.
                         values[vector_column] = postgres.vector_literal(vector)
                     connection.execute(statement, [values[name] for name in target_fields])
                     counts[table] += 1
+            collections.validate_import(connection)
             for table, count in counts.items():
                 actual = connection.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()["count"]
                 expected = source.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] if table in tables else 0

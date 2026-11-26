@@ -69,6 +69,7 @@ def configured():
         "RAGS_GENERATION_BASE_URL": "https://generation.example/v1",
         "RAGS_GENERATION_API_KEY": "fixture-generation-key", "RAGS_GENERATION_MODEL": "fixture-generation",
         "RAGS_FEATURES_JSON": '{"deletion":false}', "RAGS_CONTEXT_BUDGET": "4096",
+        "RAGS_COLLECTION_LIMITS_JSON": '{"max_records":500,"max_batch":50}',
         "RAGS_CHUNKING_JSON": '{"strategy":"recursive","max_tokens":256,"overlap_tokens":32}',
     }
     if FULL_STACK:

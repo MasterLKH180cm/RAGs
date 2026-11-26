@@ -48,6 +48,9 @@ under a database lock, applies the entire batch, and advances generation once.
 supports both. Duplicate request IDs are invalid. A preparation or SQL failure
 leaves records, vectors, generation and audit unchanged. Optional
 `expected_generation` is checked before providers and again at commit.
+Generations use signed 64-bit nonnegative integers. Changes at the maximum fail
+atomically; reads, no-ops, forks and collection deletion remain possible. Mutation
+response size, including accumulated provider usage, is checked before commit.
 
 Omitted update fields are preserved. New records default to null document and
 empty metadata, and must have a valid vector. Changed non-null text is embedded
@@ -87,6 +90,8 @@ implied by accepting precomputed sparse vectors.
 Metadata permits scalar string/finite-number/bool/null and homogeneous scalar
 arrays (no nested objects); bool is distinct from numbers. Bounds: 64 keys,
 128-character keys, 4096-character strings, 100 array entries, 16 KiB encoded.
+Integers fit signed 64-bit storage; text must be valid UTF-8 without NUL. Scalar
+null is supported, while arrays contain one non-null scalar type.
 Text is at most 20000 characters and is never silently truncated. Configured
 embedding token windows are checked before any batch encoding.
 
@@ -105,7 +110,7 @@ Existing ingestion/documents/query/deletion and strategy/provider flags also app
 | `GET /collections` | Paginated list, optional exact `name` lookup |
 | `GET /collections/{id}` | Collection information |
 | `PATCH /collections/{id}` | `{name?, metadata?, expected_generation?}` |
-| `DELETE /collections/{id}` | Delete with optional expected-generation query |
+| `DELETE /collections/{id}` | Optional expected-generation query or JSON body; duplicate sources rejected |
 | `GET /collections/{id}/count` | Committed record count |
 | `GET /collections/{id}/indexing-status` | Transactional ready state/counts/profile/generation |
 | `POST /collections/{id}/fork` | `{name, metadata?, expected_generation?}` |
@@ -151,6 +156,10 @@ are document, metadata, embedding, sparse_embedding, score and distance.
   100 ranked candidates, 100 returned records, offset+limit<=candidate_limit,
   16 MiB scanned materialized data and 2 MiB response. Bounds fail explicitly;
   no silently partial corpus. Operator configuration may lower these limits.
+  Response limits have a 32768-byte minimum for bounded control envelopes.
+  Filtered deletes exceeding the configured mutation batch limit fail as a whole;
+  callers must select smaller explicit batches. Catalog list/count requests may
+  observe concurrent catalog changes; search/get record snapshots are consistent.
 
 ## Filters and bounded regex
 
