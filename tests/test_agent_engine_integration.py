@@ -1,15 +1,18 @@
 """Bounded agent tool loop, explicit approval, memory and privilege regression."""
 from dataclasses import replace
 from collections import deque
+import json
+import time
 
+import httpx
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
 from rags.agents.config import AgentPlatformConfig
 from rags.agents.engine import AgentEngine, ToolRegistry, ToolSpec
 from rags.agents.memory import scoped_session
-from rags.agents.router import ModelReply, ToolCall
-from rags.agents.state import StateStore
+from rags.agents.router import MAX_RESPONSE_BYTES, ModelReply, ModelRouter, ToolCall
+from rags.agents.state import MAX_STATE_BYTES, StateStore
 from rags.auth import Principal, PERMISSIONS
 from rags.features import FeatureFlags
 from rags.registry import CapabilityError
@@ -86,6 +89,88 @@ def test_agent_completes_without_tool_and_persists_conversation(components):
         service.get(principal("tenant-a", subject="other-operator"), cp.run_id)
 
 
+def test_valid_gateway_reply_exceeding_checkpoint_budget_stops_before_tools(components, monkeypatch):
+    state, config = components
+    config = replace(config, max_tool_calls=16)
+    router = ModelRouter(config)
+    calls = [{"id": f"call_{index}", "type": "function", "function": {
+        "name": "knowledge_search",
+        "arguments": json.dumps({"question": str(index) + "界" * 1999, "top_k": 5}),
+    }} for index in range(8)]
+    payload = {"choices": [{"message": {
+        "role": "assistant", "content": "界" * 30000,
+        "reasoning_content": "界" * 30000, "tool_calls": calls,
+    }, "finish_reason": "tool_calls"}]}
+    raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    assert len(raw) < MAX_RESPONSE_BYTES
+    assert all(len(item["function"]["arguments"].encode("utf-8")) < 16384 for item in calls)
+    monkeypatch.setattr(router, "_post", lambda *_: httpx.Response(200, content=raw))
+    service = engine(state, config, router)
+    monkeypatch.setattr(service, "_invoke_tool",
+                        lambda *_: pytest.fail("An unsaved tool batch must never execute"))
+
+    result = service.start(principal(), goal="Search the source facts", model="main", session_id="budget")
+    assert result.status == "stopped"
+    assert result.state["stop_reason"] == "checkpoint_budget"
+    assert result.state["pending"] == [] and result.state["calls"] == 0
+    assert len(result.state["messages"]) == 2
+    assert state.get("tenant-a", result.run_id) == result
+    assert service.history.last("tenant-a", scoped_session(principal().subject, "budget")) == []
+
+
+def test_tool_result_budget_stop_does_not_continue_or_replay_pending_actions(components):
+    state, config = components
+    executed = []
+    registry = ToolRegistry()
+    registry.register(ToolSpec(
+        "action", Args,
+        lambda _tenant, _session, args: executed.append(args.amount) or {"details": "x" * 8000},
+        permission="rags:query",
+    ))
+    service = engine(state, config, FakeRouter(), registry)
+    saved = {"subject": principal().subject, "session_id": "budget", "model": "main",
+             "messages": [], "pending": [call("action", {"amount": 1}, "first").model_dump(),
+                                          call("action", {"amount": 2}, "second").model_dump()],
+             "approval": None, "evidence_ids": [], "calls": 0, "stop_reason": None,
+             "padding": ""}
+    encoded = json.dumps(saved, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    saved["padding"] = "x" * (MAX_STATE_BYTES - len(encoded) - 100)
+    cp = state.create("tenant-a", kind="agent", fingerprint=service._fingerprint, state=saved)
+
+    result = service._pending(cp, principal(), deadline=time.monotonic() + 2)
+    assert result.status == "stopped" and result.state["stop_reason"] == "checkpoint_budget"
+    assert executed == [1]
+    assert result.state["pending"] == saved["pending"]
+    assert state.get("tenant-a", cp.run_id) == result
+
+
+@pytest.mark.parametrize("spare_bytes", [100, 0])
+def test_approval_feedback_budget_is_checked_before_an_approved_tool_runs(components, spare_bytes):
+    state, config = components
+    executed = []
+    registry = ToolRegistry()
+    registry.register(ToolSpec("record", Args, lambda *_: executed.append("written"),
+                               permission="rags:memory", approval_required=True))
+    service = engine(state, config, FakeRouter(reply("", call("record", {"amount": 1}))), registry)
+    paused = service.start(principal(), goal="Record the approved value", model="main", session_id="resume-budget")
+    saved = {**paused.state, "padding": ""}
+    encoded = json.dumps(saved, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    saved["padding"] = "x" * (MAX_STATE_BYTES - len(encoded) - spare_bytes)
+    paused = state.update("tenant-a", paused.run_id, expected_revision=paused.revision,
+                          fingerprint=paused.fingerprint, status="waiting_for_approval", state=saved)
+
+    stopped = service.resume(principal(), paused.run_id, expected_revision=paused.revision,
+                             approved=True, feedback="界" * 500)
+    assert stopped.status == "stopped"
+    assert stopped.state["stop_reason"] == ("checkpoint_budget" if spare_bytes else None)
+    if not spare_bytes:
+        # Legacy exact-cap state has no room even for the reason. Preserve it
+        # byte-for-byte while still committing a terminal status outside JSON.
+        assert stopped.state == saved
+    assert stopped.state["approval"] is None and executed == []
+    assert state.get("tenant-a", paused.run_id) == stopped
+
+
 def test_agent_approval_gate_happens_before_tool_and_resumes_exactly_once(components):
     state, config = components
     invoked = []
@@ -113,6 +198,23 @@ def test_agent_approval_gate_happens_before_tool_and_resumes_exactly_once(compon
         service.resume(principal(), waiting.run_id,
                        expected_revision=waiting.revision, approved=True)
     assert invoked == [("tenant-a", scoped_session(principal().subject, "conversation"), 3)]
+
+
+def test_agent_sdk_rejects_coercible_revisions_before_approved_tool_execution(components):
+    state, config = components
+    executed = []
+    registry = ToolRegistry()
+    registry.register(ToolSpec("record", Args, lambda *_: executed.append("written") or {},
+                               permission="rags:memory", approval_required=True))
+    service = engine(state, config, FakeRouter(reply("", call("record", {"amount": 1})), reply("Done")), registry)
+    paused = service.start(principal(), goal="Record the approved value", model="main", session_id="sdk-revision")
+    for invalid in (True, False, float(paused.revision), str(paused.revision), -1):
+        with pytest.raises(ValueError, match="Invalid checkpoint revision"):
+            service.resume(principal(), paused.run_id, expected_revision=invalid, approved=True)
+        assert state.get("tenant-a", paused.run_id) == paused
+        assert executed == []
+    completed = service.resume(principal(), paused.run_id, expected_revision=paused.revision, approved=True)
+    assert completed.status == "completed" and executed == ["written"]
 
 
 def test_agent_human_denial_preserves_tool_trace_without_executing(components):

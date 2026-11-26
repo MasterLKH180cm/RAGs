@@ -160,7 +160,8 @@ def install_admin(app: FastAPI, *, settings: Settings, authenticator: Authentica
     def csrf_check(request: Request, session: AdminSession) -> None:
         _origin(request)
         supplied = request.headers.get("x-csrf-token", "")
-        if not supplied or not secrets.compare_digest(supplied, session.csrf):
+        if (not supplied or not supplied.isascii()
+                or not secrets.compare_digest(supplied, session.csrf)):
             raise HTTPException(403, detail={"code": "invalid_csrf"})
 
     def require(request: Request, *scopes: str, mutation: bool = False) -> tuple[Principal, AdminSession]:

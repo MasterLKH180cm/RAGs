@@ -170,3 +170,16 @@ def test_timed_tool_requires_explicit_readonly_and_idempotency_declaration():
     tool = ToolSpec("read", StrictArgs, lambda *_: {}, permission="rags:query",
                     read_only=True, idempotent=True)
     assert tool.read_only is True
+
+
+@pytest.mark.parametrize("value", ["false", "true", 0, 1, None])
+def test_tool_and_workflow_replay_safety_require_boolean_declarations(value):
+    for field in ("approval_required", "idempotent"):
+        with pytest.raises(ValueError, match="explicit booleans"):
+            ToolSpec("write", StrictArgs, lambda *_: {}, permission="rags:query", **{field: value})
+    for field in ("approval", "idempotent"):
+        with pytest.raises(ValueError, match="explicit booleans"):
+            Workflow("safety").then("write", lambda _: None, **{field: value})
+    with pytest.raises(ValueError, match="idempotent"):
+        Workflow("safety").parallel("reads", {"one": lambda _: 1, "two": lambda _: 2},
+                                     idempotent=value)

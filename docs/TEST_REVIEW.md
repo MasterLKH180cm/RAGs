@@ -126,7 +126,7 @@ flowchart TD
 - Missing selected resources fail. Reports and diagnostics are uploaded even
   after a failure; a missing report cannot be represented as a pass.
 
-Use the executable commands in [README](../README.md#validation-and-measured-limits).
+Use the executable commands in [README](README_REFERENCE.md#validation-and-measured-limits).
 Run unit coverage first without `--cov-append`, then integration with append, to
 avoid accidentally reusing an old measurement. Generated evidence stays under
 `reports/testing/`; raw runtime artifacts are not checked in as source code.

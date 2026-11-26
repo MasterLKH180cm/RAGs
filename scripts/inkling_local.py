@@ -100,7 +100,7 @@ def main(argv=None) -> int:
             write_json(args.manifest, deployment_manifest(report, args.threads))
             # argv is a fixed command, never interpreted by a shell.
             environment = {key: value for key, value in os.environ.items()
-                           if not key.startswith("LLAMA_ARG_")}
+                           if not key.startswith("LLAMA_ARG_") and key != "LLAMA_API_KEY"}
             return subprocess.run(command, check=False, env=environment).returncode
         return 0
     except (ImportError, OSError, ValueError, httpx.HTTPError) as exc:

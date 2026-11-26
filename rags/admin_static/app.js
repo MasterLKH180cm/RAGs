@@ -7,6 +7,7 @@
   const state = {csrf:'',tenant:'',permissions:[],view:'overview',offset:0,search:'',limit:20,deleteTarget:null,agentRun:null,workflowRun:null,workflowTemplates:[],loading:false,authenticated:false,epoch:0};
   const pending=new Set();
   let searchTimer,toastTimer;
+  let documentsRequest=0;
   function el(tag,klass,label){
     const item=document.createElement(tag); if(klass)item.className=klass;
     if(label!==undefined&&label!==null)item.textContent=String(label);return item;
@@ -214,11 +215,15 @@
     $('#page-next').disabled=state.offset+state.limit>=data.total;
   }
   async function loadDocuments(){
-    const epoch=state.epoch,root=$('#documents-body');root.replaceChildren();
+    const epoch=state.epoch,request=++documentsRequest,root=$('#documents-body');root.replaceChildren();
     const tr=el('tr'),td=el('td','empty-state','正在讀取文件…');td.colSpan=4;tr.append(td);root.append(tr);
     const qs=new URLSearchParams({search:state.search,offset:String(state.offset),limit:String(state.limit)});
-    try{const data=await api('documents?'+qs.toString());if(epoch===state.epoch)renderDocuments(data);}
-    catch(e){if(epoch===state.epoch){td.textContent=errorText(e);root.replaceChildren(tr);}}
+    try{
+      const data=await api('documents?'+qs.toString());
+      if(epoch===state.epoch&&request===documentsRequest)renderDocuments(data);
+    }catch(e){
+      if(epoch===state.epoch&&request===documentsRequest){td.textContent=errorText(e);root.replaceChildren(tr);}
+    }
   }
   function openDelete(doc){
     state.deleteTarget=doc;txt('#delete-target',doc.id);$('#delete-confirm').value='';

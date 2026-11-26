@@ -2,7 +2,9 @@
 import asyncio
 import json
 import math
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from threading import Barrier, Event, Lock
 from types import SimpleNamespace
 
 import httpx
@@ -135,6 +137,39 @@ def test_generation_rejects_invalid_success_envelopes_as_typed_provider_errors(
         Providers(replace(settings, model_provider=model_provider)).complete("system", "question")
     assert error.value.code == "invalid_model_output"
     assert error.value.status_code == 502
+
+
+@pytest.mark.parametrize("stop_reason", [{}, [], None, True, "max_tokens", "tool_use"])
+def test_anthropic_rejects_malformed_or_incomplete_stop_reason(settings, monkeypatch, stop_reason):
+    respond(monkeypatch, {"stop_reason": stop_reason, "content": [
+        {"type": "text", "text": "private provider answer fixture-anthropic-key"},
+    ]})
+    with pytest.raises(CapabilityError) as error:
+        Providers(replace(settings, model_provider="anthropic")).complete("system", "question")
+    assert (error.value.code, error.value.status_code) == ("invalid_model_output", 502)
+    assert "private" not in error.value.reason and "fixture-" not in error.value.reason
+
+
+@pytest.mark.parametrize("block_type", ["tool_use", "server_tool_use", "unknown", None, [], {}])
+def test_anthropic_rejects_nontext_action_or_invalid_content_blocks(settings, monkeypatch, block_type):
+    respond(monkeypatch, {"stop_reason": "end_turn", "content": [
+        {"type": "text", "text": "private provider answer fixture-anthropic-key"},
+        {"type": block_type, "name": "private action", "input": {}},
+    ]})
+    with pytest.raises(CapabilityError) as error:
+        Providers(replace(settings, model_provider="anthropic")).complete("system", "question")
+    assert (error.value.code, error.value.status_code) == ("invalid_model_output", 502)
+    assert "private" not in error.value.reason and "fixture-" not in error.value.reason
+
+
+@pytest.mark.parametrize("stop_reason", ["end_turn", "stop_sequence"])
+def test_anthropic_preserves_completed_text_and_private_reasoning_blocks(settings, monkeypatch, stop_reason):
+    respond(monkeypatch, {"stop_reason": stop_reason, "content": [
+        {"type": "thinking", "thinking": "private reasoning"},
+        {"type": "redacted_thinking", "data": "private redacted reasoning"},
+        {"type": "text", "text": "Source-backed "}, {"type": "text", "text": "answer."},
+    ]})
+    assert Providers(replace(settings, model_provider="anthropic")).complete("system", "question") == "Source-backed answer."
 
 
 @pytest.mark.parametrize("operation", ["embedding", "openai", "anthropic"])
@@ -307,5 +342,69 @@ def test_unavailable_fastembed_dependency_and_checkpoint_are_capability_errors(m
             provider_module._semantic_encoder("fixture-unavailable-checkpoint")
         assert error.value.code == "requires_provider"
         assert "private" not in error.value.reason
+    finally:
+        provider_module._semantic_encoder.cache_clear()
+
+
+def test_concurrent_cold_fastembed_requests_share_one_encoder(monkeypatch):
+    import sys
+
+    callers_ready = Barrier(3)
+    first_started, duplicate_started, release = Event(), Event(), Event()
+    constructed, lock = [], Lock()
+
+    def construct(**_):
+        encoder = object()
+        with lock:
+            constructed.append(encoder)
+            (first_started if len(constructed) == 1 else duplicate_started).set()
+        assert release.wait(timeout=5)
+        return encoder
+
+    def load():
+        callers_ready.wait(timeout=5)
+        return provider_module._semantic_encoder("fixture-concurrent", "fixture-cache")
+
+    monkeypatch.setitem(sys.modules, "fastembed", SimpleNamespace(TextEmbedding=construct))
+    provider_module._semantic_encoder.cache_clear()
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            pending = [pool.submit(load) for _ in range(2)]
+            callers_ready.wait(timeout=5)
+            try:
+                assert first_started.wait(timeout=5)
+                # The first construction stays blocked while the other caller
+                # enters the cold factory. A cache alone permits a second build.
+                assert not duplicate_started.wait(timeout=0.2)
+            finally:
+                release.set()
+            encoders = [future.result(timeout=5) for future in pending]
+        assert len(constructed) == 1
+        assert encoders[0] is encoders[1] is constructed[0]
+        assert provider_module._semantic_encoder("fixture-concurrent", "fixture-cache") is encoders[0]
+    finally:
+        provider_module._semantic_encoder.cache_clear()
+
+
+def test_failed_fastembed_construction_releases_lock_and_allows_retry(monkeypatch):
+    import sys
+
+    attempts, expected = [], object()
+
+    def construct(**_):
+        attempts.append(True)
+        if len(attempts) == 1:
+            raise OSError("private checkpoint failure")
+        return expected
+
+    monkeypatch.setitem(sys.modules, "fastembed", SimpleNamespace(TextEmbedding=construct))
+    provider_module._semantic_encoder.cache_clear()
+    try:
+        with pytest.raises(CapabilityError) as error:
+            provider_module._semantic_encoder("fixture-retry")
+        assert error.value.code == "requires_provider" and "private" not in error.value.reason
+        assert provider_module._semantic_encoder("fixture-retry") is expected
+        assert provider_module._semantic_encoder("fixture-retry") is expected
+        assert len(attempts) == 2
     finally:
         provider_module._semantic_encoder.cache_clear()

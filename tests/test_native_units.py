@@ -23,6 +23,15 @@ def test_cosine_preserves_direction_scale_and_zero_vector_semantics():
     assert cosine([0.0, 0.0], [1.0, 0.0]) == 0.0
 
 
+@pytest.mark.parametrize("scale", [1e-308, 1e-200, 1e200, 1e308])
+def test_cosine_preserves_finite_extreme_vector_directions(scale):
+    assert cosine([scale, scale], [scale, scale]) == pytest.approx(1.0)
+    assert cosine([scale, scale], [-scale, -scale]) == pytest.approx(-1.0)
+    assert cosine([scale, 0.0], [0.0, scale]) == 0.0
+    assert cosine([scale, scale], [1.0, 1.0]) == pytest.approx(1.0)
+    assert cosine([0.0, 0.0], [scale, scale]) == 0.0
+
+
 @pytest.mark.parametrize(("left", "right"), [([], []), ([1.0], [1.0, 2.0]),
                                               ([math.nan], [1.0]), ([1.0], [math.inf])])
 def test_cosine_rejects_mismatched_empty_and_nonfinite_vectors(left, right):

@@ -72,6 +72,163 @@ def test_workflow_rejects_approval_and_prevents_side_effect(state):
     assert final.status == "stopped" and invoked == []
 
 
+@pytest.mark.parametrize("spare_bytes", [0, 1])
+def test_full_workflow_checkpoint_can_be_denied_without_executing_action(state, spare_bytes):
+    from rags.agents.state import encode_checkpoint_state
+
+    invoked = []
+    flow = Workflow("full_denial").then("publish", lambda _: invoked.append("published"),
+                                        approval=True, idempotent=True)
+    waiting = flow.start(state, "tenant", {"payload": ""})
+    saved = {**waiting.state, "input": dict(waiting.state["input"])}
+    saved["input"]["payload"] = "x" * (
+        MAX_STATE_BYTES - len(encode_checkpoint_state(saved).encode("utf-8")) - spare_bytes
+    )
+    waiting = state.update("tenant", waiting.run_id, expected_revision=waiting.revision,
+                           fingerprint=flow.fingerprint, status="waiting_for_approval", state=saved)
+    assert len(encode_checkpoint_state(waiting.state).encode("utf-8")) == MAX_STATE_BYTES - spare_bytes
+
+    for invalid in (True, False, float(waiting.revision), str(waiting.revision), -1):
+        with pytest.raises(ValueError, match="Invalid checkpoint revision"):
+            flow.resume(state, "tenant", waiting.run_id, expected_revision=invalid, approved=False)
+        assert state.get("tenant", waiting.run_id) == waiting and invoked == []
+    for stale in (waiting.revision - 1, waiting.revision + 1):
+        with pytest.raises(CapabilityError) as conflict:
+            flow.resume(state, "tenant", waiting.run_id, expected_revision=stale, approved=False)
+        assert conflict.value.code == "revision_conflict"
+        assert state.get("tenant", waiting.run_id) == waiting and invoked == []
+
+    stopped = flow.resume(state, "tenant", waiting.run_id,
+                           expected_revision=waiting.revision, approved=False)
+    assert stopped.status == "stopped" and stopped.revision == waiting.revision + 1
+    assert stopped.state["approved"] == (False if spare_bytes else None)
+    if not spare_bytes:
+        # null -> false needs one additional byte. The terminal status must
+        # persist even when the original JSON has no room for that decision.
+        assert stopped.state == saved
+    assert state.get("tenant", waiting.run_id) == stopped and invoked == []
+
+
+def test_full_workflow_denial_does_not_overwrite_a_concurrent_checkpoint(state, monkeypatch):
+    from rags.agents.state import encode_checkpoint_state
+
+    invoked = []
+    flow = Workflow("concurrent_denial").then("publish", lambda _: invoked.append("published"),
+                                              approval=True, idempotent=True)
+    saved = {"cursor": 0, "input": {"payload": ""}, "outputs": {},
+             "approved": None, "waiting_for": "publish"}
+    saved["input"]["payload"] = "x" * (MAX_STATE_BYTES - len(encode_checkpoint_state(saved).encode("utf-8")))
+    waiting = state.create("tenant", kind="workflow", fingerprint=flow.fingerprint,
+                           status="waiting_for_approval", state=saved)
+    terminate = state.terminate
+    concurrent = []
+
+    def race(checkpoint, **kwargs):
+        concurrent.append(state.update(
+            "tenant", waiting.run_id, expected_revision=waiting.revision,
+            fingerprint=flow.fingerprint, status="waiting_for_approval", state=saved,
+        ))
+        return terminate(checkpoint, **kwargs)
+
+    monkeypatch.setattr(state, "terminate", race)
+    with pytest.raises(CapabilityError) as conflict:
+        flow.resume(state, "tenant", waiting.run_id, expected_revision=waiting.revision, approved=False)
+    assert conflict.value.code == "revision_conflict"
+    assert len(concurrent) == 1
+    assert state.get("tenant", waiting.run_id) == concurrent[0] and invoked == []
+
+
+def test_workflow_context_mutations_cannot_rewrite_input_or_committed_outputs(state):
+    inputs = {"request": {"value": "original"}}
+
+    def mutate(context):
+        context.input["request"]["value"] = "local change"
+        context.outputs["first"]["approved"] = True
+        return {"result": context.input["request"]["value"]}
+
+    flow = (Workflow("snapshots")
+            .then("first", lambda _: {"approved": False})
+            .then("second", mutate))
+    result = flow.start(state, "tenant", inputs)
+    assert inputs == {"request": {"value": "original"}}
+    assert result.state["input"] == inputs
+    assert result.state["outputs"] == {
+        "first": {"approved": False}, "second": {"result": "local change"},
+    }
+    assert state.get("tenant", result.run_id).state == result.state
+
+
+def test_parallel_workflow_callbacks_receive_independent_nested_snapshots(state):
+    from threading import Event
+
+    changed = Event()
+    inputs = {"request": {"value": "original"}}
+
+    def mutate(context):
+        context.input["request"]["value"] = "branch local"
+        context.outputs["first"]["approved"] = True
+        changed.set()
+        return "mutation remains local"
+
+    def observe(context):
+        assert changed.wait(timeout=2), "Mutating branch did not execute"
+        return {"input": context.input["request"]["value"],
+                "previous_approval": context.outputs["first"]["approved"]}
+
+    flow = (Workflow("parallel_snapshots")
+            .then("first", lambda _: {"approved": False})
+            .parallel("checks", {"mutate": mutate, "observe": observe}, idempotent=True))
+    result = flow.start(state, "tenant", inputs)
+    assert result.status == "completed"
+    assert result.state["outputs"]["checks"] == {
+        "mutate": "mutation remains local",
+        "observe": {"input": "original", "previous_approval": False},
+    }
+    assert result.state["outputs"]["first"] == {"approved": False}
+    assert result.state["input"] == inputs == {"request": {"value": "original"}}
+
+
+@pytest.mark.parametrize("waiting_for_approval", [True, False])
+def test_exact_cap_workflow_state_can_fail_without_losing_saved_data(state, waiting_for_approval):
+    from rags.agents.state import encode_checkpoint_state
+
+    invoked = []
+
+    def fail(_context):
+        invoked.append("action")
+        raise RuntimeError("Operator callback failed")
+
+    flow = Workflow("legacy_full").then("gate", fail, approval=waiting_for_approval, idempotent=True)
+    saved = {"cursor": 0, "input": {"payload": ""}, "outputs": {}, "approved": None}
+    saved["input"]["payload"] = "x" * (MAX_STATE_BYTES - len(encode_checkpoint_state(saved).encode("utf-8")))
+    cp = state.create("tenant", kind="workflow", fingerprint=flow.fingerprint,
+                      status="needs_resume", state=saved)
+
+    with pytest.raises(CapabilityError) as failed:
+        flow.recover(state, "tenant", cp.run_id, expected_revision=cp.revision)
+    assert failed.value.code == "workflow_step_failed"
+    persisted = state.get("tenant", cp.run_id)
+    assert persisted.status == "failed"
+    assert persisted.state == saved
+    assert len(invoked) == (0 if waiting_for_approval else 1)
+
+
+def test_workflow_sdk_recovery_rejects_boolean_and_float_revisions_without_replay(state):
+    executed = []
+    flow = Workflow("strict_recovery").then("action", lambda _: executed.append("done"), idempotent=True)
+    cp = state.create("tenant", kind="workflow", fingerprint=flow.fingerprint, status="needs_resume",
+                      state={"cursor": 0, "input": {}, "outputs": {}, "approved": None})
+    cp = state.update("tenant", cp.run_id, expected_revision=cp.revision,
+                      fingerprint=flow.fingerprint, status="needs_resume", state=cp.state)
+    assert cp.revision == 1  # True and 1.0 would compare equal to this revision.
+    for invalid in (True, 1.0, "1", -1):
+        with pytest.raises(ValueError, match="Invalid checkpoint revision"):
+            flow.recover(state, "tenant", cp.run_id, expected_revision=invalid)
+        assert state.get("tenant", cp.run_id) == cp and executed == []
+    completed = flow.recover(state, "tenant", cp.run_id, expected_revision=cp.revision)
+    assert completed.status == "completed" and executed == ["done"]
+
+
 def test_checkpoint_fingerprint_and_cas_conflicts(state):
     flow = Workflow("immutable", "v1").then("gate", lambda _: None,
                                              approval=True, idempotent=True)

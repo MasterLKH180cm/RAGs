@@ -15,6 +15,12 @@ from rags.storage import Store
 
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
 MAX_STATE_BYTES = 256 * 1024
+
+
+class CheckpointBudgetExceeded(ValueError):
+    """A valid JSON checkpoint cannot fit within the durable state budget."""
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS agent_runs (
  tenant TEXT NOT NULL,run_id TEXT NOT NULL,kind TEXT NOT NULL,
@@ -46,7 +52,8 @@ def _id(value: str, field: str) -> str:
     return value
 
 
-def _state_json(value: dict) -> str:
+def encode_checkpoint_state(value: dict) -> str:
+    """Validate and encode the same bounded JSON stored by every transition."""
     if not isinstance(value, dict):
         raise ValueError("Checkpoint state must be a JSON object")
     try:
@@ -54,7 +61,7 @@ def _state_json(value: dict) -> str:
     except (ValueError, TypeError, OverflowError) as exc:
         raise ValueError("Checkpoint state must contain JSON-safe values") from exc
     if len(data.encode("utf-8")) > MAX_STATE_BYTES:
-        raise ValueError("Checkpoint state exceeds storage budget")
+        raise CheckpointBudgetExceeded("Checkpoint state exceeds storage budget")
     return data
 
 
@@ -111,7 +118,7 @@ class StateStore:
             raise ValueError("Unknown run type")
         if not isinstance(fingerprint, str) or not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
             raise ValueError("Invalid workflow/agent fingerprint")
-        encoded = _state_json(state)
+        encoded = encode_checkpoint_state(state)
         identifier = secrets.token_hex(16)
         updated = _when()
         with self.store.connect() as db:
@@ -143,7 +150,7 @@ class StateStore:
             from rags.agents.memory import HistoryTurn
             if not isinstance(history_turn, HistoryTurn) or status != "completed":
                 raise ValueError("History finalization requires a completed agent turn")
-        encoded = _state_json(state)
+        encoded = encode_checkpoint_state(state)
         now = _when()
         with self.store.connect() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -172,3 +179,22 @@ class StateStore:
                 history_turn.append_in_transaction(db, tenant, is_postgres=self.store.is_postgres)
         return Checkpoint(tenant, run_id, row["kind"], expected_revision + 1, status,
                           fingerprint, state, now)
+
+    def terminate(self, checkpoint: Checkpoint, *, fingerprint: str,
+                  status: str, **diagnostics) -> Checkpoint:
+        """Finish from the last saved state without dropping data to fit a reason.
+
+        Exact-limit legacy checkpoints may have no room for new diagnostics.
+        Their terminal status still persists with the original JSON unchanged.
+        Only size failures take this path; CAS, definition and storage errors
+        retain their usual behavior.
+        """
+        if status not in {"failed", "stopped"}:
+            raise ValueError("Abort transitions require failed or stopped status")
+        arguments = {"expected_revision": checkpoint.revision, "fingerprint": fingerprint,
+                     "status": status}
+        try:
+            return self.update(checkpoint.tenant, checkpoint.run_id, **arguments,
+                               state={**checkpoint.state, **diagnostics})
+        except CheckpointBudgetExceeded:
+            return self.update(checkpoint.tenant, checkpoint.run_id, **arguments, state=checkpoint.state)

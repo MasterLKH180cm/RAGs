@@ -8,8 +8,15 @@ def cosine(left: list[float], right: list[float]) -> float:
         raise ValueError("Embedding dimensions differ; reindex the source")
     if any(not math.isfinite(x) for x in (*left, *right)):
         raise ValueError("Embeddings must be finite")
-    norm = math.sqrt(sum(x*x for x in left) * sum(x*x for x in right))
-    return sum(x*y for x, y in zip(left, right, strict=True)) / norm if norm else 0.0
+    left_scale, right_scale = max(map(abs, left)), max(map(abs, right))
+    if left_scale == 0 or right_scale == 0:
+        return 0.0
+    # Independent scaling preserves direction while keeping squared values and
+    # products representable even for very large or subnormal finite embeddings.
+    left = [value / left_scale for value in left]
+    right = [value / right_scale for value in right]
+    norm = math.sqrt(math.fsum(x*x for x in left)) * math.sqrt(math.fsum(x*x for x in right))
+    return max(-1.0, min(1.0, math.fsum(x*y for x, y in zip(left, right, strict=True)) / norm))
 
 
 def rrf(rankings: list[list[str]], limit: int) -> list[tuple[str, float]]:

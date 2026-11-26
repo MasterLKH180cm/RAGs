@@ -4,6 +4,7 @@ import os
 import sqlite3
 import stat
 
+import httpx
 import pytest
 
 from rags import cli
@@ -190,3 +191,88 @@ def test_agent_workflow_cli_options():
     assert parser.parse_args(['workflow', 'run', '--question-file', 'goal.txt']).workflow_command == 'run'
     assert parser.parse_args(['workflow', 'review', '--run-id', '123', '--revision', '1', '--approve']).approve
     assert parser.parse_args(['workflow', 'recover', '--run-id', '123', '--revision', '2']).revision == 2
+
+
+def test_environment_file_growth_after_stat_is_bounded_and_atomic(tmp_path, monkeypatch):
+    source = tmp_path / "changing.env"
+    source.write_text("RAGS_REVIEW_PROBE=first\n")
+    original = os.fstat
+
+    def grow(fd):
+        info = original(fd)
+        with source.open("a") as stream:
+            stream.write("RAGS_LARGE_VALUE=" + "x" * cli.MAX_ENV_SIZE + "\n")
+        return info
+
+    monkeypatch.setattr(os, "fstat", grow)
+    with pytest.raises(ValueError, match="exceeds 64 KiB"):
+        cli.load_env_file(source)
+    assert "RAGS_REVIEW_PROBE" not in os.environ
+    assert "RAGS_LARGE_VALUE" not in os.environ
+
+
+def test_environment_file_swapped_to_symlink_is_not_loaded(tmp_path, monkeypatch):
+    source, other = tmp_path / "profile.env", tmp_path / "private.env"
+    source.write_text("RAGS_REVIEW_PROBE=initial\n")
+    other.write_text("RAGS_REVIEW_PROBE=private\n")
+    original = os.open
+
+    def swap(path, flags):
+        source.unlink()
+        source.symlink_to(other)
+        return original(path, flags)
+
+    monkeypatch.setattr(os, "open", swap)
+    with pytest.raises(ValueError):
+        cli.load_env_file(source)
+    assert "RAGS_REVIEW_PROBE" not in os.environ
+
+
+def _text_command(kind, filename):
+    if kind == "agent":
+        return ["agent", "run", "--goal-file", str(filename), "--model", "approved", "--session", "session"]
+    return ["workflow", "run", "--question-file", str(filename)]
+
+
+@pytest.mark.parametrize("kind", ["agent", "workflow"])
+@pytest.mark.parametrize("failure", ["growth", "encoding"])
+def test_agent_and_workflow_bad_text_files_fail_before_http(tmp_path, monkeypatch, capsys, kind, failure):
+    monkeypatch.setenv("RAGS_API_KEY", "scoped-cli-test-token")
+    source = tmp_path / "question.txt"
+    source.write_bytes(b"source evidence" if failure == "growth" else b"\xff")
+    if failure == "growth":
+        original = os.fstat
+
+        def grow(fd):
+            info = original(fd)
+            with source.open("ab") as stream:
+                stream.write(b"x" * 8192)
+            return info
+
+        monkeypatch.setattr(os, "fstat", grow)
+    monkeypatch.setattr(httpx, "Client", lambda **_: pytest.fail("Invalid file must fail before HTTP"))
+    assert cli.main(_text_command(kind, source)) == 1
+    output = capsys.readouterr()
+    assert not output.out
+    assert "scoped-cli-test-token" not in output.err
+    assert "source evidence" not in output.err
+
+
+@pytest.mark.parametrize("kind", ["agent", "workflow"])
+def test_agent_and_workflow_utf8_text_remains_unchanged(tmp_path, monkeypatch, capsys, kind):
+    monkeypatch.setenv("RAGS_API_KEY", "scoped-cli-test-token")
+    source = tmp_path / "question.txt"
+    source.write_text("  資料保留多久？\n", encoding="utf-8")
+    calls = []
+
+    def handler(request):
+        calls.append(json.loads(request.content))
+        assert request.headers["authorization"] == "Bearer scoped-cli-test-token"
+        return httpx.Response(200, json={"run_id": "run", "status": "completed", "revision": 1})
+
+    original = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda **options: original(
+        transport=httpx.MockTransport(handler), **options))
+    assert cli.main(_text_command(kind, source)) == 0
+    assert calls[0]["goal" if kind == "agent" else "question"] == "資料保留多久？"
+    assert json.loads(capsys.readouterr().out)["status"] == "completed"

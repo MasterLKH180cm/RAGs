@@ -209,7 +209,8 @@ def test_safe_typed_errors_never_echo_untrusted_body(monkeypatch, status, payloa
     assert KEY not in str(error.value) and "provider-private-secret" not in str(error.value)
 
 
-@pytest.mark.parametrize("body", [b'[]', b'not-json', b'{"items":[],"items":[]}', b'{"a":NaN}'])
+@pytest.mark.parametrize("body", [b'[]', b'not-json', b'{"items":[],"items":[]}', b'{"a":NaN}',
+                                  b'{"items":[],"metric":1e999}'])
 def test_success_payload_requires_strict_json_object(monkeypatch, body):
     client, _ = mocked_client(monkeypatch, lambda _: httpx.Response(200, content=body))
     with pytest.raises(ClientError, match="invalid_response"):

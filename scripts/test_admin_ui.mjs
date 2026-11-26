@@ -64,11 +64,13 @@ function element(selector) {
 }
 const agentNav = element("#test-agents-nav");
 agentNav.dataset.view = "agents";
+const documentsNav = element("#test-documents-nav");
+documentsNav.dataset.view = "documents";
 const document = {
   body: { dataset: { theme: "dark" } },
   hidden: false,
   querySelector: element,
-  querySelectorAll: (selector) => selector === ".nav-item" ? [agentNav] : [],
+  querySelectorAll: (selector) => selector === ".nav-item" ? [agentNav, documentsNav] : [],
   createElement: (name) => new Element(name),
   addEventListener() {},
 };
@@ -83,6 +85,8 @@ let initialSessionPending = true, firstLoginSessionPending = true;
 let deferred = null;
 let makeNextQueryDeferred = false;
 let queryRequests = 0;
+let deferDocuments = false;
+const documentRequests = [];
 const session = () => ({
   csrf: "csrf-" + current,
   tenant: "tenant-" + current,
@@ -133,10 +137,13 @@ async function fetch(url, options = {}) {
     telemetry: {series: [], requests_5m: 1, errors_5m: 0, error_rate_5m: 0,
       otel: {enabled: false, exported: 0, dropped: 0, export_failures: 0}},
   });
-  if (url.startsWith("/admin/api/documents?")) return reply(200, {
-    total: 1, offset: 0, items: [{id: "secret-" + current, title: "Private " + current,
-      source: "private-source", revision: "rev", updated_at: "2026-11-23T00:00:00Z"}],
-  });
+  if (url.startsWith("/admin/api/documents?")) {
+    if (deferDocuments) return new Promise(resolve => documentRequests.push({url, resolve}));
+    return reply(200, {
+      total: 1, offset: 0, items: [{id: "secret-" + current, title: "Private " + current,
+        source: "private-source", revision: "rev", updated_at: "2026-11-23T00:00:00Z"}],
+    });
+  }
   if (url === "/admin/api/operations") return reply(200, {
     auth_mode: "api_key", storage: "sqlite", embedding_provider: "local",
     generation_provider: "extractive", permissions: ["rags:admin"], features: {},
@@ -294,5 +301,31 @@ await login("A");
 assert.equal(element("#workflow-actions").hidden, true);
 assert.equal(element("#workflow-graph").children.length, 0,
   "Workflow graph must not survive switching identity");
+// Deliberately deliver document requests out of order within one login. A
+// previous page's success or failure must not replace the latest page.
+deferDocuments = true;
+for (const olderStatus of [200, 500]) {
+  const first = documentRequests.length;
+  await trigger("#test-documents-nav");
+  await trigger("#page-next");
+  const [older, latest] = documentRequests.slice(first);
+  assert.ok(older && latest);
+  const offset = Number(new URLSearchParams(latest.url.split("?")[1]).get("offset"));
+  latest.resolve(reply(200, {total: 80, offset, items: [
+    {id: "latest-page", title: "Latest page", source: "manual", revision: "rev"},
+  ]}));
+  await microtasks();
+  const visible = snapshot(element("#documents-body"));
+  const range = element("#document-range").textContent;
+  assert.match(visible, /latest-page/);
+  older.resolve(reply(olderStatus, {total: 80, offset: 0, items: [
+    {id: "obsolete-page", title: "Obsolete page", source: "manual", revision: "rev"},
+  ]}));
+  await microtasks();
+  assert.equal(snapshot(element("#documents-body")), visible,
+    "An obsolete response must not replace the latest document page or its error state");
+  assert.equal(element("#document-range").textContent, range);
+}
+deferDocuments = false;
 await trigger("#logout-button");
-console.log("Admin UI identity switch, DOM reset and stale request isolation: passed");
+console.log("Admin UI identity switch, DOM reset and cross-tenant/same-session stale request isolation: passed");

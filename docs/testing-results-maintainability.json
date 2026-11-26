@@ -1,0 +1,682 @@
+{
+  "schema_version": "maintainability-review-validation-v1",
+  "status": "passed",
+  "recorded_at": "2026-11-26T17:26:39.907709+08:00",
+  "repository": "RAGs",
+  "base_commit": "6b1f97357ce934a75bfae3102ef8e72512d3da16",
+  "working_branch": "refactor/readme-maintainability-review",
+  "evidence_scope": "Local final working-source snapshot; independent GitHub CI validates the published commit and merged master. GitHub run URLs are linked from the pull request and delivery message.",
+  "pytest": {
+    "unique_passed": 2528,
+    "failures": 0,
+    "errors": 0,
+    "selected_skips": 0,
+    "suites": {
+      "unit": {
+        "tests": 1699,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 1699,
+        "elapsed_seconds": 23.815,
+        "collected": 2553,
+        "selected": 1699,
+        "deselected": 854,
+        "selection": "unit",
+        "skip_policy": "--require-no-skips"
+      },
+      "integration": {
+        "tests": 771,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 771,
+        "elapsed_seconds": 106.522,
+        "collected": 2553,
+        "selected": 771,
+        "deselected": 1782,
+        "selection": "integration and not external",
+        "skip_policy": "--require-no-skips"
+      },
+      "postgres": {
+        "tests": 55,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 55,
+        "elapsed_seconds": 22.968,
+        "collected": 2553,
+        "selected": 55,
+        "deselected": 2498,
+        "selection": "postgres",
+        "skip_policy": "--require-no-skips"
+      },
+      "http": {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 3,
+        "elapsed_seconds": 16.423,
+        "collected": 4,
+        "selected": 3,
+        "deselected": 1,
+        "selection": "tests/test_collection_http_e2e.py and not postgres",
+        "skip_policy": "--require-no-skips"
+      }
+    },
+    "separately_gated_cases": [
+      {
+        "nodeid": "tests/test_backends.py::test_real_colbert_checkpoint_query_document_encoding_and_maxsim",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_collection_encoder_actual.py::test_real_bge_collection_lifecycle_preserves_space_and_rejects_truncation",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_crag_actual.py::test_actual_evaluator_runs_all_three_correction_branches_and_reference_padding",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_crag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_crag_actual.py::test_actual_evaluator_rejects_native_token_overflow_before_forward",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_crag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_standard_index_communities_local_graph_retrieval_and_duplicate_lineage",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_cannot_swallow_provider_failure_and_leave_a_private_index[extraction]",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_cannot_swallow_provider_failure_and_leave_a_private_index[community_report]",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_cannot_swallow_provider_failure_and_leave_a_private_index[entity_embedding]",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_keeps_token_budget_refusal_instead_of_hiding_it_as_model_failure",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_parser_preserves_validated_records_names_and_final_weight[plain]",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_parser_preserves_validated_records_names_and_final_weight[field_spacing]",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_parser_preserves_validated_records_names_and_final_weight[quoted_names]",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_parser_preserves_validated_records_names_and_final_weight[html_identity]",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_parser_preserves_validated_records_names_and_final_weight[control_identity]",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_hipporag_upstream.py::test_actual_openie_fact_selection_and_ppr_preserve_source_snapshots",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external",
+          "research_hipporag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_hipporag_upstream.py::test_actual_upstream_swallowed_provider_failure_is_rethrown[ner]",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external",
+          "research_hipporag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_hipporag_upstream.py::test_actual_upstream_swallowed_provider_failure_is_rethrown[triples]",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external",
+          "research_hipporag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_hipporag_upstream.py::test_actual_upstream_swallowed_provider_failure_is_rethrown[filter]",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external",
+          "research_hipporag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_hipporag_upstream.py::test_actual_upstream_dense_fallback_is_an_explicit_error",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external",
+          "research_hipporag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_hipporag_upstream.py::test_actual_modified_upstream_source_fails_before_inference",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external",
+          "research_hipporag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_multimodal.py::test_real_clip_text_image_and_image_image_retrieval",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_research_upstreams.py::test_actual_raptor_umap_gmm_summary_retrieval_and_source_lineage",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_raptor"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_research_upstreams.py::test_actual_lightrag_extracts_and_retrieves_hybrid_graph_with_source_mapping",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_lightrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_selfrag_runtime_integration.py::test_actual_trained_selfrag_selects_original_source_and_preserves_its_generated_answer",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_selfrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_semantic_encoder.py::test_real_bge_semantic_boundaries_and_dense_retrieval",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external"
+        ],
+        "selected": false
+      }
+    ]
+  },
+  "coverage": {
+    "scope": "Complete production Python package in the unit/integration/PostgreSQL parent processes; subprocess, HTTP, wheel, browser and container checks do not contribute to this coverage.",
+    "files": 64,
+    "line_percent": 86.60291130670278,
+    "branch_percent": 80.53016453382084,
+    "minimum_lines": 80,
+    "minimum_branches": 72,
+    "new_exclusions": false,
+    "passed": true
+  },
+  "readme_onboarding": {
+    "status": "passed",
+    "checks": [
+      {
+        "id": "internal_markdown_links",
+        "passed": true,
+        "files": 48,
+        "links": 381
+      },
+      {
+        "id": "readme_onboarding",
+        "passed": true,
+        "storage": "sqlite",
+        "unauthenticated_status": 401,
+        "collection_records": 2,
+        "document_chunks": 1,
+        "data_survived_restart": true,
+        "installed_package_used": true,
+        "model_profile": "offline",
+        "model_credentials_required": false,
+        "port_rebound_for_isolation": true
+      }
+    ],
+    "measured_at": "2026-11-26T09:23:14.178502+00:00"
+  },
+  "isolated_wheel": {
+    "status": "passed",
+    "isolated_wheel_import": true,
+    "package_version": "0.9.0",
+    "client_imports_application": false,
+    "bounded_file_helper_packaged": true,
+    "wheel": "rags_platform-0.9.0-py3-none-any.whl",
+    "wheel_sha256": "9bb04be5a097bd8df3f3485d6822a55e1fa954d8eddfb7ea22b8438fd19c39ba"
+  },
+  "static_checks": {
+    "ruff_source_tests_scripts": "E4,E7,E9,F passed",
+    "ruff_production": "B,RUF021 passed",
+    "admin_javascript_syntax": "passed",
+    "admin_ui_state_regression": "identity switch, DOM reset, cross-tenant and same-session stale responses passed",
+    "git_diff_check": "passed"
+  },
+  "frozen_contracts": {
+    "unchanged_from_base": true,
+    "paths": [
+      "docs/testing-baseline.json",
+      "docs/testing-results-qwen-20261123.json",
+      "examples/admission_calibration_v03.json",
+      "examples/admission_holdout_v03.json",
+      "examples/benchmark_cases.json",
+      "examples/eval_baseline.json",
+      "examples/eval_v02.json",
+      "profiles/admission-bge-v03.json",
+      "profiles/admission-qwen-v03.json",
+      "pyproject.toml",
+      "reports/admission-calibration-qwen-v03.json",
+      "reports/admission-calibration-v03.json",
+      "reports/admission-holdout-v03.json",
+      "reports/admission-verification-qwen-v03.json",
+      "reports/agent_admission_http_v03.json",
+      "reports/collections-postgres.json",
+      "reports/collections-sqlite.json",
+      "reports/crag_public_fetch_readiness_v10.json",
+      "reports/crag_web_v10.junit.xml",
+      "reports/inkling-local-readiness-v09.json",
+      "reports/inkling-mini-readiness-actions-v09.json",
+      "reports/inkling-mini-readiness-v09.json",
+      "reports/research_core_verification_v10.json",
+      "reports/research_crag_http_v10.json",
+      "reports/research_crag_v10.json",
+      "reports/research_crag_v10.junit.xml",
+      "reports/research_full_graphrag_http_v10.json",
+      "reports/research_full_graphrag_v10.json",
+      "reports/research_full_graphrag_v10.junit.xml",
+      "reports/research_hipporag_http_v10.json",
+      "reports/research_hipporag_v10.json",
+      "reports/research_hipporag_v10.junit.xml",
+      "reports/research_lightrag_http_v03.json",
+      "reports/research_lightrag_v03.json",
+      "reports/research_raptor_http_v03.json",
+      "reports/research_raptor_v03.json",
+      "reports/research_selfrag_cpu_comparison_v10.json",
+      "reports/research_selfrag_eager_exit_diagnostic_v10.json",
+      "reports/research_selfrag_eager_initial_failure_v10.json",
+      "reports/research_selfrag_http_initial_failure_v10.json",
+      "reports/research_selfrag_http_timeout_v10.json",
+      "reports/research_selfrag_http_v10.json",
+      "reports/research_selfrag_paging_after_v10.json",
+      "reports/research_selfrag_paging_before_v10.json",
+      "reports/research_selfrag_phase_diagnostic_v10.json",
+      "reports/research_selfrag_provenance_v10.json",
+      "reports/research_selfrag_sidecar_diagnostic_v10.json",
+      "reports/research_selfrag_v10.json",
+      "reports/research_selfrag_v10.junit.xml",
+      "requirements/answerability.txt",
+      "requirements/research-crag.in",
+      "requirements/research-crag.txt",
+      "requirements/research-full_graphrag.in",
+      "requirements/research-full_graphrag.txt",
+      "requirements/research-hipporag.in",
+      "requirements/research-hipporag.txt",
+      "requirements/research-lightrag.txt",
+      "requirements/research-raptor.txt",
+      "requirements/research-selfrag-convert.txt",
+      "tests/test_layers.json",
+      "uv.lock"
+    ],
+    "qwen_answerability_quality": "Historical frozen report: 7 of 11 quality gates passed; not promoted or enabled by default.",
+    "router_agent_memory_defaults": "true, unchanged"
+  },
+  "resolved_code_findings": [
+    "CR-01",
+    "CR-02",
+    "CR-03",
+    "CR-04",
+    "CR-05",
+    "CR-06",
+    "CR-07",
+    "CR-08",
+    "CR-09",
+    "CR-10",
+    "CR-11",
+    "CR-12",
+    "CR-13",
+    "CR-14",
+    "CR-15",
+    "CR-16",
+    "CR-17",
+    "CR-18"
+  ],
+  "source_sha256": {
+    ".env.example": "eb8395caf48c793423ac4dabb179993ae46ea50299208fae521b444184e54ec4",
+    ".github/workflows/ci.yml": "8d27224283dc5a34fa19f8c3d945ec88c4f16b1af740b902097f166644dcc7a4",
+    ".github/workflows/model-benchmark.yml": "18ee99c27aba3ef5d9c67757da3397677dfa8357388fad34e2d234753a252059",
+    "Dockerfile": "52a5856c6ec238075082806c69fe84f81de7d9d62cea77cc40106af280b031ff",
+    "README.md": "ad1b021a375916de61e88bc8f4da1964dc1dbe767da55e581548cf8565be3018",
+    "compose.yaml": "5d1f2360fe9f7be0b05211b565578102b53b1ed7a06d5374cc8e890f57fa9378",
+    "conftest.py": "c096a4dd5917229e316bf0bae3c2fa7fdeb9319d59a9315b955ca96bec6cfb1f",
+    "docker/init-databases.sh": "c9ec3612e354a4f32c8dac09f60039fd1c7069b41d6449a3b42899f97022f639",
+    "docker/otel-collector.yaml": "f170f649be9931e8fbd7c94a15381265edba95cfadfc897f98b6ccf8be461049",
+    "docs/README_REFERENCE.md": "c0c5ff668959e9a00cca9903978405a538437a439f7a0fbca523fc41c430c948",
+    "pyproject.toml": "312fc7cbf5225a24db5e2a7867c83816941d21758e979684fcf3e2e1cdc50758",
+    "rags/__init__.py": "eb421d96c421e8977ce6970f51f13d67d7b88da34996f6370bf5bc80408c96c2",
+    "rags/__main__.py": "47bea09506b87026270063771d6660147e220b5a9a0e47a7bec4ddcbc3cfeaf9",
+    "rags/admin.py": "ab36a2c6fd3e8d70b9d8f83a7a47e03a8563de0b2dc524fc73cd8f44161734ef",
+    "rags/admin_static/app.js": "590c5568cbb72221840e695aac51b93d303be76f9df19812807bcdb8cbf22dc5",
+    "rags/admin_static/index.html": "791414f5eb83f27adff91c887ae72145477ea90b6706e3e697760f259e44daa6",
+    "rags/admin_static/style.css": "7cae63286c82063413fe9951876e597d0dea9dc791c1e22c4d79f96b8a447eaa",
+    "rags/admission.py": "3bbd1906a976ebef13bf6c9e54c837af68b48a88537976fa63d5a0d74a0d380b",
+    "rags/admission_eval.py": "a99abc96bbf74884cb1f77cb31b5f97eeb202e1a01642c5d6a561be5b119c319",
+    "rags/agents/__init__.py": "095d5fc505a5edd2352d70201017f1854cf21f50eb35bb501477902c00d5dbc3",
+    "rags/agents/api.py": "cf68d1079369c961d1ba38363f7671c491e26757c4649a16892f9999bebc46e6",
+    "rags/agents/config.py": "9bb9e9a15fed199f0a6c6bb9501dfee0aea9128f9e20ddad9d0f9c831a2dc825",
+    "rags/agents/deadline.py": "30b2ac4c50ab68525c4b56a73172226e581bab4ebd616d1b9808ec8ce0ceb671",
+    "rags/agents/engine.py": "c981ed43ce54121c81c95f78120f937043d6b501fef8fe6e49f522281d90d557",
+    "rags/agents/memory.py": "1cb22295911e4076b4ab38bb122c88c37786ba80b8cef9ad2909687333236a6d",
+    "rags/agents/router.py": "0a85894a2f29136a6c403a9ee80be114ce4e802a000a35e77debcf70b43bad92",
+    "rags/agents/state.py": "f16b381711bc9b58a532abb559e17facde85ed7d49b5f6215065d2831af82e8a",
+    "rags/agents/templates.py": "c7e1f6b194e0532c1eb461a39f6063122c303a9b17761235547878100bd6f00f",
+    "rags/agents/workflow.py": "64645c8300770c8c9694717738b88b5d7decc866bf297279bd9f1177ff7515de",
+    "rags/answerability.py": "8b0c107bb16be006fbe49c2118be97cc673970882390c23f4c616737b361345e",
+    "rags/api.py": "8084b3b88abc2901a95a8918c467dee2bcc23afaf4f0d0626839c8c1604bdfa6",
+    "rags/auth.py": "f009e4a9c3838b3ad8f2794d717d29e5247d5b596e3cd018972a5be69ff3615f",
+    "rags/backends.py": "96789c4a5fd6436029a54e94e64bfb6af45e7aa33fc06fdf6ef05c8bda8ae439",
+    "rags/benchmark.py": "2940b417b7ede3bdcba17f7e025b4338157386c5f2e019c08436896bd734879e",
+    "rags/chunking.py": "1405478e8c1d5eee68129e4fcc272b6b3a69f9549c05d2e270404799fd830145",
+    "rags/cli.py": "cb32afc0d5653efeada2b04c09271786ec7fab22b6fac8a51c1f013bedeb0c12",
+    "rags/client.py": "36133c022580c73d277de4256f429ff6d6c7121c4e354d1c2405be15addd230f",
+    "rags/collection_api.py": "cc41a0597c2185f70ed770007efe7972cc98e348206acea07c4f92c15e7e1dfc",
+    "rags/collection_cli.py": "3e0272109069b47fd776511c362d9254f27574ce6d1050fe964e9ba179189221",
+    "rags/collection_filters.py": "9d847b30adf873ac8b79508857545a9a8ecc72c215de2f9ae8979c2e81c5aeb3",
+    "rags/collection_models.py": "6d70718e4ec5d72ebf111fade529d1bdc82607c42ceca7b01052ff1082630d7c",
+    "rags/collection_search.py": "fbfbb6cc73625d944690d0478d055ca1b96dda5229d0fd68f0a5767cd2f8168b",
+    "rags/collection_service.py": "c1a63fa4412ef6e8deabed32782abbe3c25c72a4c0ae9491325d0d5e9c18d881",
+    "rags/collection_store.py": "1b35034cadc854b9f3e23c9194cf3bb92c095420b879830ae2daad6a64491d7c",
+    "rags/config.py": "51bcdbc065cbfa6ce7d979d2343d58668860712f8ba2e31196299a4a7f4ced80",
+    "rags/evaluate.py": "55f34ef9d56ed9cf35193d8b34e3b17ac53e4828b621ea04fc6cb01add2e6518",
+    "rags/features.py": "759260fd1d6485868d4ce8f86e310ece35a362759a6768c2852350fe1e70ed55",
+    "rags/file_io.py": "ea6e5f7921332ce6f444b2e193def5378a0e8cc632f5d262e2f911a472e5a54f",
+    "rags/limits.py": "ee20a69c4c3057e5c2e4b9bb245dd42b1b5ebd597007a5c9b0a46209598059de",
+    "rags/mcp_server.py": "28fd9315513763acf2279fd18c64ac72ec0c22c5cee4128f99ed3fadc5b84a3f",
+    "rags/migrate.py": "15f0375b0e4385cbd251a9fdfa4ddc93854b485f8fba34896099cc8f8f710c6d",
+    "rags/model_benchmark.py": "6dcd1ff0dd2dc48b329c906e31cf01afa1dbe1a212d8d2b72aad0fe2a6eeb444",
+    "rags/model_profiles.py": "c1977e25a425e7b502848e0c550ba4c04326716326a3f5e730f638d9e2f9ed28",
+    "rags/monitoring.py": "ed8816083058e2c38b394568baec920990ee6dd1059935ab9d5b5822cf731355",
+    "rags/multimodal.py": "8b728901107882d3f01d68a3f3310affba7a4ca68063ef88ecfa788c8e5eb982",
+    "rags/native.py": "672ef1b8def8ea680ef3b41d2e56ee834af3dcf072ab8d2f4b1af1b70cf98054",
+    "rags/postgres.py": "f93fec27864376f80f3645fc8f2681a959c1b4b5b2800dc9fb13253788f79bcd",
+    "rags/provider_transport.py": "f4e2f449f52bed239f0805ab3507f6040ec4fbddb6c9f37be2c368a4473f6298",
+    "rags/providers.py": "03aed24b5ddc11a15c71a027d053f2b77c71ef102e6892580528cbdff90538c4",
+    "rags/registry.py": "125ba7209a2b503be7b1253e1b5c3c2d474133132eccf4034b212be76ca41418",
+    "rags/research/__init__.py": "7166dd4d357e8625fdfdb5ac49b7a030993de3b791ad1b87ba920ba0fbf927fc",
+    "rags/research/common.py": "38a5b1f954bb0974b12ab423e05847c5d42cd1afde6b4838699d6c7f65567e75",
+    "rags/research/crag_adapter.py": "e82f48dad1aa84f93112db95626b944e6064a4d2ebe31393ae9b297e22e0a97b",
+    "rags/research/crag_web.py": "cc48a2319d5788d84a8edadb8dfe101163dca72e9ed33ac00e3e0981007bb7f3",
+    "rags/research/graphrag_adapter.py": "378a507bc44528ac6355dc897a87e397340ec4a981d8f6cb7a87811578f8cecb",
+    "rags/research/hipporag_adapter.py": "f6dc520b45236889bc5affd341c0ba0a71fa5bacc1cad5a0a9365490e6f12925",
+    "rags/research/lightrag_adapter.py": "f21835b3c20ab57dc8743a1259def4ca14172ceadd921d34835a86bdf17dfec9",
+    "rags/research/raptor_adapter.py": "e5b4dd013a35dfacc2e24c595fdbf7bfa679d758bb30087cfaac3557062e1420",
+    "rags/research/selfrag_adapter.py": "7a2631c417318b1c80f0a875e147955d5db1cf5f0d9e4d2bad7148963c215dab",
+    "rags/research/selfrag_runtime.py": "c5d9984b57b471bf509e1d1b72a2db89897edf84c81d9f2f907102767fdcfe1e",
+    "rags/research_protocol.py": "a0dd2545c6e61d8f7341373d11c8667efd11ecb7bac31389e6a5946475f016be",
+    "rags/research_service.py": "8456b735f9b5bfd6ed8ab8f4dc4293ea4ab98864fbde17ca837fb975f371aacb",
+    "rags/research_worker.py": "befa41fec4f59e2707d18c20a66d601ac9ea13a35ca44ac719ba5ff084526a74",
+    "rags/retrieval.py": "0972d62d8403a20caa7e4f84678cfe7eddcda20ef35708240585843dccded56f",
+    "rags/storage.py": "9b8a832eddc9f8d0260093f5271f6909659bfd24353a4b344fb8411b01cff764",
+    "rags/templates/anthropic.env": "cabfb192e8e5555cd9f2b0cc2dee517958da53774c8e6a4724da616d26d82dcc",
+    "rags/templates/inkling-local.env": "654c13f8fd32ae481bb886131ad58fc522fbfab4ae4976c2bf231c023953f6b9",
+    "rags/templates/inkling.env": "5f134a8e607682b713225872f0c514a1334dc4f694fbbfd86b883a2a46b9bbbd",
+    "rags/templates/litellm.env": "241a73d899d3f2ea249f427250ceb317e2bef13b1b1716a4f588ce59ddb3b6ef",
+    "rags/templates/offline.env": "532cb6cbb71afa30628bfab9a0de97297f27a8149f3a0c42032760d912011bbd",
+    "rags/templates/ollama.env": "9ce152307875b091ddf4dbfd9daf93a6a7a90ae4075718f7655c3a88fc0bf49d",
+    "rags/templates/openai.env": "da17ce3ae47511f6088749e4f1276a8ceb2a31f79bc1fa269fd23f8fc2c9a611",
+    "rags/templates/postgres.env": "39f578ae5df97b2dd6e6899adb8b047853e38367d865db04332d9b582bbfb18b",
+    "rags/tokenization.py": "7160b9a3533f4e6b7d03356e62dcd1c28dd2904a1584b617378c705bd8eddb24",
+    "rags/verify_admission.py": "284e0f583dc95382e45a4ed88dee87b2b5ba6c8f0910e347109905dcfb40be4d",
+    "rags/vision.py": "8efc461a82097f4af050f60a8965e60dd325345b1c06207e2c65d74cea46b8f4",
+    "requirements/answerability.txt": "ddaaab18f3f1a18cd8d8d98191a38c2b251151f31984b3bfb2b9a22123ea58ff",
+    "requirements/research-crag.in": "b4a4d75b93dc0346b40b2e01d02cb70ccfd356afbadac365d780b481e53c92f4",
+    "requirements/research-crag.txt": "d49864c267be3150bb51bc813e6f7fc7cc3918fe47c4cff6a925b3251823b813",
+    "requirements/research-full_graphrag.in": "4ba9fcd0c1a779c5930fd9e180e7ee0b7f01fa6330ef81c41830315caa07097a",
+    "requirements/research-full_graphrag.txt": "8543b1ac633dc0c75a5bcb600b8a15569480dfa0bf2198d566feb30c61a511b9",
+    "requirements/research-hipporag.in": "d46934f21cf594126ebfa5e2670ab5aba442d7213fe44953c22e46ffcc3416c4",
+    "requirements/research-hipporag.txt": "c8f7721df754d14a3e9cc0843240d7fb41c3df6ac473b90297a5f8c7b348ea6d",
+    "requirements/research-lightrag.txt": "f763ebc967ee6c0796ddec0468d8470de52d6a50d71b1e0fd704b192840c0d2d",
+    "requirements/research-raptor.txt": "4653acf2c0896cd4cd876513708b733e2a775ed1212a203ef5c65d59bd86f4c1",
+    "requirements/research-selfrag-convert.txt": "8f3fa32dd8b29c75633efc92cc2611b2908739bf94168c7a7d86bc5a59006a9b",
+    "scripts/benchmark_collections.py": "c66c5bb3959263cdada785dbc267bb691bf920b8f3d52cac78c03cf246e61720",
+    "scripts/bootstrap_compose.py": "69070ba6f089e26963a75d33ce5cd22fd6de3aea85861f3a2c610bd19aa679e9",
+    "scripts/check_compose.py": "1f0b07f09acbbca534b9af04c4fe4b95fa9fc49316bbbae9105f0cc26cd1efde",
+    "scripts/check_coverage.py": "3ca07c59d35d92c61db0cb8bedbef9544556baf837e7774df6e8305d62f7b43c",
+    "scripts/check_readme.py": "2d73c4116da1fb0bcda869739befa6ef7fae1ea3929efa62cba34303bb606a90",
+    "scripts/crag_local.py": "335da814daf7faf86c3ce6c2dc165ed8f4566661b745c3f817cf2576cfea63fc",
+    "scripts/e2e_agent_platform.py": "12afd719b93382fd4cc181bdfa6b60a6245def331a3c3bc960106c44944443b5",
+    "scripts/e2e_crag_v10.py": "b21f74b7b38e1ebec82e3a088b51c564214ac8b357b7aa97a01e2c6297a0cc32",
+    "scripts/e2e_research_v03.py": "f5cea4d66bbecaa2531b5d113c36414e4700f38442eb27beed9efa116106ee6a",
+    "scripts/e2e_selfrag_v10.py": "191864d96100fc84fcea0a70af480b1cb78b011962597c707e3df35d2ff22f25",
+    "scripts/inkling_local.py": "58fef6553699da00d0dafb873fed5671ea6ad0598342a8bf70036be4ee3d8d6f",
+    "scripts/install-answerability.sh": "98f4cac585a4a8f62852a7e340aa455f696f8917e70566e2155b0891ab674ae7",
+    "scripts/install_research.sh": "bb86fee7eb057f4862d47d1af48e686556e656479b290a5cce1e7cc834ce942c",
+    "scripts/local_model.py": "d53cfa062ea3c5fc0b7dd6a8d7f2d219f2c349a836e655e3caf629ad61625985",
+    "scripts/migrate_sqlite_to_postgres.py": "d7ae56f1a5c3648fe2ce99f3b14bbfa0d8ba1233a4c885b8e7909cc08855ad37",
+    "scripts/qwen_local.py": "7876425b41696554d8964c597e19b3e4bdccdbc2bb89bc2757054ab552445210",
+    "scripts/selfrag_local.py": "421b24de949437880d3e71e7b3a2972248c5ae5f96ac114b207ed19bce833202",
+    "scripts/test_admin_ui.mjs": "7f6c42496b704b672ca79f37a509160d82c5513b9c5856cb4aadc072c2fd0d5d",
+    "scripts/verify_admission_runtime.py": "486904fd207dc06449d46acc108344cb669f1416feea8713f197a43f37021a4e",
+    "tests/crag_fixture_provider.py": "28aaaae602b0cf9f09541941f5b68627239fc92b61c1765e6a2ca476b2fcd418",
+    "tests/graphrag_fixture_provider.py": "52c4074ad96dc1c1d9ecf46049819f89925a13d71df1fa5ec5d44352e545714b",
+    "tests/hipporag_fixture_provider.py": "4106806a1734d7977757a90fa6d790d1d575e32563e8d2d38dd0bfaeebfe3728",
+    "tests/research_fixture_provider.py": "6c121afcc885c2c9d7de160af2b51d05521359c0462ed1f1db129105ddc012df",
+    "tests/test_admin.py": "73cb614b93444e608f6de6a7529b2e43789f5587054f60fa3958e7cb1e9569c5",
+    "tests/test_admission.py": "76b32eb19f0ecc1476c1c71e155053d447f966c2f211cfc0bbcb7c5e4757abac",
+    "tests/test_agent_admin_integration.py": "b74e787da853b47e807b79fa837fbfd9eabfc91b1b234b4dadd12c3a96a759a6",
+    "tests/test_agent_api_integration.py": "ee39f3e1e01c8fcc0d5eb68de1a6b15562bb7318735563af4223d47a8823f898",
+    "tests/test_agent_contracts_unit.py": "70b0b7566b92576685cff5ddc37ce451fa50ef66d9ac1d992e7d573793d84b0a",
+    "tests/test_agent_engine_integration.py": "dcd7efded07e8857e06109fce682c21cb6b20c750015dcd6d05a3089ffbef47c",
+    "tests/test_agent_postgres.py": "fc7d9c82ef960d69994937e1b75fb9eda36be1db6210d581abf059387628d5dd",
+    "tests/test_agent_router_unit.py": "65dc1051f257712b2c8af012dcf89c1b53726bf82d0b68e6fb812b8bc033e0b3",
+    "tests/test_agent_workflow_api.py": "111cfbc7ff21649556b0b266d68ca3e591ef2bbb178f2071f90b2915f6389e68",
+    "tests/test_agent_workflow_integration.py": "ac7eaed132349dae9a3d3402294d10d44052a4cad06d4c5274ef73574ac1d735",
+    "tests/test_answerability.py": "cb07b4ee586d6f931c4beea5d7a446d80845e418b15b456b95ce327bf1a95305",
+    "tests/test_api.py": "b84c7ea6b4cd865baee0d1fe6ca1678fa589910546967a7a96c49bee9c55a27b",
+    "tests/test_auth_integration.py": "0d2d8b824ad14b5a1a6f89d588939eef26e4b060f78b88c2cd4ad7b1fc848478",
+    "tests/test_auth_unit.py": "d85ac2c8c478efa52e6032cd3e5e8c522a3ccabce5796d4ecc1658b61218b276",
+    "tests/test_backends.py": "4aab7fa19d78a26c664824a3bde9129dd3bb74beaf7b1d8958e520ad385828bc",
+    "tests/test_chunk_resource_limits.py": "70ac1e43a13a7df79bc58f48df7bc9c2b84c04d8e9e6eb1d7fd07ba7d26e1f01",
+    "tests/test_chunking.py": "4329296b6ca5db91e4dc3968546bc5b98f19ab0d5bbe5b81e1d6473e6e1335a5",
+    "tests/test_cli.py": "78726aaa51b5928977e712d96156b4621784ef22cd5410a5c5d68c61f818fb8b",
+    "tests/test_collection_api.py": "a7698fd3714f7ddef5d6cce1e1f82a83573480cd9e12479df35794ea4f248f98",
+    "tests/test_collection_benchmark.py": "d6c2bc6560e97a946d21ad7177020b9d7b03d501df77f6489bf3ee91d5d93831",
+    "tests/test_collection_cli.py": "ee5493f14d550e50f6469e85e71d33b64ae4399f754bc68463e0bd840eee7210",
+    "tests/test_collection_client.py": "d30900512ca7fc1c320687a8a4d16bb158489ac8dfda1976675a9055c1cd3d4c",
+    "tests/test_collection_client_integration.py": "df51e229e4bad07adc38b6b31373d1adb0f3e7ce04d9325893d59622f3e2d391",
+    "tests/test_collection_encoder_actual.py": "46cfae95db720ada36f416cbc07c1af158616632051fce396bbde5d5a602f0fd",
+    "tests/test_collection_filters.py": "365bc9de4a81e1054e359865a105bee1704545d463082799d63fa85a4033637a",
+    "tests/test_collection_http_e2e.py": "6ca6efadbfc7cc87c850e2e5a73bf287161c26183c0a8229f79d5eb342eeceb7",
+    "tests/test_collection_models.py": "3c639b17cd7398c306ee28c794619b02502b972f2f4d36cbd5a8bd4bf70f76d4",
+    "tests/test_collection_postgres.py": "6115c74621506b69b13a231b8ac6a0852745ce1d212d0335b6aa72492bea5d8a",
+    "tests/test_collection_search.py": "a35829a4fc7bce8663d94932ec35caf09d2f631f04efcccd949009cd170a85e3",
+    "tests/test_collection_service.py": "854e93332021981b063d2dfcaba9f41867b5840955bcd9a167383d996add6794",
+    "tests/test_collection_storage.py": "f7474b8b3ad66f9e229228e9987134b7bc7774fbe06e04502b588e1be6fbef58",
+    "tests/test_config.py": "a83fe747ee63534f4ef47660a241b4c4b58cf9895c08a2c099b4cff412763679",
+    "tests/test_crag_actual.py": "8ce0f83b62ffa2fbbbec3cf439f12ccebd4f326de4bd908410acd031e7204fd1",
+    "tests/test_crag_adapter.py": "8b1cf07648e797111c225146eb0292c9063b7f918c23975996cf3b71c26ee1a3",
+    "tests/test_crag_combined_v10.py": "645ae93cb863ed3487c4ecfeb95ec94a31540d7cbb9213be861ee608f5343d28",
+    "tests/test_crag_local.py": "41805cc03349ee6fdb27c17230055bde0c462765b3d4eff7aa52ac6d191d5440",
+    "tests/test_crag_web.py": "f5edbeb0f3feb373c8a6987fb81345423e41d3a245c9abfb824434808a65d29f",
+    "tests/test_deployment.py": "57f3cecec834b023922060d07953f1e12594ea2e69914f462e4801652d4db497",
+    "tests/test_evaluate.py": "8afe073ed7fc96a513e4dff72099d3cd7c154f2948f8ee4ca1d89e3f1a281940",
+    "tests/test_features_integration.py": "d679fc73ec4862088958f4b6cdffb20a7a66a4303b786b8ae3575df7d81488ed",
+    "tests/test_features_unit.py": "a70363d4f7e24308bffa85d185d487fdd2139567f72cd54a1a4ff1575f94daad",
+    "tests/test_federated_contexts.py": "6b50f562ec0a145cb7787f8d4e45bc3887b5bd3038f31f7f68734bbca5772297",
+    "tests/test_file_io.py": "70e279e3b69377f33f4074ddf246ccb7b445719c152235d01fc63e04e63a8713",
+    "tests/test_graphrag_actual.py": "029cc08c2790b13d36323437e2fd820ef43a847d1828db2365789899865363f3",
+    "tests/test_graphrag_adapter.py": "7eccf7a2d6c87e546cb0d6c88fcf3fcf4f55dc424b0f43be0f92906e27a86480",
+    "tests/test_hipporag_adapter.py": "af1e525dea0f4fd44ce2f65c577bb0c1491273215bd19ab0b0049d929072de47",
+    "tests/test_hipporag_upstream.py": "e0bc8f21be15642e0c9e00fb4c999b1cbcd5049639a93c4bdf1abafaef156043",
+    "tests/test_inkling_integration.py": "b47a947b89d7ea83e0ce5e28dc8ea6eac8aae9bad419dc0e69145c850909021e",
+    "tests/test_inkling_local_setup.py": "b9a081cca1ea668a1b03dd2f217934cf45260debaafa5d31874471dd560f524a",
+    "tests/test_layers.json": "b631d60d3858a24a0e714c0c9ae1db6282e1c8729c7fa3588a133d8f6c151365",
+    "tests/test_limits.py": "b0ebd97e2ecf72ede3d1e4b1cf7f6c6c261bfbfa1d148c7292cc3c20db5aedf2",
+    "tests/test_local_model_auth.py": "7a0afff3aab36b4c2cc1de1571530d7cdfe02c08faeb3e45eca93776bc434351",
+    "tests/test_model_benchmark.py": "4c8d219d950a19c8f92ec2397ab5426c1fad0a22a997086c0949ff7016456350",
+    "tests/test_model_profiles.py": "f806feac4d59dfbbbe6023aa800c134a43dff5ccf9c7ff5d12f779c0e4e0e27a",
+    "tests/test_monitoring.py": "4d6d70244aece1473da506aebc3ed9a36c0b90b779b39a21521fe88a1bd5a6ab",
+    "tests/test_multimodal.py": "c06c4509d8d7c2d97b4228e9d6cc3f239c3b7a366caa925792eda7cea5515d2e",
+    "tests/test_multimodal_features.py": "be8f5411d0757d2c9d0195d2683c977bbe4bef8916dbc2a49b0fe6eb026bd916",
+    "tests/test_native_integration.py": "10f4cfe1ffa5b9fb75770bd85008ea3148240a00c16a4a7a75cc9bf67434fd4a",
+    "tests/test_native_units.py": "65eb74dff9dc7e2950a1ee2687a4e86a9862db56f4412bf16f439c92bf08ce1a",
+    "tests/test_postgres_storage.py": "3d3158885d34b33f1568b961ccf56cf42d0aa10b7dc09e5a4fe55b1b715c74ac",
+    "tests/test_postgres_unit.py": "715a34dd0e1c4e0716c6ad4763bc62b4df0124c0b9a634124b26e691ffc4b391",
+    "tests/test_provider_api.py": "9533c89b4cee8ef0fba36d7579938768f0b01c8bf4f3b310a3c417de95348761",
+    "tests/test_provider_endpoints.py": "a3878808721caf4e1114d23417c20f616efd7f925643d79d17a02c7f4918f4b8",
+    "tests/test_provider_transport.py": "082e17a2411d23aebdde643e52afeaa795e04204dbd19a5aeb96153930d38f77",
+    "tests/test_providers.py": "40900f23c43c58a260988542380285bea7e03d9565ff0aa60d192339e5ae4dbb",
+    "tests/test_qwen_local_setup.py": "8c4f575d7a6195df5bf19fa7d750c190fd32a0ae0528c983f76161a87a6edca2",
+    "tests/test_reindex.py": "ee1a4e52f58fd5f1285ec39aa8834ac199140ba273a241296352a1152aabdd99",
+    "tests/test_request_boundaries.py": "4bffe686b6c1a9709df28e54ba13aa06531934b1c3afb2278a6f9eaec65df874",
+    "tests/test_research_credentials_v10.py": "d2784baf3becefaf027def87db6e82cb728781e1623cefa7ed3c67964ea5cb22",
+    "tests/test_research_features.py": "a014e9ee0dc6bcd42e2aeebd297dd17bc9c4628a0abc62d2b3ec00040c8fe41a",
+    "tests/test_research_http_errors_v10.py": "9e40683c1cba0a82bcd954e46b2b1a895fe60a3bb207b0da491f27fbc60e3b7d",
+    "tests/test_research_provenance_v10.py": "33676a11b98f96231fed8512364785653225e02d7687ec76dc6ee37d30df3bb8",
+    "tests/test_research_scope_v10.py": "2f7d150e436cf78994059b2296ad124bf451539aa190c0af02c4dcad50f215c1",
+    "tests/test_research_service.py": "4e556fab82045d99035ff6e83a8cc4b90665bb04c2d4d49d22a533a6e21e349a",
+    "tests/test_research_upstreams.py": "9590b5f4e9d03ed9384076d7abbe755f940a076cd181af276173bbbe4848b190",
+    "tests/test_research_v10_contracts.py": "73235608fa1afb170a6c1de7c8d3b75fa5bf4ca41e35f77a1738343250a5d1ac",
+    "tests/test_review_data.py": "17818f019c9d9a3c692e8129bf957669c3aa9ec2e07153ce1f767ee9ad67e4ad",
+    "tests/test_router_rag_integration.py": "c5b371d2ca18df61b4043008a63c79bd10f9592818538bcdae4554174a5f0d96",
+    "tests/test_runtime_regressions.py": "03b2348c0a25588d462bb4c5b4b08a7031b979f986c7b3f2d846303d6879c0a6",
+    "tests/test_selfrag.py": "f1522a92b41c3b9ba9ffa65792e3e151a7c931591be33a345ba80cba6b2eb4b6",
+    "tests/test_selfrag_local.py": "1a9c58f6fd136b8469d3606161118518a58579623bbd9ef83770158f90fbc91a",
+    "tests/test_selfrag_runtime_integration.py": "bc522418946628fb475c9193423760897e61879118ca228b1aeebe15909fb5b1",
+    "tests/test_selfrag_setup_integration.py": "58305b8d3ad15f7a9ab35866a13cd795e2fe41abaac4d277788da5529056a110",
+    "tests/test_semantic_encoder.py": "f0d2c0ff9dc0290f679efe4b983a7505c89556c3ba4915c62715214f665fb5de",
+    "tests/test_storage_atomicity.py": "71cd8ce02602e9b8eab9049aebe136c4b5469a2d21f64445ec6df791751072b9",
+    "tests/test_testing_contracts.py": "76ad35d3759f51c2becf725168316c1ce2005c2c69d06d5e3ea6adcbda1fdf23",
+    "tests/test_tokenization.py": "7a2cc954dd08cf6b7c25f32ef57d277e557b812f54dab66897fd03f8e0fa3326",
+    "tests/test_uploads.py": "a04b9a29f1497f82929fdc1a2e1e8b6bcd71d0b3181d5b54d432c89cb46c18fd",
+    "tests/test_verify_admission.py": "8d6ebb7a05d837d6660507d2ed195cfe5fc19f3ab7c0f30f23b3ed2343f301bc",
+    "tests/test_vision.py": "8de81f9b7aaec2b453f86bfdb51f409105e43758a288020101e2d695f7866867",
+    "tests/test_vision_providers.py": "5a2f5c31f8b6a28365a0974c5d2a7679332f0dab1bb1254fe97b52d0709c26fa",
+    "uv.lock": "c3fe2590df32d85efb3ffba29ffe898cbe709c10e621a5e14168e5cf12c4d19a"
+  },
+  "evidence_sha256": {
+    "maintainability-coverage-core.json": "df64271ff2cc1b4d00897768c9c6fe5db99fd79bfab06f058e9597cdb46ce265",
+    "maintainability-coverage-unit.json": "6e42081cd9dc2faa16e660445fd677117cb7eca2dd4d48d47d177e0fb75a3e4a",
+    "maintainability-coverage.log": "eccd199c0baf989c62edad6f7c0285fba6c2b855aa0bf52d1063dd8c7e8935b0",
+    "maintainability-http.xml": "fb67f5c5a61aa3f27a5975a2bd4598e33246f8daaa0fa9c3c40a8929ae72a1e8",
+    "maintainability-integration.log": "3423e1852043dde1e3b44210e1b5b644c439ae41cfd70e7379480d4071da1019",
+    "maintainability-integration.xml": "27ad962a99fe4fc65325e4a32650dc6d09ceeae0825f0c617ce0252b96394382",
+    "maintainability-inventory-http.json": "7e827b27b4d33d17c5f20cdd30a6a11131c8b1f2bb18b8ab858434610404566e",
+    "maintainability-inventory-integration.json": "63bd610642f9d29547fd6ba173429c963e4c000854e6d9856a48755a759b0b86",
+    "maintainability-inventory-postgres.json": "7f2addbe11a2a8452c1edf5d7878ed09c7147b3c674a5930537d9f970818ef65",
+    "maintainability-inventory-unit.json": "8acd866279f644cba0dd30662e98acbc727a31fe03ab9d4310322f0ca7fbeff2",
+    "maintainability-links-final.json": "3412879e2c609123fa9013cfa76d0272c191d51de5206d1373d03a5e7ed0cee3",
+    "maintainability-links.json": "490e1438e0d4e8d98cc550db20eafa5e8f6bc1eeca26576b36d0ec8ee2edd447",
+    "maintainability-postgres.log": "1a4e3234fc597211d046b1ba791fb5d22cc15235d4cbdf530f0f03c75ff9902b",
+    "maintainability-postgres.xml": "1cf9dbf85182de2b9a7a3b04965c9dfb17e8b4779c08431c6d355248a000446c",
+    "maintainability-readme.json": "94bd1f49fec85331c39995e8d8943de5af86130de60488c922c198988f70429d",
+    "maintainability-unit.log": "54479b89ee6e48847db5fd8c0d009b1ed61b09bda65afa89179cfd0a7c7410f5",
+    "maintainability-unit.xml": "30732a2e381ef2f8ee07ea2ca537a749ec73c00930f0fd79ed172267c0580c70",
+    "maintainability-wheel.json": "c5b7edbffde2c90d9d927e386009d0c28b1c6874ce2d813dd1ea5fc02b6969fd"
+  },
+  "limitations": [
+    "Local validation uses offline model fixtures and actual PostgreSQL; it is not a live Qwen or Inkling performance benchmark.",
+    "The 25 explicitly unselected tests are accounted for by separate resource/E2E gates; they are not recorded as selected skips.",
+    "Actual encoders, upstream research engines, Chromium and Docker Compose run in their dedicated unchanged GitHub CI jobs.",
+    "The optional full frozen Qwen admission quality benchmark remains a separate manual job with unchanged quality enforcement.",
+    "README execution covers marked offline examples, local links and wheel packaging; it does not check external URLs or repeat the network Git installation command.",
+    "One upstream Starlette/httpx deprecation warning was emitted by pytest."
+  ]
+}

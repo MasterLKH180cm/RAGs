@@ -1,6 +1,6 @@
 # RAGs architecture
 
-This document describes the implemented service. The [v0.4 specification](SPEC_V04.md) adds explicit feature configuration and PostgreSQL/pgvector, extending the [v0.3 specification](SPEC_V03.md) and [v0.2 requirements](SPEC_V02.md); the [v0.3 review](IMPLEMENTATION_REVIEW_V03.md) and historical [v0.2 review](IMPLEMENTATION_REVIEW.md) distinguish actual execution, measured quality and remaining integrations. The [README](../README.md#architecture-and-flows) contains the service, ingestion and retrieval flowcharts.
+This document describes the implemented service. The [v0.4 specification](SPEC_V04.md) adds explicit feature configuration and PostgreSQL/pgvector, extending the [v0.3 specification](SPEC_V03.md) and [v0.2 requirements](SPEC_V02.md); the [v0.3 review](IMPLEMENTATION_REVIEW_V03.md) and historical [v0.2 review](IMPLEMENTATION_REVIEW.md) distinguish actual execution, measured quality and remaining integrations. The [README](README_REFERENCE.md#architecture-and-flows) contains the service, ingestion and retrieval flowcharts.
 
 The current review corrections follow the [data](REVIEW_DATA_FIX_SPEC.md) and
 [runtime](REVIEW_RUNTIME_FIX_SPEC.md) contracts. The optional shared generation
@@ -100,7 +100,7 @@ supported; partial native schemas, unsupported columns and unknown populated
 application tables fail before target initialization. All application tables
 participate in empty-target checks, locks and count verification. It is an operator-run migration, not an
 implicit startup operation; backups and the rollback boundary are documented
-in the [README](../README.md#database-migration-and-backups).
+in the [README](README_REFERENCE.md#database-migration-and-backups).
 
 ### Atomic ingestion and reindexing
 

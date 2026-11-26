@@ -14,7 +14,7 @@ from rags.agents.config import AgentPlatformConfig
 from rags.agents.deadline import execution_deadline
 from rags.agents.memory import ConversationStore, HistoryTurn, ObservationStore, context_messages, scoped_session
 from rags.agents.router import ModelRouter, ToolCall, TOOL_NAME
-from rags.agents.state import Checkpoint, StateStore, _id
+from rags.agents.state import Checkpoint, CheckpointBudgetExceeded, StateStore, _id, encode_checkpoint_state
 from rags.auth import Principal
 from rags.features import FeatureFlags
 from rags.registry import CapabilityError
@@ -55,6 +55,8 @@ class ToolSpec:
             raise ValueError("Tool schemas must forbid unrecognized fields")
         if not callable(self.handler):
             raise ValueError("Tool handler must be callable")
+        if type(self.approval_required) is not bool or type(self.idempotent) is not bool:
+            raise ValueError("Tool approval_required and idempotent must be explicit booleans")
         if self.approval_required and not self.idempotent:
             raise ValueError("Approved tools require an idempotent implementation")
         if type(self.read_only) is not bool:
@@ -219,6 +221,8 @@ class AgentEngine:
     def resume(self, principal: Principal, run_id: str, *, expected_revision: int,
                approved: bool, feedback: str = "") -> Checkpoint:
         self._preflight(principal)
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise ValueError("Invalid checkpoint revision")
         cp = self.get(principal, run_id)
         if cp.fingerprint != self._fingerprint:
             raise CapabilityError("definition_mismatch", "Agent execution contract changed", 409)
@@ -232,16 +236,25 @@ class AgentEngine:
         if not pending:
             raise CapabilityError("invalid_state", "Missing pending tool", 409)
         call = ToolCall.model_validate(pending[0])
-        updated = {**cp.state, "approval": {
-            "call_id": call.id, "approved": approved, "feedback": feedback}}
-        cp = self.state.update(principal.tenant, cp.run_id, expected_revision=cp.revision,
-                               fingerprint=cp.fingerprint, status="running", state=updated)
+        cp = self._step(cp, status="running", approval={
+            "call_id": call.id, "approved": approved, "feedback": feedback})
         return self._advance(cp, principal)
 
-    def _step(self, cp: Checkpoint, *, status: str, **changes) -> Checkpoint:
-        return self.state.update(cp.tenant, cp.run_id, expected_revision=cp.revision,
-                                 fingerprint=self._fingerprint, status=status,
-                                 state={**cp.state, **changes})
+    def _step(self, cp: Checkpoint, *, status: str,
+              history_turn: HistoryTurn | None = None, **changes) -> Checkpoint:
+        proposed = {**cp.state, **changes}
+        try:
+            # A valid bounded Gateway reply can still exceed durable state once
+            # tool arguments appear in both the replay transcript and pending
+            # queue. Leave room for a terminal reason in every saved checkpoint;
+            # never truncate evidence or execute an uncheckpointed tool batch.
+            encode_checkpoint_state({**proposed, "stop_reason": "checkpoint_budget"})
+            return self.state.update(cp.tenant, cp.run_id, expected_revision=cp.revision,
+                                     fingerprint=self._fingerprint, status=status,
+                                     state=proposed, history_turn=history_turn)
+        except CheckpointBudgetExceeded:
+            return self.state.terminate(cp, fingerprint=self._fingerprint, status="stopped",
+                                        stop_reason="checkpoint_budget")
 
     @staticmethod
     def _invoke_tool(spec: ToolSpec, tenant: str, session: str, args: BaseModel,
@@ -350,6 +363,8 @@ class AgentEngine:
             cp = self._step(cp, status="running", pending=cp.state["pending"][1:],
                             approval=None, messages=messages, calls=cp.state["calls"] + 1,
                             evidence_ids=evidence)
+            if cp.status != "running":
+                return cp
         return cp
 
     def _advance(self, cp: Checkpoint, principal: Principal) -> Checkpoint:
@@ -443,9 +458,5 @@ class AgentEngine:
                 retained = set(re.findall(r"\[([^\]\n]+)\]", answer[:4000]))
                 turn = HistoryTurn(memory_id, cp.state["goal"], answer[:4000],
                                    tuple(sorted(references & retained)))
-            return self.state.update(
-                cp.tenant, cp.run_id, expected_revision=cp.revision,
-                fingerprint=self._fingerprint, status="completed",
-                state={**cp.state, "steps": steps, "answer": answer}, history_turn=turn,
-            )
+            return self._step(cp, status="completed", steps=steps, answer=answer, history_turn=turn)
         return cp

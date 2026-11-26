@@ -1,6 +1,8 @@
 """Vision shares typed provider parsing while preserving requests and ingestion."""
 import base64
 import io
+import struct
+import zlib
 from dataclasses import replace
 
 import httpx
@@ -49,6 +51,13 @@ def image_bytes():
     stream = io.BytesIO()
     Image.new("RGB", (12, 10)).save(stream, format="PNG")
     return stream.getvalue()
+
+
+def image_with_declared_size(width, height):
+    raw = bytearray(image_bytes())
+    raw[16:24] = struct.pack(">II", width, height)
+    raw[29:33] = struct.pack(">I", zlib.crc32(raw[12:29]))
+    return bytes(raw)
 
 
 @pytest.mark.unit
@@ -170,3 +179,36 @@ class TestVisionProviderAPI:
             unauthorized = client.post("/images", files={"file": ("diagram.png", image_bytes(), "image/png")})
             assert unauthorized.status_code == 401
             assert provider_reply["calls"] == []
+
+    @pytest.mark.parametrize("size", [(6000, 5000), (10000, 10000), (20000, 10000)])
+    def test_oversized_image_headers_are_rejected_without_provider_or_pixel_allocation(
+        self, settings, provider_reply, monkeypatch, size,
+    ):
+        from PIL import Image
+
+        # Exercise the local ceiling, Pillow warning and Pillow error paths with
+        # only a tiny PNG header. Decoding the declared pixels is never needed.
+        monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 89_478_485)
+        with TestClient(create_app(settings), raise_server_exceptions=False) as client:
+            response = client.post("/images", headers={"Authorization": "Bearer vision-key"},
+                                   files={"file": ("oversized.png", image_with_declared_size(*size), "image/png")})
+            assert response.status_code == 422, response.text
+            assert provider_reply["calls"] == []
+            assert client.get("/documents", headers={"Authorization": "Bearer vision-key"}).json() == []
+        assert Image.MAX_IMAGE_PIXELS == 89_478_485
+
+    @pytest.mark.parametrize("payload", [
+        {"stop_reason": {}, "content": [{"type": "text", "text": "private answer"}]},
+        {"stop_reason": "end_turn", "content": [{"type": "text", "text": "private answer"},
+                                                  {"type": "tool_use", "name": "private action", "input": {}}]},
+    ])
+    def test_anthropic_incomplete_completion_cannot_be_ingested_as_a_caption(self, settings, provider_reply, payload):
+        provider_reply["payload"] = payload
+        headers = {"Authorization": "Bearer vision-key"}
+        with TestClient(create_app(replace(settings, model_provider="anthropic")), raise_server_exceptions=False) as client:
+            response = client.post("/images", headers=headers,
+                                   files={"file": ("diagram.png", image_bytes(), "image/png")})
+            assert response.status_code == 502, response.text
+            assert response.json()["detail"]["code"] == "invalid_model_output"
+            assert "private" not in response.text
+            assert client.get("/documents", headers=headers).json() == []

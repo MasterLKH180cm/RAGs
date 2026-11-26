@@ -101,6 +101,44 @@ def test_workflow_unconfigured_router_and_no_memory_still_operational(client):
     assert response.json()["status"]=="waiting_for_approval"
 
 
+def test_workflow_approval_rejects_coerced_decisions_without_advancing(client):
+    paused = start(client).json()
+    run_path = "/agents/workflows/runs/" + paused["run_id"]
+    decision = {"expected_revision": paused["revision"], "approved": True}
+    malformed = [{**decision, "approved": value} for value in (1, 0, "yes", "false", None)]
+    malformed += [{**decision, "expected_revision": value}
+                  for value in (str(paused["revision"]), float(paused["revision"]), True)]
+    for body in malformed:
+        rejected = client.post(run_path + "/resume", headers=RUNNER, json=body)
+        assert rejected.status_code == 422, rejected.text
+        assert client.get(run_path, headers=RUNNER).json() == paused
+
+    completed = client.post(run_path + "/resume", headers=RUNNER, json=decision)
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["state"]["outputs"]["human_approval"]["human_reviewed"] is True
+
+
+def test_workflow_recovery_requires_integer_revision_before_claiming_run(client):
+    paused = start(client).json()
+    state = client.app.state.agent_engine.state
+    cp = state.get("tenant-a", paused["run_id"])
+    interrupted = state.update(
+        "tenant-a", cp.run_id, expected_revision=cp.revision,
+        fingerprint=cp.fingerprint, status="needs_resume", state=cp.state,
+    ).public()
+    run_path = "/agents/workflows/runs/" + cp.run_id
+    for value in (str(interrupted["revision"]), float(interrupted["revision"]), True):
+        response = client.post(run_path + "/recover", headers=RUNNER,
+                               json={"expected_revision": value})
+        assert response.status_code == 422, response.text
+        assert client.get(run_path, headers=RUNNER).json() == interrupted
+
+    resumed = client.post(run_path + "/recover", headers=RUNNER,
+                          json={"expected_revision": interrupted["revision"]})
+    assert resumed.status_code == 200, resumed.text
+    assert resumed.json()["status"] == "waiting_for_approval"
+
+
 def test_workflow_run_with_disabled_feature_does_not_access_sources(tmp_path,monkeypatch):
     from rags.features import FeatureFlags
     for name in tuple(os.environ):

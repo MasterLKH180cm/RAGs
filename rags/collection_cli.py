@@ -5,10 +5,11 @@ import argparse
 import json
 import os
 from pathlib import Path
-import stat
 import sys
 
-from rags.client import ClientError, HttpClient, MAX_BYTES, _pairs
+from rags.client import ClientError, HttpClient, MAX_BYTES
+from rags.file_io import BoundedFileError, read_regular_bytes
+from rags.model_profiles import strict_json
 
 
 def _common(parser: argparse.ArgumentParser) -> None:
@@ -81,27 +82,18 @@ def add_commands(subparsers) -> None:
 def _read_file(path: Path, *, limit: int = MAX_BYTES) -> bytes:
     """Bound reads before allocation and avoid following a swapped symlink."""
     try:
-        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
-        with os.fdopen(fd, "rb") as stream:
-            info = os.fstat(stream.fileno())
-            if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
-                raise ClientError("invalid_input_file", 422)
-            raw = stream.read(limit + 1)
-            if len(raw) > limit:
-                raise ClientError("request_too_large", 413)
-            return raw
-    except ClientError:
-        raise
+        return read_regular_bytes(path, max_bytes=limit)
+    except BoundedFileError as exc:
+        if exc.reason == "read_limit_exceeded":
+            raise ClientError("request_too_large", 413) from None
+        raise ClientError("invalid_input_file", 422) from None
     except OSError:
         raise ClientError("invalid_input_file", 422) from None
 
 
 def _read_json(path: Path) -> dict:
-    def reject_constant(_):
-        raise ValueError
-
     try:
-        data = json.loads(_read_file(path), object_pairs_hook=_pairs, parse_constant=reject_constant)
+        data = strict_json(_read_file(path))
         if not isinstance(data, dict):
             raise ValueError
         return data

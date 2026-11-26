@@ -7,7 +7,6 @@ authenticated HTTPS introspection endpoint.
 from dataclasses import dataclass, field
 import hashlib
 import hmac
-import json
 import math
 import re
 import time
@@ -15,6 +14,9 @@ from urllib.parse import urlsplit
 
 import httpx
 from fastapi import HTTPException
+
+from rags.model_profiles import strict_json
+from rags.provider_transport import bounded_form_post
 
 
 PERMISSIONS = frozenset({
@@ -135,33 +137,29 @@ def _validate_introspection(raw: object, config: OAuth2Config, now: float) -> Pr
     return Principal(tenant, subject, selected, "oauth2_introspection")
 
 
-def _client(config: OAuth2Config) -> httpx.Client:
+def _client(config: OAuth2Config) -> httpx.AsyncClient:
     """Construct a fresh, non-proxying client per request; no revoked-token cache."""
-    return httpx.Client(timeout=config.timeout_seconds, follow_redirects=False, trust_env=False)
+    return httpx.AsyncClient(timeout=config.timeout_seconds, follow_redirects=False, trust_env=False)
 
 
 def _introspect(token: str, config: OAuth2Config) -> Principal:
     try:
-        # No redirects, ambient proxies, token logging or introspection caching.
-        with _client(config) as client:
-            with client.stream(
-                "POST", config.introspection_url,
-                data={"token": token, "token_type_hint": "access_token"},
-                auth=httpx.BasicAuth(config.client_id, config.client_secret),
-                headers={"Accept": "application/json"},
-            ) as response:
-                if response.status_code != 200:
-                    raise _unavailable()
-                chunks, length = [], 0
-                for chunk in response.iter_bytes():
-                    length += len(chunk)
-                    if length > MAX_INTROSPECTION_BYTES:
-                        raise _unavailable()
-                    chunks.append(chunk)
-        payload = json.loads(b"".join(chunks))
+        # One wall deadline includes connection, headers and slow-drip bodies.
+        # Raw bounded reads reject compression before any decompression occurs.
+        response = bounded_form_post(
+            config.introspection_url,
+            data={"token": token, "token_type_hint": "access_token"},
+            auth=httpx.BasicAuth(config.client_id, config.client_secret),
+            headers={"Accept": "application/json"}, timeout=config.timeout_seconds,
+            max_response_bytes=MAX_INTROSPECTION_BYTES,
+            client_factory=lambda **_options: _client(config), trust_env=False,
+        )
+        if response.status_code != 200:
+            raise _unavailable()
+        payload = strict_json(response.content.decode("utf-8"))
     except HTTPException:
         raise
-    except (httpx.HTTPError, ValueError, UnicodeError, TypeError) as exc:
+    except (httpx.HTTPError, TimeoutError, ValueError, UnicodeError, TypeError, RecursionError) as exc:
         # Provider error bodies and URLs may contain credentials. Never echo them.
         raise _unavailable() from exc
     return _validate_introspection(payload, config, time.time())

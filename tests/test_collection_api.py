@@ -238,6 +238,7 @@ def test_duplicate_nondecimal_and_out_of_range_query_values_fail_before_database
     (b'{"name":"first","name":"second"}', "application/json"),
     (b'{"name":"notes","metadata":{"x":1,"x":2}}', "application/json"),
     (b'{"name":"notes","metadata":{"x":NaN}}', "application/json"),
+    (b'{"name":"notes","metadata":{"x":1e999}}', "application/json"),
     (b'{"name":"notes","metadata":{"x":Infinity}}', "application/json"),
     (b'{"name":"notes","metadata":{"x":-Infinity}}', "application/json"),
     (b'{"name":"notes"} trailing', "application/json"), (b"[1,2]", "application/json"),

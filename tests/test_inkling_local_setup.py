@@ -177,6 +177,7 @@ def test_serving_manifest_matches_benchmark_contract_and_clears_runtime_override
     ready = {"status": "ready_for_server_start", "block_reasons": [], "host": resources(tool)}
     monkeypatch.setattr(tool, "readiness", lambda *_: ready)
     monkeypatch.setenv("LLAMA_ARG_CHAT_TEMPLATE", "an-unrecorded-template")
+    monkeypatch.setenv("LLAMA_API_KEY", "private-unselected-server-key")
     calls = []
 
     def run(command, **kwargs):
@@ -192,4 +193,6 @@ def test_serving_manifest_matches_benchmark_contract_and_clears_runtime_override
     assert manifest.server_threads == 4 and manifest.source == "operator_supplied"
     assert manifest.model_sha256 == tool.MODEL_SHA256
     assert "LLAMA_ARG_CHAT_TEMPLATE" not in calls[0][1]["env"]
+    assert "LLAMA_API_KEY" not in calls[0][1]["env"]
+    assert "private-unselected-server-key" not in manifest_path.read_text()
     assert calls[0][1].get("shell", False) is False
