@@ -21,6 +21,8 @@ from rags.agents.config import AgentPlatformConfig
 from rags.agents.api import mount_agent_api
 from rags.auth import Authenticator, authorization_for_path, Principal
 from rags.chunking import ChunkConfig
+from rags.collection_api import mount_collection_api
+from rags.collection_service import CollectionService
 from rags.config import Settings
 from rags.limits import BodyLimitMiddleware
 from rags.multimodal import install_multimodal_routes
@@ -200,6 +202,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     store = Store(config.db_path)
     service = RAGService(store, Providers(config))
     app.state.service = service
+    collections = CollectionService(store, service.provider)
+    app.state.collections = collections
     authenticator = Authenticator(mode=config.auth_mode, keys=config.keys,
                                   key_roles=config.key_roles, oauth2=config.oauth2)
 
@@ -326,6 +330,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "generation": {"provider": config.model_provider, "model": service.provider.model_identity},
                 "permissions": sorted(principal.permissions),
                 "capabilities": effective_catalog(tenant, principal),
+                "collections": collections.capabilities(principal),
                 "image_assets": multimodal.capability()}
 
     @app.get("/strategies")
@@ -514,6 +519,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     install_admin(app, settings=config, authenticator=authenticator,
                   store=store, service=service, monitor=monitor)
+    mount_collection_api(app, service=collections, auth=auth)
     mount_agent_api(app, store=store, rag=service, config=AgentPlatformConfig.from_env(),
                     auth=auth, features=config.features)
     return app

@@ -316,6 +316,8 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--chunks-per-document", type=int, default=8)
     bench.add_argument("--iterations", type=int, default=20)
     bench.add_argument("--json", action="store_true")
+    from rags.collection_cli import add_commands
+    add_commands(sub)
     return parser
 
 
@@ -330,6 +332,9 @@ def main(argv: list[str] | None = None) -> int:
             print("Start with: rags serve --env-file " + str(paths[0]))
             return 0
         load_env_file(args.env_file)
+        if args.command in {"collection", "records", "search"}:
+            from rags.collection_cli import run
+            return run(args)
         if args.command == "agent":
             from rags.agents.config import AgentPlatformConfig
             import httpx

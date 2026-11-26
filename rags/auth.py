@@ -232,6 +232,30 @@ def route_permissions(path: str, method: str) -> tuple[str, ...]:
         if len(chunks) == 2 and chunks[0] and chunks[1] in {"messages", "observations"}:
             if method == "GET" or (method == "POST" and chunks[1] == "observations"):
                 return ("rags:agent", "rags:memory")
+    if path == "/collections":
+        return {"GET": ("rags:read",), "POST": ("rags:write",)}.get(method, ())
+    if path.startswith("/collections/"):
+        parts = path[len("/collections/"):].split("/")
+        if not parts[0]:
+            return ()
+        if len(parts) == 1:
+            return {"GET": ("rags:read",), "PATCH": ("rags:write",),
+                    "DELETE": ("rags:delete",)}.get(method, ())
+        if len(parts) == 2:
+            if parts[1] in {"count", "indexing-status"} and method == "GET":
+                return ("rags:read",)
+            if parts[1] == "fork" and method == "POST":
+                return ("rags:read", "rags:write")
+            if parts[1] in {"search", "ask"} and method == "POST":
+                return ("rags:query",)
+        if len(parts) == 3 and parts[1] == "records" and method == "POST":
+            if parts[2] in {"add", "update", "upsert"}:
+                return ("rags:write",)
+            if parts[2] == "get":
+                return ("rags:read",)
+            if parts[2] == "delete":
+                return ("rags:delete",)
+        return ()
     if path == "/documents" and method == "POST":
         return ("rags:write",)
     if path == "/documents/upload" and method == "POST":

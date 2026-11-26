@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 from rags.auth import OAuth2Config, ROLES, TENANT
 from rags.chunking import ChunkConfig
+from rags.collection_models import CollectionConfig
 from rags.features import FeatureFlags
 from rags.model_profiles import (
     TINKER_BASE_URL, chat_profile, effort_from_env,
@@ -76,8 +77,11 @@ class Settings:
     reasoning_effort: str | float | None = None
     generation_auth_mode: str = "required"
     embedding_space_id: str = ""
+    collection_config: CollectionConfig = field(default_factory=CollectionConfig)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.collection_config, CollectionConfig):
+            raise ValueError("Collection limits require validated CollectionConfig")
         if (not isinstance(self.embedding_space_id, str)
                 or (self.embedding_space_id and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:/@+-]{0,159}", self.embedding_space_id))):
             raise ValueError("RAGS_EMBEDDING_SPACE_ID must be a bounded deployment/version identifier")
@@ -325,4 +329,5 @@ class Settings:
             generation_protocol=generation_protocol,
             reasoning_effort=effort,
             generation_auth_mode=generation_auth_mode,
+            collection_config=CollectionConfig.from_env(),
         )

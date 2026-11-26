@@ -2237,6 +2237,7 @@ dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
     { name = "python-multipart" },
+    { name = "regex" },
     { name = "tiktoken" },
     { name = "uvicorn" },
 ]
@@ -2288,6 +2289,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1,<8" },
     { name = "python-multipart", specifier = ">=0.0.12,<1" },
+    { name = "regex", specifier = ">=2026.11.19,<2027" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8,<1" },
     { name = "safetensors", marker = "extra == 'answerability'", specifier = "==0.8.0" },
     { name = "tiktoken", specifier = ">=0.8,<1" },

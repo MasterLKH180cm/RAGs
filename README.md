@@ -27,9 +27,17 @@ presets. It is separate from the original bfloat16 answerability scorer and its
 frozen quality gates. [Evaluation diagnostics](docs/QWEN_EVALUATION_SPEC.md)
 separate missing reference documents from references removed after retrieval.
 
+The new [Collections API and Python SDK](docs/COLLECTIONS.md) add Chroma-inspired
+record workflows: atomic batches, explicit embedding spaces, metadata arrays,
+bounded text/regex filters, dense/BM25/sparse/hybrid ranking, grouped projections,
+and independent dataset forks. The service retains PostgreSQL/pgvector and the
+existing evidence admission pipeline. The [implementation contract](docs/COLLECTIONS_SPEC.md)
+defines the API and its measured-scope limits.
+
 ## Contents
 
 - [Quick start](#quick-start)
+- [Collections and Python SDK](#collections-and-python-sdk)
 - [Agent Platform: model routing, workflows and memory (v0.8)](#agent-platform-model-routing-workflows-and-memory-v08)
 - [Admin Dashboard and OpenTelemetry (v0.7)](#admin-dashboard-and-opentelemetry-v07)
 - [Tenant authorization and OAuth2](#tenant-authorization-and-oauth2)
@@ -51,6 +59,60 @@ separate missing reference documents from references removed after retrieval.
 - [MCP and API reference](#mcp-and-api-reference)
 - [Validation and measured limits](#validation-and-measured-limits)
 - [Deployment and project map](#deployment-and-project-map)
+
+## Collections and Python SDK
+
+Use a collection when each caller-supplied record corresponds to one vector.
+Use the existing document API when a long source needs automatic chunking.
+Both interfaces use the configured authentication, tenant boundaries and feature flags.
+
+```python
+import os
+from rags.client import HttpClient
+
+with HttpClient("http://127.0.0.1:8000", api_key=os.environ["RAGS_API_KEY"]) as client:
+    notes = client.get_or_create_collection("product-notes")
+    notes.upsert(
+        ids=["storage", "retention"],
+        documents=["Backups are encrypted at rest.", "Logs are retained for 30 days."],
+        metadatas=[{"tags": ["security", "storage"]}, {"tags": ["operations"]}],
+    )
+    hits = notes.search(query_texts=["encrypted backups"], mode="hybrid",
+                        where={"tags": {"$contains": "security"}})
+    print(hits.rows())
+    experiment = notes.fork("product-notes-experiment")
+    experiment.update(ids=["retention"], documents=["Logs are retained for 60 days."])
+    answer = notes.ask("How long are logs retained?", mode="lexical")
+    print(answer["answer"], answer["citations"])
+```
+
+`PersistentClient(path, api_key=...)` offers the same collection operations with
+an authenticated local SQLite store; its default is explicitly offline. Pass
+validated settings, or use `PersistentClient.from_env`, to opt into configured
+models. The HTTP client uses the server's provider configuration. Dense queries
+can instead supply matching precomputed vectors. Default local embeddings are
+deterministic hashing, not a trained semantic model.
+
+```bash
+rags collection --help
+rags records --help
+rags search --help
+```
+
+Forks share immutable text, metadata and vectors, then copy O(record-count)
+mapping rows. Changes and deletion are isolated; a fork survives deletion of its
+source collection. Search supports cosine, actual BM25, explicit-space sparse
+dot products and positive weighted reciprocal-rank fusion. Collection `ask`
+uses the existing admission, context budgeting and versioned source citations;
+raw rankings remain `ranked_unassessed`.
+
+This is the RAGs API, not Chroma wire compatibility or a Chroma Cloud performance
+claim. Defaults bound each collection to 10,000 records, each mutation to 100
+records, a search batch to 16 queries, and scans/responses to 16 MiB/2 MiB.
+See [the usage guide](docs/COLLECTIONS.md) for complete SDK, CLI, filters,
+embedding and authorization examples.
+See [validation and measured performance](docs/COLLECTIONS_VALIDATION.md) for the
+test scope, reproducible commands and synthetic SQLite/PostgreSQL p50/p95 data.
 
 ## Tenant authorization and OAuth2
 

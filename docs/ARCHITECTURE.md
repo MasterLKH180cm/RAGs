@@ -131,6 +131,46 @@ refresh, change-data-capture connectors or a transaction-time query API.
 
 Leaf and parent records retain exact source offsets. Generated contextual prefixes remain separate from source text. Hierarchy summaries store original-leaf lineage and expand into original leaves for citations. Graph traversal uses relations whose evidence IDs are already in the authorized revision scope. Hypothetical HyDE documents and generated summaries are never accepted as original source citations.
 
+## Collection records, shared versions and unified search
+
+The additive collection interface has a distinct one-record/one-vector unit.
+`collection_models` defines strict JSON contracts shared by `client`, the HTTP
+transport and `collection_service`. The local SDK authenticates before opening
+the store; HTTP authentication and operation feature checks precede body parsing.
+Both transports dispatch to the same authorized application service.
+
+`rag_collections` contains tenant-unique names, immutable embedding profiles and
+generation counters. `rag_collection_records` maps a tenant/collection/record ID
+to an immutable `rag_collection_versions` payload. Forking copies mappings and
+shares payloads. Per-collection generation CAS prevents lost updates after
+provider preparation; ordered bounded PostgreSQL lock stripes serialize shared
+version cleanup without exhausting lock memory on large forks. A version is
+physically deleted only when no collection references it. Legacy document
+deletion cannot remove collection data.
+
+Search first applies tenant/collection SQL scoping and typed bounded predicates
+to a consistent snapshot. PostgreSQL cosine executes through native pgvector
+inside that snapshot; SQLite uses the same normalized float32 vectors. BM25
+counts the full filtered corpus, including zero-length records, using k1=1.2
+and b=0.75. Explicit sparse spaces use exact dot products. Hybrid ranking combines
+one-based component ranks with positive weights and reciprocal-rank fusion.
+Grouping follows ranking; projection and bounded pagination follow grouping.
+No approximate-nearest-neighbor index or unbounded corpus scan is implied.
+
+The application validates complete batches, provider token windows, vector
+spaces/dimensions and the mutation response size before committing. Query batches
+share one snapshot and one filter deadline. Regex uses a timeout-capable engine.
+`RAGS_COLLECTION_LIMITS_JSON` lowers default record, batch, query, scan, response
+and deadline bounds. Authentication scopes and operator feature flags both apply.
+
+Collection `ask` builds immutable version-derived evidence IDs and calls the
+same `RAGService.answer_result` admission/budget/generation path as document
+queries. The source record text and offsets remain exact. Raw search scores do
+not establish answer support; an unassessed result stays unassessed. Collection
+tables participate as a complete optional group in the transactional
+SQLite-to-PostgreSQL importer. Full contracts and operational examples are in
+[COLLECTIONS_SPEC](COLLECTIONS_SPEC.md) and [COLLECTIONS](COLLECTIONS.md).
+
 ## Text processing and prompt budgets
 
 The six ingestion strategies are fixed, recursive, structure, parent-child, semantic, and contextual. Semantic boundaries require a trained encoder; contextual prefixes require a generator. Missing required dependencies produce an error. Structure parsing recognizes text/Markdown blocks and heading paths; it is not a PDF layout parser.

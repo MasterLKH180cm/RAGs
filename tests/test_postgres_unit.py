@@ -10,7 +10,6 @@ from rags import postgres
 from rags.registry import CapabilityError
 from rags.storage import SCHEMA
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -43,6 +42,20 @@ def test_bound_values_do_not_rewrite_question_marks_inside_sql_literals():
     assert "embedding vector NOT NULL" in translated
     assert "tsvector GENERATED ALWAYS" in translated
     assert "VIRTUAL TABLE" not in translated and "AUTOINCREMENT" not in translated
+
+
+def test_schema_vector_translation_preserves_sparse_and_other_text_columns():
+    translated = postgres.translate_schema("""
+        CREATE TABLE payloads (
+            embedding TEXT NOT NULL, sparse_embedding TEXT NOT NULL,
+            vector TEXT NOT NULL, sparse_vector TEXT NOT NULL,
+            previous_embedding TEXT NOT NULL, output_vector TEXT NOT NULL
+        );
+    """)
+    assert "embedding vector NOT NULL" in translated
+    assert "vector vector NOT NULL" in translated
+    for field in ("sparse_embedding", "sparse_vector", "previous_embedding", "output_vector"):
+        assert f"{field} TEXT NOT NULL" in translated
 
 
 class RawCursor:

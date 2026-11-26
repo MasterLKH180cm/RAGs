@@ -748,6 +748,20 @@ class RAGService:
             self.settings.features.require("model_generation")
         self.provider.begin_usage()
         result = self._retrieve(tenant, question, mode, top_k, options)
+        return self.answer_result(question, mode, generate, result)
+
+    def answer_result(self, question: str, mode: str, generate: bool, result: dict) -> dict:
+        """Finalize trusted server-retrieved evidence through the existing gates.
+
+        Collection retrieval calls this same path after tenant-scoped ranking.
+        No HTTP endpoint accepts an arbitrary result/evidence object from clients.
+        """
+        self.settings.features.require("query")
+        if generate:
+            self.settings.features.require("tokenizer." + self.settings.generation_tokenizer_config.get("backend", "unicode"))
+        if generate and self.settings.model_provider != "extractive":
+            self.settings.features.require("model_generation")
+        result = dict(result)
         chunks = result.pop("chunks")
         diagnostics = {"candidate_count": len(chunks), "candidate_ids": [c["id"] for c in chunks],
                        "candidate_document_ids": [c["document_id"] for c in chunks], "usable_as_evidence": False}
@@ -783,11 +797,15 @@ class RAGService:
 
     @staticmethod
     def _citation(chunk: dict) -> dict:
-        return {"chunk_id": chunk["id"], "document_id": chunk["document_id"], "title": chunk["title"],
+        result = {"chunk_id": chunk["id"], "document_id": chunk["document_id"], "title": chunk["title"],
                 "source": chunk["source"], "section": chunk["section"], "score": chunk["score"], "text": chunk["content"],
                 "revision": chunk.get("revision"), "profile_id": chunk.get("profile_id"),
                 "start_char": chunk.get("start_char"), "end_char": chunk.get("end_char"),
                 "origin_source": chunk.get("origin_source", "local"), "origin_chunk_id": chunk.get("origin_chunk_id", chunk["id"])}
+        for key in ("collection_id", "record_id"):
+            if key in chunk:
+                result[key] = chunk[key]
+        return result
 
     def _generate_answer(self, question: str, chunks: list[dict], draft: str | None,
                          *, grounded_ids: list[str] | None = None) -> tuple:
