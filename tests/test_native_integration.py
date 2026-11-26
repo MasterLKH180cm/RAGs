@@ -44,6 +44,21 @@ def query(client, *, token=A, **data):
     return response.json()
 
 
+@pytest.mark.integration
+@pytest.mark.parametrize("scale", [1e-200, 1e200])
+def test_sqlite_dense_ranks_extreme_finite_vectors_by_direction(system, monkeypatch, scale):
+    client, service, _ = system
+    monkeypatch.setattr(service.provider, "embedding", lambda text: [scale, 0.0] if "aligned" in text else [0.0, scale])
+    # The lower source ID is deliberately orthogonal: zero/NaN scores must not
+    # reduce the ranking to insertion order or the stable identifier tie-break.
+    monkeypatch.setattr(retrieval_module, "_identifier", lambda *parts: parts[1] + "-" + parts[-1])
+    ingest(client, document_id="a-orthogonal", title="Orthogonal", text="orthogonal evidence")
+    ingest(client, document_id="z-aligned", title="Aligned", text="aligned evidence")
+    result = query(client, question="aligned", mode="dense", top_k=2)
+    assert [citation["document_id"] for citation in result["citations"]] == ["z-aligned", "a-orthogonal"]
+    assert all(citation["revision"] for citation in result["citations"])
+
+
 def test_temporal_versions_metadata_selection_and_purge(system):
     client, service, _ = system
     first = ingest(client, document_id="policy", title="Policy", text="The lunar policy costs 10 credits.",

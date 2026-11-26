@@ -18,7 +18,7 @@ long-document chunking and the existing research retrieval pipelines.
 
 ## Start locally
 
-Install this repository's package as described in the [installation guide](../README.md#installable-cli-no-clone-needed).
+Install this repository's package as described in the [installation guide](../README.md#quick-start).
 The package provides both the `rags` command and `rags.client`; it is not currently
 published on PyPI. In a source checkout, use `python -m pip install -e .` inside
 your Python environment, or the repository's documented `uv sync` workflow.

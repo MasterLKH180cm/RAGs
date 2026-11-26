@@ -2,6 +2,7 @@
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
+from importlib.metadata import version
 import asyncio
 import io
 import json
@@ -196,7 +197,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             await asyncio.to_thread(upload_workers.shutdown, wait=True)
             monitor.shutdown()
-    app = FastAPI(title="RAGs", version="0.9.0", docs_url="/docs" if docs else None,
+    app = FastAPI(title="RAGs", version=version("rags-platform"), docs_url="/docs" if docs else None,
                   redoc_url="/redoc" if docs else None, openapi_url="/openapi.json" if docs else None, lifespan=lifespan)
     app.add_middleware(BodyLimitMiddleware, max_body_bytes=2_100_000)
     store = Store(config.db_path)

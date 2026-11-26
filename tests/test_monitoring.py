@@ -1,5 +1,9 @@
 """Telemetry and HTTP OTLP privacy, bounds and protocol unit contracts."""
+import asyncio
+import gzip
 import json
+from importlib.metadata import version
+import time
 from types import SimpleNamespace
 
 import httpx
@@ -51,6 +55,9 @@ def test_otlp_json_shapes_include_traces_and_cumulative_metrics_without_secrets(
     payload = seen[0][1]
     group = payload["resourceSpans"][0]
     assert group["resource"]["attributes"][0]["value"]["stringValue"] == "rags-platform"
+    assert group["resource"]["attributes"][1] == {
+        "key": "service.version", "value": {"stringValue": version("rags-platform")},
+    }
     spans = group["scopeSpans"][0]["spans"]
     assert len(spans) == 2
     assert len(spans[0]["traceId"]) == 32 and len(spans[0]["spanId"]) == 16
@@ -79,6 +86,95 @@ def test_otlp_collector_error_does_not_fail_request_or_expose_exception():
     assert mon.export_failures == 1
     assert mon.snapshot("tenant")["otel"]["exported"] == 0
     assert "private" not in json.dumps(mon.snapshot("tenant"))
+
+
+class CollectorStream(httpx.SyncByteStream, httpx.AsyncByteStream):
+    def __init__(self, chunks, delay=0.):
+        self.chunks, self.delay = chunks, delay
+        self.reads, self.closed = 0, False
+
+    def __iter__(self):
+        for chunk in self.chunks:
+            if self.delay:
+                time.sleep(self.delay)
+            self.reads += 1
+            yield chunk
+
+    async def __aiter__(self):
+        for chunk in self.chunks:
+            if self.delay:
+                await asyncio.sleep(self.delay)
+            self.reads += 1
+            yield chunk
+
+    def close(self):
+        self.closed = True
+
+    async def aclose(self):
+        self.closed = True
+
+
+def collector_transport(monkeypatch, stream, headers=None):
+    clients = []
+    real_sync, real_async = httpx.Client, httpx.AsyncClient
+
+    def handler(request):
+        return httpx.Response(200, headers=headers or {}, stream=stream)
+
+    def factory(client_type, **kwargs):
+        assert 0 < kwargs["timeout"] <= 2.
+        assert kwargs["follow_redirects"] is False and kwargs["trust_env"] is False
+        client = client_type(transport=httpx.MockTransport(handler), **kwargs)
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(httpx, "Client", lambda **kwargs: factory(real_sync, **kwargs))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: factory(real_async, **kwargs))
+    return clients
+
+
+def pending_export():
+    monitor = Monitor(enabled=True, endpoint="https://collector.invalid", start_worker=False)
+    monitor.record(tenant="private-tenant", route="/query", method="POST", status=200,
+                   duration_ms=1., start_ns=10, end_ns=20)
+    return monitor, monitor._queue.get_nowait()
+
+
+@pytest.mark.parametrize("headers", [{"Content-Encoding": "gzip"}, {"Content-Length": "16385"}])
+def test_otlp_rejects_unsafe_collector_headers_before_read_or_decompression(monkeypatch, headers):
+    stream = CollectorStream([gzip.compress(b"private collector payload" * 50_000)])
+    clients = collector_transport(monkeypatch, stream, headers)
+    monitor, event = pending_export()
+    monitor.flush([event])
+    assert stream.reads == 0 and stream.closed
+    assert clients and all(client.is_closed for client in clients)
+    assert monitor.snapshot("private-tenant")["otel"]["export_failures"] == 1
+    assert monitor.exported == 0
+
+
+def test_otlp_bounds_unknown_length_collector_response_and_counts_failure(monkeypatch):
+    stream = CollectorStream([b"private" + b"x" * 4089] * 100)
+    clients = collector_transport(monkeypatch, stream)
+    monitor, event = pending_export()
+    monitor.flush([event])
+    assert 0 < stream.reads < 100 and stream.closed
+    assert clients and all(client.is_closed for client in clients)
+    assert monitor.snapshot("private-tenant")["otel"]["export_failures"] == 1
+    assert monitor.exported == 0
+    assert "private" not in json.dumps(monitor.snapshot("private-tenant"))
+
+
+def test_otlp_wall_deadline_stops_slow_collector_and_closes_owned_request(monkeypatch):
+    stream = CollectorStream([b" "] * 150, delay=.02)
+    clients = collector_transport(monkeypatch, stream)
+    monitor, event = pending_export()
+    started = time.monotonic()
+    monitor.flush([event])
+    assert time.monotonic() - started < 3.
+    assert 0 < stream.reads < 150 and stream.closed
+    assert len(clients) == 1 and clients[0].is_closed
+    assert monitor.snapshot("private-tenant")["otel"]["export_failures"] == 1
+    assert monitor.exported == 0
 
 
 def test_otel_queue_and_tenant_memory_have_finite_bounds():
@@ -172,14 +268,15 @@ def test_otlp_emits_http_json_to_expected_collector_paths(monkeypatch):
         assert request.method == "POST"
         assert request.url.path in {"/v1/traces", "/v1/metrics"}
         assert request.headers["content-type"] == "application/json"
+        assert request.headers["accept-encoding"] == "identity"
         assert request.headers.get("authorization") is None
         assert "private-tenant" not in request.content.decode("utf-8")
         assert request.content.startswith(b"{")
         return httpx.Response(200, json={})
 
-    actual = httpx.Client
-    monkeypatch.setattr(telemetry.httpx, "Client",
-                        lambda **kwargs: actual(transport=httpx.MockTransport(handler)))
+    actual = httpx.AsyncClient
+    monkeypatch.setattr(telemetry.httpx, "AsyncClient",
+                        lambda **kwargs: actual(transport=httpx.MockTransport(handler), **kwargs))
     monitor = Monitor(enabled=True, endpoint="https://collector.test:4318", start_worker=False)
     monitor.record(tenant="private-tenant", route="/query", method="POST", status=200,
                    duration_ms=9.5, start_ns=1_000, end_ns=20_000)

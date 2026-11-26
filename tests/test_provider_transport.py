@@ -58,6 +58,53 @@ def request(factory, **changes):
 
 @pytest.mark.unit
 class TestBoundedProviderTransport:
+    def test_json_facade_retains_its_declared_media_type(self):
+        stream = TrackedStream([b"{}"])
+        factory, clients, requests = client_fixture(stream)
+        request(factory, headers={"Content-Type": "text/plain"})
+        assert requests[0].headers["content-type"] == "application/json"
+        assert stream.closed and clients[0].is_closed
+
+    @pytest.mark.parametrize("inside_async", [False, True])
+    def test_form_posts_share_bounds_and_preserve_basic_auth(self, inside_async):
+        from urllib.parse import parse_qs
+
+        stream = TrackedStream([b'{"active":false}'])
+        factory, clients, requests = client_fixture(stream)
+
+        def send():
+            return transport.bounded_form_post(
+                "https://identity.invalid/introspect", headers={"Accept": "application/json"},
+                data={"token": "opaque&=+ /漢", "token_type_hint": "access_token"},
+                auth=httpx.BasicAuth("client", "test-secret"), timeout=2,
+                client_factory=factory,
+            )
+
+        async def invoke():
+            return send()
+
+        response = asyncio.run(invoke()) if inside_async else send()
+        assert response.json() == {"active": False}
+        sent = requests[0]
+        assert parse_qs(sent.content.decode()) == {
+            "token": ["opaque&=+ /漢"], "token_type_hint": ["access_token"],
+        }
+        assert sent.headers["content-type"] == "application/x-www-form-urlencoded"
+        assert sent.headers["authorization"] == "Basic Y2xpZW50OnRlc3Qtc2VjcmV0"
+        assert sent.headers["accept-encoding"] == "identity"
+        assert stream.closed and clients[0].is_closed
+
+    @pytest.mark.parametrize("data", [{"token": "too-large"}, {"token": False}, ["not-a-form"]])
+    def test_form_validation_precedes_network(self, data):
+        factory, clients, requests = client_fixture()
+        with pytest.raises(ValueError):
+            transport.bounded_form_post(
+                "https://identity.invalid/introspect", headers={}, data=data,
+                auth=httpx.BasicAuth("client", "test-secret"), timeout=2,
+                max_request_bytes=3, client_factory=factory,
+            )
+        assert clients == [] and requests == []
+
     @pytest.mark.parametrize("inside_async", [False, True])
     def test_success_uses_exact_utf8_json_and_closes_owned_resources(self, inside_async):
         stream = TrackedStream([b'{"value":', '"結果"}'.encode()])

@@ -8,7 +8,7 @@ this document's then-unverified RAPTOR/LightRAG integration status.
 
 The [v0.2 specification](SPEC_V02.md) was committed before feature implementation, following the requested specification → implementation → self-review sequence. This review records implemented behavior and measured checks against that contract. It does not declare all twenty original research families reproduced.
 
-The [README coverage table](../README.md#twenty-family-coverage) retains every original family. Native mechanisms have explicit names. Required trained models and generators fail closed when unavailable. An external research adapter is an implemented protocol boundary; the named upstream engine remains an unverified external requirement until its actual indexing and retrieval have been exercised.
+The [README coverage table](README_REFERENCE.md#twenty-family-coverage) retains every original family. Native mechanisms have explicit names. Required trained models and generators fail closed when unavailable. An external research adapter is an implemented protocol boundary; the named upstream engine remains an unverified external requirement until its actual indexing and retrieval have been exercised.
 
 ## Requirement ledger
 

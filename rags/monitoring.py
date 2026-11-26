@@ -7,6 +7,7 @@ collector endpoint is operator-configured; no request can change it.
 from collections import Counter, deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from importlib.metadata import version
 import math
 import queue
 import re
@@ -16,15 +17,18 @@ import time
 
 import httpx
 
+from rags import provider_transport
+
 
 BUCKETS_MS = (5, 10, 25, 50, 100, 250, 500, 1000, 2500)
 MAX_TENANTS = 64
 MAX_EVENTS_PER_TENANT = 600
 MAX_SERIES = 120
 MAX_QUEUE = 512
+MAX_COLLECTOR_RESPONSE_BYTES = 16_384
 ROUTE = re.compile(r"^/[a-z0-9_{}./-]{1,100}$")
 SCOPE = "rags.http"
-VERSION = "0.7.0"
+VERSION = version("rags-platform")
 
 
 def route_name(scope: dict) -> str:
@@ -210,11 +214,11 @@ class Monitor:
                                      }]}]}
 
     def _post(self, suffix: str, payload: dict) -> None:
-        with httpx.Client(timeout=2., follow_redirects=False, trust_env=False) as client:
-            response = client.post(self.endpoint + suffix, json=payload,
-                                   headers={"Content-Type": "application/json"})
-            if not 200 <= response.status_code < 300:
-                raise ValueError("Collector rejected telemetry")
+        provider_transport.bounded_post(
+            self.endpoint + suffix, json=payload, headers={}, timeout=2.,
+            max_response_bytes=MAX_COLLECTOR_RESPONSE_BYTES,
+            client_factory=httpx.AsyncClient, trust_env=False,
+        )
 
     def flush(self, events: list[RequestEvent]) -> None:
         if not self.enabled or not events:

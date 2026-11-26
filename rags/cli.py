@@ -5,6 +5,7 @@ database until the operator explicitly chooses "serve".
 """
 import argparse
 from importlib import resources
+from importlib.metadata import version
 import ipaddress
 import json
 import os
@@ -17,6 +18,7 @@ import sys
 
 from rags.config import Settings
 from rags.features import MANIFEST
+from rags.file_io import BoundedFileError, read_regular_text
 
 
 PROFILES = ("offline", "postgres", "openai", "ollama", "anthropic", "inkling", "inkling-local", "litellm")
@@ -51,12 +53,12 @@ def load_env_file(path: str | Path | None) -> None:
     if path is None:
         return
     filename = Path(path)
-    if filename.is_symlink() or not filename.is_file():
-        raise ValueError("Environment file must be an existing regular file, not a symlink")
-    if filename.stat().st_size > MAX_ENV_SIZE:
-        raise ValueError("Environment file exceeds 64 KiB")
     try:
-        raw = filename.read_text(encoding="utf-8")
+        raw = read_regular_text(filename, max_bytes=MAX_ENV_SIZE)
+    except BoundedFileError as exc:
+        if exc.reason in {"too_large", "read_limit_exceeded"}:
+            raise ValueError("Environment file exceeds 64 KiB") from exc
+        raise ValueError("Environment file must be an existing regular file, not a symlink") from exc
     except (OSError, UnicodeError) as exc:
         raise ValueError("Cannot read environment file") from exc
     seen = set()
@@ -255,7 +257,7 @@ def _run_serve(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="rags", description="RAGs platform tooling")
-    parser.add_argument("--version", action="version", version="rags-platform 0.9.0")
+    parser.add_argument("--version", action="version", version="rags-platform " + version("rags-platform"))
     sub = parser.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init", help="Create private credentials and a deployment profile")
     init.add_argument("--profile", choices=PROFILES, default="offline")
@@ -360,10 +362,10 @@ def main(argv: list[str] | None = None) -> int:
             if not token or len(token) > 4096:
                 raise ValueError("Set RAGS_API_KEY to a scoped local API token")
             if args.agent_command == "run":
-                path = args.goal_file
-                if path.is_symlink() or not path.is_file() or path.stat().st_size > 8192:
-                    raise ValueError("Provide a regular small goal file")
-                goal = path.read_text(encoding="utf-8").strip()
+                try:
+                    goal = read_regular_text(args.goal_file, max_bytes=8192).strip()
+                except (OSError, ValueError) as exc:
+                    raise ValueError("Provide a regular small goal file") from exc
                 payload = {"goal": goal, "model": args.model, "session_id": args.session}
                 endpoint = "/agents/runs"
             else:
@@ -393,10 +395,10 @@ def main(argv: list[str] | None = None) -> int:
             if args.workflow_command == "list":
                 route = "/agents/workflows"
             elif args.workflow_command == "run":
-                filename = args.question_file
-                if filename.is_symlink() or not filename.is_file() or filename.stat().st_size > 8192:
-                    raise ValueError("Workflow question must be a regular file of at most 8 KiB")
-                question = filename.read_text("utf-8").strip()
+                try:
+                    question = read_regular_text(args.question_file, max_bytes=8192).strip()
+                except (OSError, ValueError) as exc:
+                    raise ValueError("Workflow question must be a regular file of at most 8 KiB") from exc
                 if not 2 <= len(question) <= 2000:
                     raise ValueError("Workflow question must be 2..2000 chars")
                 from rags.agents.templates import get_template

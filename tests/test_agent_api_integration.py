@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from rags.api import create_app
-from rags.agents.router import ModelRouter, ModelReply
+from rags.agents.router import ModelRouter, ModelReply, ToolCall
 from rags.config import Settings
 
 pytestmark = pytest.mark.integration
@@ -104,6 +104,49 @@ def test_agent_api_malformed_or_unapproved_models_do_not_call_gateway(settings, 
         assert response.status_code == 403
         assert client.post("/agents/runs", headers=AGENT, json={
             "goal": "valid", "model": "main", "session_id": "../../bad"}).status_code == 422
+
+
+def test_agent_approval_requires_json_boolean_and_integer_revision(settings, monkeypatch):
+    calls = []
+
+    def complete(self, **kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            return ModelReply(model="openai/mock", finish_reason="tool_calls", tool_calls=[
+                ToolCall(id="remember_1", name="remember_observation", arguments={
+                    "fact": "Use concise examples", "source_id": "explicit-consent",
+                }),
+            ])
+        return ModelReply(content="Recorded the approved preference.", model="openai/mock",
+                          finish_reason="stop")
+
+    monkeypatch.setattr(ModelRouter, "complete", complete)
+    with TestClient(create_app(settings)) as client:
+        response = client.post("/agents/runs", headers=AGENT, json={
+            "goal": "Remember my preference", "model": "main", "session_id": "strict-approval",
+        })
+        assert response.status_code == 201, response.text
+        paused = response.json()
+        assert paused["status"] == "waiting_for_approval"
+        run_path = "/agents/runs/" + paused["run_id"]
+        decision = {"expected_revision": paused["revision"], "approved": True}
+        malformed = [{**decision, "approved": value}
+                     for value in (1, 0, "yes", "no", "true", "false", None)]
+        malformed += [{**decision, "expected_revision": value}
+                      for value in (str(paused["revision"]), float(paused["revision"]), True)]
+        for body in malformed:
+            rejected = client.post(run_path + "/resume", headers=AGENT, json=body)
+            assert rejected.status_code == 422, rejected.text
+            assert client.get(run_path, headers=AGENT).json() == paused
+        assert len(calls) == 1
+        observations = "/agents/sessions/strict-approval/observations"
+        assert client.get(observations, headers=AGENT).json() == {"observations": []}
+
+        accepted = client.post(run_path + "/resume", headers=AGENT, json=decision)
+        assert accepted.status_code == 200, accepted.text
+        assert accepted.json()["status"] == "completed"
+        assert len(client.get(observations, headers=AGENT).json()["observations"]) == 1
+        assert len(calls) == 2
 
 
 def test_agent_api_routes_are_unmounted_when_disabled(settings, monkeypatch):

@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from contextlib import contextmanager
 import hashlib
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -107,7 +109,8 @@ async def download_checkpoint(cache: Path, filename: str, size: int, digest: str
         with os.fdopen(descriptor, "wb") as stream:
             await stream_model(stream, Artifact(CHECKPOINT_REPOSITORY, CHECKPOINT_REVISION,
                                                filename, size, digest, "original_bfloat16"), timeout_seconds=1800)
-        os.replace(temporary, target)
+        # Publish without replacing a file created while the download ran.
+        os.link(temporary, target)
     finally:
         Path(temporary).unlink(missing_ok=True)
 
@@ -135,7 +138,7 @@ async def download_converter(cache: Path) -> Path:
                     stream.write(data)
             if size != SOURCE_ARCHIVE_BYTES or digest.hexdigest() != SOURCE_ARCHIVE_SHA256:
                 raise ValueError("Pinned converter archive digest differs")
-        os.replace(temporary, target)
+        os.link(temporary, target)
     finally:
         Path(temporary).unlink(missing_ok=True)
     return target
@@ -188,15 +191,46 @@ def manifest(cache: Path) -> dict:
             "model_inference_executed": False}
 
 
+@contextmanager
+def preparation_lock(cache: Path):
+    """Allow one preparer per cache; the kernel releases ownership on exit/crash.
+
+    Keep the lock file in place: unlinking it could give concurrent processes
+    different lock inodes. Its presence is harmless after a crash and requires
+    no manual lock removal. This recipe uses the pinned Linux CPU runtime.
+    """
+    import fcntl
+
+    descriptor = os.open(cache / ".selfrag-prepare.lock",
+                         os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise ValueError("Self-RAG preparation lock must be a regular file")
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ValueError("Self-RAG preparation is already running in this cache") from exc
+        yield
+    finally:
+        os.close(descriptor)
+
+
 def prepare(cache: Path, directory: Path, python: str) -> dict:
     if cache.is_symlink():
         raise ValueError("Self-RAG cache must not be a symbolic link")
     cache.mkdir(parents=True, exist_ok=True)
+    with preparation_lock(cache):
+        return _prepare_locked(cache, directory, python)
+
+
+def _prepare_locked(cache: Path, directory: Path, python: str) -> dict:
     verify_runtime(directory)
     if verified(cache / MODEL_FILENAME, MODEL_BYTES, MODEL_SHA256):
         result = manifest(cache)
         write_json(cache / "selfrag-manifest.json", result)
         return result
+    if (cache / MODEL_FILENAME).exists() or (cache / MODEL_FILENAME).is_symlink():
+        raise ValueError("Existing Self-RAG model differs; choose a clean cache")
     verify_conversion_python(python)
     required = sum(size for name, (size, _) in SOURCE_FILES.items() if not (cache / name).exists())
     required += (0 if (cache / F16_FILENAME).exists() else F16_BYTES) + MODEL_BYTES + 1024 ** 3
@@ -225,7 +259,7 @@ def prepare(cache: Path, directory: Path, python: str) -> dict:
                 normalize_selfrag_eos(python, converter, partial)
                 if not verified(partial, F16_BYTES, F16_SHA256):
                     raise ValueError("Converted Self-RAG F16 identity differs")
-                os.replace(partial, f16)
+                os.link(partial, f16)
             finally:
                 partial.unlink(missing_ok=True)
     partial = cache / (MODEL_FILENAME + ".partial")
@@ -236,7 +270,7 @@ def prepare(cache: Path, directory: Path, python: str) -> dict:
                        timeout=1800, check=True, env=conversion_environment())
         if not verified(partial, MODEL_BYTES, MODEL_SHA256):
             raise ValueError("Quantized Self-RAG identity differs")
-        os.replace(partial, cache / MODEL_FILENAME)
+        os.link(partial, cache / MODEL_FILENAME)
     finally:
         partial.unlink(missing_ok=True)
     result = manifest(cache)

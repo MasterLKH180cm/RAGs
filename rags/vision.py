@@ -20,7 +20,6 @@ def validate_image(raw: bytes) -> str:
         from PIL import Image, UnidentifiedImageError
     except ImportError as exc:
         raise ValueError("Install vision support: uv sync --locked --extra vision (include other selected extras)") from exc
-    Image.MAX_IMAGE_PIXELS = 25_000_000
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
@@ -34,7 +33,7 @@ def validate_image(raw: bytes) -> str:
                     raise ValueError("Only JPEG, PNG and WebP images are supported")
                 img.verify()
                 return media_type
-    except (UnidentifiedImageError, OSError, Image.DecompressionBombWarning) as exc:
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombWarning, Image.DecompressionBombError) as exc:
         raise ValueError("Invalid or unsafe image") from exc
 
 

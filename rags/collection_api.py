@@ -1,29 +1,15 @@
 """Thin authenticated HTTP transport for the shared collection application service."""
-import json
-
 from fastapi import APIRouter, Depends, Request
 from starlette.concurrency import run_in_threadpool
 
 from rags.collection_models import MAX_REQUEST_BYTES
 from rags.collection_service import CollectionService, REQUEST_MODELS
+from rags.model_profiles import strict_json
 from rags.registry import CapabilityError
 
 
 def _invalid() -> CapabilityError:
     return CapabilityError("invalid_collection_input", "Invalid collection request", 422)
-
-
-def _unique_object(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("Duplicate object key")
-        result[key] = value
-    return result
-
-
-def _reject_constant(value):
-    raise ValueError("Nonfinite JSON")
 
 
 async def _body(request: Request, *, optional: bool = False) -> dict:
@@ -35,8 +21,7 @@ async def _body(request: Request, *, optional: bool = False) -> dict:
     if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
         raise _invalid()
     try:
-        value = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object,
-                           parse_constant=_reject_constant)
+        value = strict_json(raw.decode("utf-8"))
         if not isinstance(value, dict):
             raise ValueError("Request must be an object")
         return value

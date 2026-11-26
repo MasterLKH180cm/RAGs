@@ -93,7 +93,7 @@ def test_oauth2_tenant_claims_enforce_data_isolation_and_authentication(base_set
             "active": True, "iss": "https://idp.example/", "aud": "rags-api",
             "tenant_id": tenant, "sub": token, "exp": time.time()+60, "scope": scope,
         })
-    real_client = httpx.Client
+    real_client = httpx.AsyncClient
     monkeypatch.setattr(auth, "_client", lambda _config: real_client(transport=httpx.MockTransport(handler)))
     cfg = replace(base_settings, auth_mode="oauth2_introspection", keys={}, key_roles={},
                   oauth2=auth.OAuth2Config(

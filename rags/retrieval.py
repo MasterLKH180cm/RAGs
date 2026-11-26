@@ -1,5 +1,6 @@
 """Source-preserving ingestion and explicit, independently observable retrieval paths."""
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from dataclasses import asdict
 from datetime import datetime
 from functools import cached_property
@@ -14,6 +15,7 @@ import httpx
 
 from rags import provider_transport
 from rags.admission import EvidenceAdmission, finite, metadata as admission_metadata, validate_remote_decision
+from rags.agents.deadline import remaining_timeout
 from rags.chunking import (
     ALGORITHM_VERSION, MAX_INDEX_RECORDS, MAX_MATERIALIZED_BYTES,
     ChunkConfig, chunk_document, index_fingerprint,
@@ -699,7 +701,7 @@ class RAGService:
             response = provider_transport.post(
                 source["url"].rstrip("/") + "/query",
                 headers={"Authorization": "Bearer " + source["tenant_keys"][tenant]}, json=payload,
-                timeout=FEDERATED_TIMEOUT_SECONDS, max_response_bytes=MAX_FEDERATED_RESPONSE_BYTES,
+                timeout=remaining_timeout(FEDERATED_TIMEOUT_SECONDS), max_response_bytes=MAX_FEDERATED_RESPONSE_BYTES,
                 client_factory=httpx.AsyncClient,
             )
             body = response.json()
@@ -731,7 +733,10 @@ class RAGService:
             return source_id, result, decision
         try:
             with ThreadPoolExecutor(max_workers=min(4, len(selected))) as pool:
-                responses = list(pool.map(search, selected))
+                # Each worker needs its own Context object while inheriting this
+                # request's deadline and synchronized provider-usage accumulator.
+                pending = [pool.submit(copy_context().run, search, source_id) for source_id in selected]
+                responses = [future.result() for future in pending]
         except Exception as exc:
             raise CapabilityError("federated_source_failed", "An authorized source failed; no partial result was presented", 502) from exc
         lookup = {c["id"]: c for _, hits, _ in responses for c in hits}

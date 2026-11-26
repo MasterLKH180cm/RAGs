@@ -1,4 +1,5 @@
 """Unit contracts for tenant principals, API key roles and RFC 7662 boundaries."""
+import asyncio
 import json
 import os
 import time
@@ -193,7 +194,7 @@ def test_rfc7662_introspection_has_basic_auth_form_post_and_no_cross_tenant_user
         assert b"token_type_hint=access_token" in request.content
         return httpx.Response(200, json=claims())
 
-    real_client = httpx.Client
+    real_client = httpx.AsyncClient
     monkeypatch.setattr(auth, "_client", lambda _cfg: real_client(transport=httpx.MockTransport(provider)))
     principal = auth.Authenticator(mode="oauth2_introspection", keys={}, key_roles={},
                                    oauth2=config()).authenticate("Bearer opaque-token")
@@ -212,7 +213,7 @@ def test_rfc7662_introspection_has_basic_auth_form_post_and_no_cross_tenant_user
     lambda: httpx.Response(200, content=b"<not-json>"),
 ])
 def test_provider_failures_fail_closed_without_leaking_secret(monkeypatch, failure):
-    real_client = httpx.Client
+    real_client = httpx.AsyncClient
     monkeypatch.setattr(auth, "_client",
                         lambda _cfg: real_client(transport=httpx.MockTransport(lambda _: failure())))
     with pytest.raises(HTTPException) as error:
@@ -220,3 +221,115 @@ def test_provider_failures_fail_closed_without_leaking_secret(monkeypatch, failu
     assert error.value.status_code == 503
     assert "private" not in json.dumps(error.value.detail)
     assert "idp.example" not in str(error.value.detail)
+
+
+@pytest.mark.parametrize("body", [
+    b'{"active":false,"active":true}',
+    b'{"active":false,"unused":NaN}',
+    b'{"active":false,"unused":1e999}',
+    b"\xff",
+])
+def test_ambiguous_or_unparseable_claims_are_sanitized_unavailable(monkeypatch, body):
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(auth, "_client", lambda _cfg: real_client(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, content=body)),
+    ))
+    with pytest.raises(HTTPException) as error:
+        auth._introspect("private-token", config())
+    assert error.value.status_code == 503
+    assert error.value.detail == {"code": "identity_provider_unavailable"}
+
+
+def test_nested_nonobject_claims_fail_closed_across_json_decoders(monkeypatch):
+    # Some supported Python decoders accept deeply nested valid JSON; others
+    # reject it with RecursionError. Neither may turn it into a principal or 500.
+    body = b"[" * 7000 + b"0" + b"]" * 7000
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(auth, "_client", lambda _cfg: real_client(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, content=body)),
+    ))
+    with pytest.raises(HTTPException) as error:
+        auth._introspect("private-token", config())
+    assert error.value.status_code in {401, 503}
+    assert error.value.detail["code"] in {"invalid_token", "identity_provider_unavailable"}
+
+
+@pytest.mark.parametrize("response_headers", [
+    {"Content-Encoding": "gzip"},
+    {"Content-Length": str(auth.MAX_INTROSPECTION_BYTES + 1)},
+    {"Content-Length": "not-an-integer"},
+])
+def test_introspection_rejects_unsafe_envelopes_before_reading(monkeypatch, response_headers):
+    class Unreadable(httpx.AsyncByteStream):
+        closed = False
+
+        async def __aiter__(self):
+            pytest.fail("Rejected envelope must never read or decompress the body")
+            yield b""
+
+        async def aclose(self):
+            self.closed = True
+
+    stream = Unreadable()
+    clients = []
+    real_client = httpx.AsyncClient
+
+    def factory(_cfg):
+        client = real_client(transport=httpx.MockTransport(lambda _: httpx.Response(
+            200, headers=response_headers, stream=stream,
+        )))
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(auth, "_client", factory)
+    with pytest.raises(HTTPException) as error:
+        auth._introspect("private-token", config())
+    assert error.value.status_code == 503
+    assert stream.closed and clients[0].is_closed
+
+
+@pytest.mark.parametrize("phase", ["headers", "slow_body"])
+def test_introspection_wall_deadline_cancels_and_closes_owned_request(monkeypatch, phase):
+    class SlowClaims(httpx.AsyncByteStream):
+        closed = False
+        reads = 0
+
+        async def __aiter__(self):
+            for _ in range(100):
+                await asyncio.sleep(0.02)
+                self.reads += 1
+                yield b" "
+            yield json.dumps(claims()).encode()
+
+        async def aclose(self):
+            self.closed = True
+
+    stream = SlowClaims()
+    clients, cancelled = [], []
+    real_client = httpx.AsyncClient
+
+    async def provider(request):
+        if phase == "headers":
+            try:
+                await asyncio.sleep(10)
+            finally:
+                cancelled.append(True)
+        return httpx.Response(200, stream=stream)
+
+    def factory(_cfg):
+        client = real_client(transport=httpx.MockTransport(provider))
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(auth, "_client", factory)
+    started = time.monotonic()
+    with pytest.raises(HTTPException) as error:
+        auth._introspect("private-token", replace(config(), timeout_seconds=1))
+    assert time.monotonic() - started < 2.5
+    assert error.value.status_code == 503
+    assert error.value.detail == {"code": "identity_provider_unavailable"}
+    assert clients[0].is_closed
+    if phase == "headers":
+        assert cancelled == [True]
+    else:
+        assert stream.closed and 0 < stream.reads < 100

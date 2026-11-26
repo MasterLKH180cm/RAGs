@@ -45,6 +45,22 @@ def secured(csrf_value, *, origin=ORIGIN, extra=None):
     return {"Origin": origin, "X-CSRF-Token": csrf_value, **(extra or {})}
 
 
+def test_non_ascii_csrf_is_rejected_before_any_mutation(config):
+    app = create_app(config)
+    with TestClient(app, base_url=ORIGIN) as client:
+        assert sign_in(client).status_code == 200
+        response = client.post(
+            "/admin/api/documents",
+            headers=[(b"Origin", ORIGIN.encode()), (b"X-CSRF-Token", b"\xff")],
+            json={"title": "Rejected source", "text": "Must never be indexed."},
+        )
+        assert response.status_code == 403
+        assert response.json() == {"detail": {"code": "invalid_csrf"}}
+        assert client.get("/admin/api/documents").json()["items"] == []
+        # A malformed header must not revoke the legitimate session.
+        assert client.get("/admin/api/session").status_code == 200
+
+
 def test_optin_admin_not_mounted_by_default(config):
     app = create_app(replace(config, admin_enabled=False))
     with TestClient(app, base_url=ORIGIN) as client:
@@ -263,7 +279,7 @@ def test_oauth2_admin_session_revalidates_revocation_on_every_request(config, mo
             "exp": time.time() + 120, "scope": "rags:admin rags:read rags:query",
         })
 
-    actual_client = httpx.Client
+    actual_client = httpx.AsyncClient
     monkeypatch.setattr(auth, "_client",
                         lambda _cfg: actual_client(transport=httpx.MockTransport(introspect)))
     oauth = auth.OAuth2Config("https://idp.example/introspect", "https://idp.example/",

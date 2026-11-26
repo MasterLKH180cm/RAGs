@@ -185,6 +185,8 @@ jobs:
             --directory "$RUNNER_TEMP/rags-wheel-inkling-local"
           "$RUNNER_TEMP/rags-wheel/bin/rags" doctor \
             --env-file "$RUNNER_TEMP/rags-wheel-inkling-local/.env" --no-db --json
+          "$RUNNER_TEMP/rags-wheel/bin/python" scripts/check_readme.py --live \
+            --report reports/testing/readme-onboarding.json
       - name: Enforce complete-package line and branch floors
         run: python scripts/check_coverage.py
       - name: Publish test inventory, JUnit and coverage evidence

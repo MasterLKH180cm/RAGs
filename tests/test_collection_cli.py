@@ -127,7 +127,8 @@ def test_advanced_search_json_is_supported(wire, tmp_path, capsys):
     capsys.readouterr()
 
 
-@pytest.mark.parametrize("body", ["[]", "not-json", '{"ids":[],"ids":["secret"]}', '{"ids":[NaN]}'])
+@pytest.mark.parametrize("body", ["[]", "not-json", '{"ids":[],"ids":["secret"]}', '{"ids":[NaN]}',
+                                  '{"ids":["source"],"documents":["fact"],"unused":1e999}'])
 def test_bad_json_files_fail_before_any_request(wire, tmp_path, capsys, body):
     file = tmp_path / "bad.json"
     file.write_text(body)

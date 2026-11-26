@@ -25,7 +25,7 @@ class RunIn(BaseModel):
 
 
 class ResumeIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
     expected_revision: int = Field(ge=0)
     approved: bool
     feedback: str = Field(default="", max_length=500)
@@ -46,7 +46,7 @@ class WorkflowRunIn(BaseModel):
 
 
 class WorkflowRecoverIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
     expected_revision: int = Field(ge=0)
 
 

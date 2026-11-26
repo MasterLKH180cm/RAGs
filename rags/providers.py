@@ -7,6 +7,7 @@ import re
 from collections import Counter
 from contextvars import ContextVar
 from functools import cached_property, lru_cache
+from threading import Lock
 
 import httpx
 
@@ -16,7 +17,24 @@ from rags.model_profiles import chat_profile, normalized_usage, strict_json
 from rags.registry import CapabilityError
 from rags.agents.deadline import remaining_timeout
 
-_calls: ContextVar[list | None] = ContextVar("rags_provider_calls", default=None)
+class _UsageLog:
+    """One request's reports, safely shared by its copied worker contexts."""
+
+    def __init__(self):
+        self._calls = []
+        self._lock = Lock()
+
+    def append(self, call: dict) -> None:
+        with self._lock:
+            self._calls.append(call)
+
+    def snapshot(self) -> list[dict]:
+        with self._lock:
+            return list(self._calls)
+
+
+_calls: ContextVar[_UsageLog | None] = ContextVar("rags_provider_calls", default=None)
+_SEMANTIC_ENCODER_LOCK = Lock()
 
 
 def response_object(response: httpx.Response, code: str, reason: str) -> dict:
@@ -50,10 +68,16 @@ def response_text(payload: dict, provider: str) -> str:
             raise CapabilityError("invalid_model_output", "Unexpected tool calls in text generation", 502)
         answer = message.get("content") if isinstance(message, dict) else None
     else:
-        if payload.get("stop_reason", "end_turn") not in {"end_turn", "stop_sequence"}:
+        stop_reason = payload.get("stop_reason", "end_turn")
+        if not isinstance(stop_reason, str) or stop_reason not in {"end_turn", "stop_sequence"}:
             raise CapabilityError("invalid_model_output", "Generation did not finish with a text answer", 502)
         blocks = payload.get("content")
-        if not isinstance(blocks, list) or any(not isinstance(block, dict) for block in blocks):
+        # Thinking blocks may accompany a completed text answer. Tool actions or
+        # unknown block types cannot silently become a successful text completion.
+        if not isinstance(blocks, list) or any(
+            not isinstance(block, dict) or not isinstance(block.get("type"), str)
+            or block["type"] not in {"text", "thinking", "redacted_thinking"} for block in blocks
+        ):
             raise CapabilityError("invalid_model_output", "Generation provider returned invalid content blocks", 502)
         parts = [block.get("text") for block in blocks if block.get("type") == "text"]
         if any(not isinstance(part, str) for part in parts):
@@ -74,7 +98,7 @@ def _finite_number(value) -> bool:
 
 
 @lru_cache(maxsize=2)
-def _semantic_encoder(model: str, cache_dir: str | None = None):
+def _cached_semantic_encoder(model: str, cache_dir: str | None = None):
     try:
         from fastembed import TextEmbedding
     except ImportError as exc:
@@ -83,6 +107,18 @@ def _semantic_encoder(model: str, cache_dir: str | None = None):
         return TextEmbedding(model_name=model, cache_dir=cache_dir, threads=2)
     except Exception as exc:
         raise CapabilityError("requires_provider", "Configured FastEmbed checkpoint is unavailable") from exc
+
+
+def _semantic_encoder(model: str, cache_dir: str | None = None):
+    # lru_cache permits concurrent cold misses. Serialize the cache lookup and
+    # construction so one checkpoint cannot allocate several complete encoders.
+    with _SEMANTIC_ENCODER_LOCK:
+        return _cached_semantic_encoder(model, cache_dir)
+
+
+_semantic_encoder.cache_clear = _cached_semantic_encoder.cache_clear
+_semantic_encoder.cache_info = _cached_semantic_encoder.cache_info
+_semantic_encoder.cache_parameters = _cached_semantic_encoder.cache_parameters
 
 
 def local_embedding(text: str, dims: int = 384) -> list[float]:
@@ -135,10 +171,11 @@ class Providers:
         )
 
     def begin_usage(self) -> None:
-        _calls.set([])
+        _calls.set(_UsageLog())
 
     def usage(self) -> dict:
-        calls = _calls.get() or []
+        log = _calls.get()
+        calls = log.snapshot() if log is not None else []
         reported = [c for c in calls if c.get("usage")]
         return {"calls": len(calls), "provider_reports": reported,
                 "token_usage": "provider_reported" if reported else "unavailable",

@@ -50,6 +50,51 @@ def test_checkpoint_symlink_is_never_followed_or_replaced(tmp_path):
     assert path.is_symlink() and target.read_bytes() == b"owned data"
 
 
+def test_checkpoint_publication_does_not_overwrite_a_concurrent_target(monkeypatch, tmp_path):
+    target = tmp_path / "weights.bin"
+
+    async def stream(output, *_args, **_kwargs):
+        output.write(b"verified source")
+        target.write_bytes(b"concurrent owner")
+
+    monkeypatch.setattr(tool, "stream_model", stream)
+    with pytest.raises(FileExistsError):
+        asyncio.run(tool.download_checkpoint(tmp_path, target.name, 15,
+                                             hashlib.sha256(b"verified source").hexdigest()))
+    assert target.read_bytes() == b"concurrent owner"
+    assert not list(tmp_path.glob(".selfrag-download-*"))
+
+
+def test_converter_publication_does_not_overwrite_a_concurrent_target(monkeypatch, tmp_path):
+    body = b"verified archive fixture"
+    target = tmp_path / "llama-source.tar.gz"
+    client = httpx.AsyncClient
+
+    def respond(_request):
+        target.write_bytes(b"concurrent owner")
+        return httpx.Response(200, stream=httpx.ByteStream(body))
+
+    monkeypatch.setattr(tool, "SOURCE_ARCHIVE_BYTES", len(body))
+    monkeypatch.setattr(tool, "SOURCE_ARCHIVE_SHA256", hashlib.sha256(body).hexdigest())
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs:
+                        client(transport=httpx.MockTransport(respond), **kwargs))
+    with pytest.raises(FileExistsError):
+        asyncio.run(tool.download_converter(tmp_path))
+    assert target.read_bytes() == b"concurrent owner"
+    assert not list(tmp_path.glob(".selfrag-source-*"))
+
+
+def test_existing_mismatched_final_model_is_preserved_before_preparation(monkeypatch, tmp_path):
+    target = tmp_path / tool.MODEL_FILENAME
+    target.write_bytes(b"existing operator artifact")
+    monkeypatch.setattr(tool, "verify_runtime", lambda _: None)
+    monkeypatch.setattr(tool, "verify_conversion_python",
+                        lambda _: pytest.fail("A conflicting model must fail before conversion setup"))
+    with pytest.raises(ValueError, match="Existing Self-RAG model differs"):
+        tool.prepare(tmp_path, tmp_path / "runtime", "unused-python")
+    assert target.read_bytes() == b"existing operator artifact"
+
+
 @pytest.mark.parametrize("name,kind", [("../escape.py", "file"),
                                       ("llama.cpp-wrong/file.py", "file"),
                                       ("llama.cpp-" + tool.RUNTIME_REVISION + "/unsafe.py", "symlink")])

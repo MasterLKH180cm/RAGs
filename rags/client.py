@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from rags.config import Settings
+from rags.model_profiles import strict_json
 
 MAX_BYTES = 2 * 1024 * 1024
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}\Z")
@@ -86,21 +87,9 @@ def _json_bytes(value: object) -> bytes:
     return bytes(body)
 
 
-def _pairs(pairs):
-    value = {}
-    for key, item in pairs:
-        if key in value:
-            raise ValueError("Duplicate JSON field")
-        value[key] = item
-    return value
-
-
 def _parse_json(raw: bytes) -> dict:
-    def reject_constant(_):
-        raise ValueError("Nonfinite JSON value")
-
     try:
-        value = json.loads(raw, object_pairs_hook=_pairs, parse_constant=reject_constant)
+        value = strict_json(raw)
     except (ValueError, UnicodeError, RecursionError):
         raise ClientError("invalid_response", 502) from None
     if not isinstance(value, dict):

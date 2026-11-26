@@ -144,7 +144,7 @@ the remaining pinned dependencies resolve from PyPI. See the
 dependency versions. The LightRAG wheel SHA-256 is
 `895b81d94ca447afc6290c0e049d339f6caed46fbf29e4324f6db987046c6fcb`.
 
-The [README service example](../README.md#raptor-and-lightrag-services) shows
+The [README service example](README_REFERENCE.md#raptor-and-lightrag-services) shows
 provider credentials, tenant keys, service startup and the main API backend
 configuration. Set `require_pinned_upstream:true` for these services. Keep the
 main API's client deadline longer than the sidecar deadline. Production backend
