@@ -39,6 +39,7 @@ _SAFE_CODES = frozenset({
     "invalid_collection_filter", "invalid_collection_search", "invalid_collection_data",
     "collection_filter_timeout", "collection_response_limit", "collection_timeout",
     "collection_integrity_error", "collection_request_limit", "embedding_failed",
+    "unknown_embedding_profile", "reembedding_source_changed", "reembedding_incomplete",
 })
 
 
@@ -48,6 +49,14 @@ class ClientError(ValueError):
     def __init__(self, code: str, status_code: int = 400):
         self.code, self.status_code = code, status_code
         super().__init__(f"{code} (HTTP {status_code})")
+
+
+class ReembeddingError(ClientError):
+    """A partial copy is retained for inspection; source data is never modified."""
+
+    def __init__(self, cause: ClientError, progress: dict):
+        super().__init__("reembedding_incomplete", cause.status_code)
+        self.progress = {**progress, "completed": False, "cause": cause.code}
 
 
 def _safe_error(payload: object, status: int) -> ClientError:
@@ -113,7 +122,7 @@ def _payload(operation: str, data: dict | None) -> dict:
     _json_bytes(value)  # Bound the original request before normalization or work.
     model = models.get(operation)
     if model is None:
-        if value or operation not in {"get", "count", "indexing_status"}:
+        if value or operation not in {"get", "count", "indexing_status", "models", "tokenizers"}:
             raise ClientError("invalid_request", 422)
         return {}
     try:
@@ -160,7 +169,17 @@ class _CollectionClient:
     def _dispatch(self, operation: str, collection_id: str | None = None, data: dict | None = None) -> dict:
         raise NotImplementedError
 
-    def create_collection(self, name: str, **configuration) -> Collection:
+    def list_models(self) -> dict:
+        return self._dispatch("models")
+
+    def list_tokenizers(self) -> dict:
+        return self._dispatch("tokenizers")
+
+    def create_collection(self, name: str, *, embedding_profile: str | None = None, **configuration) -> Collection:
+        if embedding_profile is not None:
+            if "embedding" in configuration:
+                raise ClientError("invalid_request", 422)
+            configuration["embedding"] = {"mode": "profile", "profile_id": embedding_profile}
         return Collection(self, self._dispatch("create", data={"name": name, **configuration}))
 
     def get_or_create_collection(self, name: str, **configuration) -> Collection:
@@ -250,6 +269,93 @@ class Collection:
 
     def fork(self, name: str, **options) -> Collection:
         return Collection(self._client, self._client._dispatch("fork", self.id, {"name": name, **options}))
+
+    def reembed(self, name: str, *, embedding_profile: str, batch_size: int = 100,
+                expected_generation: int | None = None) -> dict:
+        """Copy source text into a fresh vector space with checked generations.
+
+        This bounded batch workflow is intentionally resumable by inspection,
+        not a single server transaction. A failure retains its separately named
+        partial target and returns progress on ReembeddingError; it never deletes
+        concurrent work or changes the source collection. Start a fresh copy after
+        a source change instead of mixing versions from different snapshots.
+        """
+        if type(batch_size) is not int or not 1 <= batch_size <= 100:
+            raise ClientError("invalid_request", 422)
+        if expected_generation is not None and (type(expected_generation) is not int or expected_generation < 0):
+            raise ClientError("invalid_request", 422)
+        source = self._client.get_collection(collection_id=self.id).to_dict()
+        generation, count = source.get("generation"), source.get("record_count")
+        if (type(generation) is not int or not 0 <= generation < 2 ** 63
+                or type(count) is not int or not 0 <= count <= 100_000):
+            raise ClientError("invalid_response", 502)
+        if expected_generation is not None and generation != expected_generation:
+            raise ClientError("collection_generation_conflict", 409)
+        configuration = source.get("configuration")
+        if not isinstance(configuration, dict):
+            raise ClientError("invalid_response", 502)
+        sparse_space = configuration.get("sparse_space_id")
+        from rags.collection_models import canonical_metadata, canonical_sparse, record_ids, valid_text
+        try:
+            if sparse_space is not None:
+                valid_text(sparse_space, 160)
+            canonical_metadata(source.get("metadata", {}))
+        except (ValueError, TypeError):
+            raise ClientError("invalid_response", 502) from None
+        target = self._client.create_collection(name, embedding_profile=embedding_profile,
+                                                metadata=source.get("metadata", {}), sparse_space_id=sparse_space)
+        progress = {"source_collection_id": self.id, "source_generation": generation,
+                    "target_collection_id": target.id, "target_generation": target.to_dict().get("generation"),
+                    "copied_records": 0, "completed": False}
+        try:
+            target_generation = progress["target_generation"]
+            if (type(target_generation) is not int or target_generation != 0
+                    or target.id == self.id or target.name != name
+                    or type(target.to_dict().get("record_count")) is not int
+                    or target.to_dict()["record_count"] != 0):
+                progress["target_generation"] = None
+                raise ClientError("invalid_response", 502)
+            include = ["document", "metadata"] + (["sparse_embedding"] if sparse_space is not None else [])
+            while progress["copied_records"] < count:
+                page = self.get(limit=batch_size, offset=progress["copied_records"], include=include)
+                if page.get("generation") != generation:
+                    raise ClientError("reembedding_source_changed", 409)
+                items = page.get("items")
+                if (not isinstance(items, list) or not 1 <= len(items) <= min(batch_size, count - progress["copied_records"])
+                        or any(not isinstance(row, dict) or not isinstance(row.get("document"), str)
+                               or not row["document"].strip() for row in items)):
+                    raise ClientError("invalid_collection_input", 422)
+                try:
+                    record_ids([row.get("id") for row in items])
+                    for row in items:
+                        valid_text(row["document"], 20_000)
+                        canonical_metadata(row.get("metadata", {}))
+                        if sparse_space is not None and row.get("sparse_embedding") is not None:
+                            canonical_sparse(row.get("sparse_embedding"))
+                except (ValueError, TypeError):
+                    raise ClientError("invalid_response", 502) from None
+                fields = {"ids": [row["id"] for row in items], "documents": [row["document"] for row in items],
+                          "metadatas": [row.get("metadata", {}) for row in items],
+                          "expected_generation": progress["target_generation"]}
+                if sparse_space is not None:
+                    fields["sparse_embeddings"] = [row.get("sparse_embedding") for row in items]
+                written = target.add(**fields)
+                next_generation = written.get("generation")
+                if (type(next_generation) is not int or not 0 <= next_generation < 2 ** 63
+                        or next_generation != progress["target_generation"] + 1):
+                    raise ClientError("invalid_response", 502)
+                progress["target_generation"] = next_generation
+                progress["copied_records"] += len(items)
+            if self._client.get_collection(collection_id=self.id).to_dict().get("generation") != generation:
+                raise ClientError("reembedding_source_changed", 409)
+            current = target.refresh().to_dict()
+            if (current.get("generation") != progress["target_generation"]
+                    or current.get("record_count") != count):
+                raise ClientError("collection_generation_conflict", 409)
+        except ClientError as exc:
+            raise ReembeddingError(exc, progress) from None
+        progress["completed"] = True
+        return progress
 
     def add(self, *, ids: list[str], **fields) -> dict:
         return self._client._dispatch("add", self.id, {"ids": ids, **fields})
@@ -418,7 +524,9 @@ class HttpClient(_CollectionClient):
     def _dispatch(self, operation: str, collection_id: str | None = None, data: dict | None = None) -> dict:
         self._check_open()
         prepared = _payload(operation, data)
-        if operation in {"create", "list"}:
+        if operation in {"models", "tokenizers"}:
+            method, path = "GET", "/v1/" + operation
+        elif operation in {"create", "list"}:
             method, path = ("POST" if operation == "create" else "GET"), "/collections"
         else:
             key = _identifier(collection_id)
@@ -515,6 +623,11 @@ class PersistentClient(_CollectionClient):
             # Authenticate each operation, before models/providers/storage reads.
             principal = self._authenticator.authenticate("Bearer " + self._api_key)
             prepared = _payload(operation, data)
+            if operation in {"models", "tokenizers"}:
+                principal.require("rags:read")
+                from rags.model_discovery import model_discovery, tokenizer_discovery
+                discover = model_discovery if operation == "models" else tokenizer_discovery
+                return discover(self._service.settings)
             if collection_id is not None:
                 _identifier(collection_id)
             result = self._service.dispatch(principal, operation, collection_id, prepared)

@@ -66,11 +66,13 @@ const agentNav = element("#test-agents-nav");
 agentNav.dataset.view = "agents";
 const documentsNav = element("#test-documents-nav");
 documentsNav.dataset.view = "documents";
+const settingsNav = element("#test-settings-nav");
+settingsNav.dataset.view = "settings";
 const document = {
   body: { dataset: { theme: "dark" } },
   hidden: false,
   querySelector: element,
-  querySelectorAll: (selector) => selector === ".nav-item" ? [agentNav, documentsNav] : [],
+  querySelectorAll: (selector) => selector === ".nav-item" ? [agentNav, documentsNav, settingsNav] : [],
   createElement: (name) => new Element(name),
   addEventListener() {},
 };
@@ -87,6 +89,21 @@ let makeNextQueryDeferred = false;
 let queryRequests = 0;
 let deferDocuments = false;
 const documentRequests = [];
+let deferModels = false;
+const modelRequests = [];
+const modelCatalog = (identity) => ({
+  embeddings: [{id: "bge-small-zh", label: "BGE 中文 <script>literal</script>", provider: "fastembed",
+    model: "BAAI/bge-small-zh-v1.5", languages: ["zh"], dimensions: 512, max_input_tokens: 512,
+    execution: "local", cost_category: "local_compute", input_policy: "exact", enabled: false,
+    dependency: {installed: false}, limitations: ["Validate your corpus."]}],
+  tokenizers: [
+    {id: "auto", label: "Automatic"}, {id: "embedding", label: "Embedding counter"},
+    {id: "unicode", label: "Characters"}, {id: "utf8_bytes", label: "UTF-8 bytes"},
+    {id: "huggingface", label: "HF", requires_artifact: true},
+  ],
+  registered_artifacts: [{id: "zh-count", backend: "huggingface"}],
+  approved_profiles: [{id: "model-profile-" + identity, model: "approved-" + identity}],
+});
 const session = () => ({
   csrf: "csrf-" + current,
   tenant: "tenant-" + current,
@@ -147,7 +164,18 @@ async function fetch(url, options = {}) {
   if (url === "/admin/api/operations") return reply(200, {
     auth_mode: "api_key", storage: "sqlite", embedding_provider: "local",
     generation_provider: "extractive", permissions: ["rags:admin"], features: {},
+    embedding: {provider: "local", model: "offline-hash-v1",
+      readiness: {enabled: true, dependency: {installed: true}, runtime_validation: "not_run"}},
+    source_tokenizer: {backend: "unicode", count_kind: "fallback_units"},
+    generation_tokenizer: {backend: "utf8_bytes", count_kind: "conservative_bytes"},
   });
+  if (url === "/admin/api/models") {
+    assert.equal(method, "GET", "Model selection must never mutate live configuration");
+    const identity = current;
+    if (deferModels) return new Promise(resolve => modelRequests.push({identity, resolve}));
+    modelRequests.push({identity});
+    return reply(200, modelCatalog(identity));
+  }
   if (url === "/admin/api/agents/capabilities") return reply(200, {
     models: [], tools: [], router_ready: false,
   });
@@ -220,7 +248,7 @@ function snapshot(node, seen = new Set()) {
 }
 function assertNoOldTenant() {
   const sensitive = ["PRIVATE A", "SECRET A", "Proprietary evidence of tenant A", "secret-A",
-    "source-ID-A", "workflow-A"];
+    "source-ID-A", "workflow-A", "model-profile-A", "approved-A"];
   for (const value of sensitive) {
     for (const [key, node] of dom.entries()) {
       assert.equal(snapshot(node).includes(value), false,
@@ -327,5 +355,40 @@ for (const olderStatus of [200, 500]) {
   assert.equal(element("#document-range").textContent, range);
 }
 deferDocuments = false;
+// Selection preview uses the shared catalog, distinguishes configured from
+// validated, and performs only read requests even when users change choices.
+await trigger("#test-settings-nav");
+assert.match(element("#setting-embedding").textContent, /offline-hash-v1/);
+assert.match(element("#setting-model-readiness").textContent, /尚未執行模型驗證/);
+assert.match(snapshot(element("#model-choice")), /<script>literal<\/script>/,
+  "Labels are displayed as literal text, never interpreted as HTML");
+assert.equal(element("#generation-tokenizer-choice").children.some(c => ["auto", "embedding"].includes(c.value)), false);
+assert.equal(element("#source-tokenizer-choice").children.some(c => c.value === "huggingface:zh-count"), true);
+const beforePreview = modelRequests.length;
+element("#model-choice").value = "bge-small-zh";
+await trigger("#model-choice", "change");
+element("#generation-tokenizer-choice").value = "utf8_bytes";
+await trigger("#generation-tokenizer-choice", "change");
+assert.match(element("#model-selection-command").textContent, /rags config plan.*--embedding 'bge-small-zh'/);
+assert.match(element("#model-selection-command").textContent, /--generation-tokenizer 'utf8_bytes'/);
+assert.match(snapshot(element("#model-selection-notes")), /目前部署已停用/);
+assert.match(snapshot(element("#model-selection-notes")), /重新產生向量/);
+assert.equal(modelRequests.length, beforePreview, "Changing a preview has no API side effects");
+
+// A catalog loaded under the previous tenant must never repopulate choices or
+// approved profile names after logout/login, even if its response arrives late.
+deferModels = true;
+await trigger("#test-settings-nav");
+const pendingModel = modelRequests.at(-1);
+assert.equal(typeof pendingModel.resolve, "function");
 await trigger("#logout-button");
-console.log("Admin UI identity switch, DOM reset and cross-tenant/same-session stale request isolation: passed");
+assert.equal(element("#model-choice").children.length, 0);
+assert.equal(element("#model-choice").disabled, true);
+assert.equal(element("#approved-model-profiles").children.length, 0);
+await login("B");
+pendingModel.resolve(reply(200, modelCatalog("A")));
+await microtasks();
+assertNoOldTenant();
+assert.equal(element("#model-choice").children.length, 0);
+await trigger("#logout-button");
+console.log("Admin UI selection preview, identity switch and stale request isolation: passed");

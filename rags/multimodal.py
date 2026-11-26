@@ -5,7 +5,6 @@ images into invented document text, and does not provide audio/video retrieval.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import io
@@ -14,7 +13,6 @@ import math
 import os
 from pathlib import Path
 import re
-import sqlite3
 import threading
 from typing import Callable, Protocol
 import uuid
@@ -25,7 +23,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
-from rags import postgres
+from rags import database, postgres
 from rags.features import FeatureFlags
 from rags.registry import CapabilityError
 
@@ -217,24 +215,8 @@ class AssetStore:
             else:
                 connection.executescript(_SCHEMA)
 
-    @contextmanager
     def connect(self):
-        if self.is_postgres:
-            with postgres.connect(self.path) as connection:
-                yield connection
-            return
-        connection = sqlite3.connect(self.path, timeout=20)
-        try:
-            connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA busy_timeout=20000")
-            connection.execute("PRAGMA journal_mode=WAL")
-            yield connection
-            connection.commit()
-        except BaseException:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
+        return database.connect(self.path, foreign_keys=False)
 
     @staticmethod
     def decode(row) -> dict | None:

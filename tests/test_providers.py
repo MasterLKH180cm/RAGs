@@ -23,7 +23,7 @@ def settings(tmp_path):
     return Settings(
         db_path=str(tmp_path / "providers.db"), keys={"test-key": "tenant"},
         embedding_provider="openai", model_provider="openai", openai_key="fixture-openai-key",
-        openai_base_url="https://provider.invalid/v1", embedding_model="fixture-embedding",
+        openai_base_url="https://provider.invalid/v1", embedding_model="text-embedding-3-small",
         chat_model="fixture-chat", anthropic_key="fixture-anthropic-key", anthropic_model="fixture-message",
     )
 
@@ -50,10 +50,10 @@ def test_embedding_request_vector_and_usage_preserve_the_provider_contract(setti
     assert provider.embedding("source text") == [0.25, -0.5, 1]
     assert requests == [(settings.openai_base_url + "/embeddings", {
         "headers": {"Authorization": "Bearer fixture-openai-key"},
-        "json": {"model": "fixture-embedding", "input": "source text"}, "timeout": 30,
+        "json": {"model": "text-embedding-3-small", "input": "source text"}, "timeout": 30,
     })]
     assert provider.usage()["provider_reports"] == [{
-        "kind": "embedding", "model": "openai:fixture-embedding",
+        "kind": "embedding", "model": "openai:text-embedding-3-small",
         "usage": {"prompt_tokens": 7, "total_tokens": 7},
     }]
     assert "private" not in json.dumps(provider.usage())
@@ -318,6 +318,7 @@ def test_fastembed_adapter_keeps_query_and_document_paths_distinct(settings, mon
             return iter([SimpleNamespace(tolist=lambda: [0.0, 1.0])])
 
     monkeypatch.setattr(provider_module, "_semantic_encoder", lambda *_: Encoder())
+    monkeypatch.setattr(provider_module, "fastembed_token_window", lambda _: (lambda text, query=False: len(text), 512))
     provider = Providers(replace(settings, embedding_provider="fastembed"))
     assert provider.embedding("source") == [1.0, 0.0]
     assert provider.query_embedding("question") == [0.0, 1.0]

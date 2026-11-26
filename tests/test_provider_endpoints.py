@@ -61,7 +61,7 @@ def test_separate_embedding_and_generation_endpoints_keys_models_and_index_ident
         settings = replace(Settings.from_env(), db_path=str(tmp_path / "endpoints.db"), keys={"endpoints-key": "tenant"},
                            embedding_provider="openai", model_provider=model_provider,
                            openai_base_url="https://legacy-must-not-be-called.invalid/v1", openai_key="legacy-key",
-                           embedding_base_url=embedding_url, embedding_api_key="embedding-only-key", embedding_model="embedding-v2",
+                           embedding_base_url=embedding_url, embedding_api_key="embedding-only-key", embedding_model="text-embedding-3-small",
                            generation_base_url=generation_url, generation_api_key="generation-only-key",
                            chat_model="chat-v2", anthropic_model="messages-v2", generation_tokenizer_config={"backend": "unicode"})
         with TestClient(create_app(settings)) as client:
@@ -75,7 +75,7 @@ def test_separate_embedding_and_generation_endpoints_keys_models_and_index_ident
             assert len(response.json()["citations"]) == 1
         assert len(embedding_calls) == 2 and len(generation_calls) == 1
         assert all(call["path"] == "/v1/embeddings" and call["authorization"] == "Bearer embedding-only-key"
-                   and call["body"]["model"] == "embedding-v2" for call in embedding_calls)
+                   and call["body"]["model"] == "text-embedding-3-small" for call in embedding_calls)
         generation = generation_calls[0]
         if model_provider == "openai":
             assert generation["path"] == "/v1/chat/completions"

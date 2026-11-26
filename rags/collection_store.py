@@ -104,10 +104,15 @@ def _configuration(value: Any) -> dict:
         raise ValueError("Invalid collection configuration")
     embedding = value["embedding"]
     fields = {"mode", "model", "endpoint", "space_id", "dimensions", "normalization"}
-    if not isinstance(embedding, dict) or set(embedding) != fields:
+    if not isinstance(embedding, dict) or set(embedding) not in (fields, fields | {"profile_id"}):
         raise ValueError("Invalid embedding configuration")
     if embedding["mode"] not in {"configured", "external"} or embedding["normalization"] != "l2-f32-v1":
         raise ValueError("Invalid embedding configuration")
+    if "profile_id" in embedding:
+        from rags.embedding_profiles import PROFILE_ID
+        if (embedding["mode"] != "configured" or not isinstance(embedding["profile_id"], str)
+                or not PROFILE_ID.fullmatch(embedding["profile_id"])):
+            raise ValueError("Invalid embedding profile binding")
     valid_text(embedding["model"], 160)
     valid_text(embedding["endpoint"], 4096)
     valid_text(embedding["space_id"], 160)

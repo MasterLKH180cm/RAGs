@@ -457,10 +457,17 @@ def install_admin(app: FastAPI, *, settings: Settings, authenticator: Authentica
         }
         for flag, permission in rights.items():
             flags[flag] = flags[flag] and permission in principal.permissions
+        from rags.model_discovery import configured_models
         return {"auth_mode": settings.auth_mode, "storage": store.storage_backend,
                 "embedding_provider": settings.embedding_provider,
                 "generation_provider": settings.model_provider,
                 "features": flags, "permissions": sorted(principal.permissions),
-                "telemetry": monitor.snapshot(principal.tenant)["otel"]}
+                "telemetry": monitor.snapshot(principal.tenant)["otel"], **configured_models(settings)}
+
+    @app.get("/admin/api/models", include_in_schema=False)
+    def model_options(request: Request):
+        require(request, "rags:read")
+        from rags.model_discovery import model_discovery
+        return model_discovery(settings)
 
     return sessions

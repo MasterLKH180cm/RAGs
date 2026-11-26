@@ -201,7 +201,7 @@ def route_permissions(path: str, method: str) -> tuple[str, ...]:
     """Deny by default; never derive privileges from user-supplied payload."""
     if method == "GET" and path in {
         "/health", "/capabilities", "/strategies", "/assets/capabilities",
-        "/documents", "/assets/images",
+        "/documents", "/assets/images", "/v1/models", "/v1/tokenizers",
     }:
         return ("rags:read",)
     if path == "/agents/workflows" and method == "GET":

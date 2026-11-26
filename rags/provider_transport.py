@@ -47,7 +47,8 @@ def _encode(payload: dict, limit: int) -> bytes:
 
 async def _request(url: str, headers: Mapping[str, str], encoded: bytes,
                    deadline: float, client_factory: Callable[..., httpx.AsyncClient], trust_env: bool,
-                   max_response_bytes: int, auth: httpx.Auth | None = None) -> httpx.Response:
+                   max_response_bytes: int, auth: httpx.Auth | None = None,
+                   accepted_statuses: tuple[int, ...] = ()) -> httpx.Response:
     remaining = deadline - monotonic()
     if remaining <= 0:
         raise TimeoutError
@@ -60,7 +61,8 @@ async def _request(url: str, headers: Mapping[str, str], encoded: bytes,
             authentication = {"auth": auth} if auth is not None else {}
             async with client.stream("POST", url, headers=request_headers, content=encoded,
                                      **authentication) as response:
-                response.raise_for_status()
+                if response.status_code not in accepted_statuses:
+                    response.raise_for_status()
                 if response.headers.get("content-encoding", "identity").strip().lower() != "identity":
                     raise ResponseRejected("Compressed provider responses are not accepted")
                 length = response.headers.get("content-length")
@@ -105,11 +107,12 @@ def _deadline(timeout: float, max_request_bytes: int, max_response_bytes: int,
 
 def _run_request(url: str, headers: Mapping[str, str], encoded: bytes, deadline: float,
                  client_factory: Callable[..., httpx.AsyncClient], trust_env: bool,
-                 max_response_bytes: int, auth: httpx.Auth | None = None) -> httpx.Response:
+                 max_response_bytes: int, auth: httpx.Auth | None = None,
+                 accepted_statuses: tuple[int, ...] = ()) -> httpx.Response:
     """Own and join the request loop, including calls made from async code."""
     def run() -> httpx.Response:
         return asyncio.run(_request(url, headers, encoded, deadline, client_factory, trust_env,
-                                    max_response_bytes, auth))
+                                    max_response_bytes, auth, accepted_statuses))
 
     try:
         asyncio.get_running_loop()
@@ -123,7 +126,7 @@ def bounded_post(url: str, *, headers: Mapping[str, str], json: dict, timeout: f
                  max_request_bytes: int = MAX_REQUEST_BYTES,
                  max_response_bytes: int = MAX_RESPONSE_BYTES,
                  client_factory: Callable[..., httpx.AsyncClient] = httpx.AsyncClient,
-                 trust_env: bool = True) -> httpx.Response:
+                 trust_env: bool = True, accepted_statuses: tuple[int, ...] = ()) -> httpx.Response:
     """Post bounded JSON; callers map transport exceptions to their own error codes.
 
     Async application paths already calling a synchronous provider use a short-
@@ -131,11 +134,14 @@ def bounded_post(url: str, *, headers: Mapping[str, str], json: dict, timeout: f
     so no request continues after the caller observes a completed operation.
     """
     deadline = _deadline(timeout, max_request_bytes, max_response_bytes, trust_env)
+    if not isinstance(accepted_statuses, tuple) or any(type(code) is not int or code != 400
+                                                     for code in accepted_statuses):
+        raise ValueError("Only bounded input-rejection responses may be accepted")
     encoded = _encode(json, max_request_bytes)
     json_headers = httpx.Headers(headers)
     json_headers["Content-Type"] = "application/json"
     return _run_request(url, json_headers, encoded, deadline, client_factory, trust_env,
-                        max_response_bytes)
+                        max_response_bytes, accepted_statuses=accepted_statuses)
 
 
 def bounded_form_post(url: str, *, headers: Mapping[str, str], data: Mapping[str, str],

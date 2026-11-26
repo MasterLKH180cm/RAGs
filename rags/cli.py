@@ -44,14 +44,8 @@ PROFILE_DISABLED = {
 }
 
 
-def load_env_file(path: str | Path | None) -> None:
-    """Read a small shell-quoted file without executing arbitrary shell code.
-
-    Existing process variables take precedence; files never replace secrets
-    supplied by a shell, container orchestrator, or secret-management system.
-    """
-    if path is None:
-        return
+def read_env_file(path: str | Path) -> tuple[str, dict[str, str]]:
+    """Read and validate one bounded configuration without changing process state."""
     filename = Path(path)
     try:
         raw = read_regular_text(filename, max_bytes=MAX_ENV_SIZE)
@@ -61,6 +55,11 @@ def load_env_file(path: str | Path | None) -> None:
         raise ValueError("Environment file must be an existing regular file, not a symlink") from exc
     except (OSError, UnicodeError) as exc:
         raise ValueError("Cannot read environment file") from exc
+    return raw, parse_env_text(raw)
+
+
+def parse_env_text(raw: str) -> dict[str, str]:
+    """Parse already-bounded text without interpolating or executing its values."""
     seen = set()
     parsed = {}
     for number, line in enumerate(raw.splitlines(), start=1):
@@ -77,11 +76,19 @@ def load_env_file(path: str | Path | None) -> None:
         if len(tokens) > 1:
             raise ValueError(f"Environment line {number} must contain one value")
         parsed[name] = tokens[0] if tokens else ""
+    return parsed
+
+
+def load_env_file(path: str | Path | None) -> None:
+    """Load validated assignments; existing process variables take precedence."""
+    if path is None:
+        return
+    _, parsed = read_env_file(path)
     for name, value in parsed.items():
         os.environ.setdefault(name, value)
 
 
-def init_config(directory: Path, profile: str) -> tuple[Path, Path]:
+def init_config(directory: Path, profile: str, *, env_overrides: dict | None = None) -> tuple[Path, Path]:
     """Generate private auth values, fail closed and never overwrite/symlink-follow."""
     if profile not in PROFILES:
         raise ValueError("Unsupported profile")
@@ -100,6 +107,15 @@ def init_config(directory: Path, profile: str) -> tuple[Path, Path]:
     env_body += "\nRAGS_KEYS_JSON=" + shlex.quote(json.dumps({token: "local"})) + "\n"
     env_body += "RAGS_API_KEY=" + shlex.quote(token) + "\n"
     flags = {name: False for name in PROFILE_DISABLED[profile]}
+    if env_overrides:
+        from rags.model_cli import update_env_text
+        env_body = update_env_text(env_body, env_overrides)
+        provider = env_overrides.get("RAGS_EMBEDDING_PROVIDER")
+        if provider:
+            # New deployment selections must agree with their generated flags.
+            for name in MANIFEST:
+                if name.startswith("embedding."):
+                    flags[name] = name == "embedding." + provider
     if any(name not in MANIFEST for name in flags):
         raise ValueError("Packaged feature manifest is invalid")
     content = json.dumps(flags, indent=2, sort_keys=True) + "\n"
@@ -195,20 +211,21 @@ def diagnose(*, check_db: bool = True) -> dict:
          "offline-hash-v1" if settings.embedding_provider == "local" else
          settings.fastembed_model if settings.embedding_provider == "fastembed" else settings.embedding_model,
          settings.embedding_endpoint,
-         settings.embedding_credential if settings.embedding_provider == "openai" else ""),
+         settings.embedding_credential if settings.embedding_provider in {"openai", "ollama"} else ""),
         ("generation", settings.model_provider,
          settings.anthropic_model if settings.model_provider == "anthropic" else
-         settings.chat_model if settings.model_provider == "openai" else "extractive",
+         settings.chat_model if settings.model_provider in {"openai", "router"} else "extractive",
          settings.generation_endpoint if settings.model_provider != "extractive" else "local",
          settings.generation_credential if settings.model_provider != "extractive" else ""),
     )
     for name, provider, model, url, credential in providers:
         host = urlsplit(url).hostname or "local"
         details = f"{provider}; model={model}; endpoint_host={host}"
-        local_no_auth = name == "generation" and settings.generation_auth_mode == "none"
+        local_no_auth = (settings.generation_auth_mode if name == "generation"
+                         else settings.embedding_auth_mode) == "none"
         if local_no_auth:
             details += "; auth=none (explicit loopback)"
-        if not local_no_auth and (provider == "openai" or provider == "anthropic") and (
+        if not local_no_auth and provider in {"openai", "anthropic", "ollama"} and (
             not credential or credential == "REPLACE_ME"
         ):
             checks.append(_check(name, "warning", details + "; credentials missing"))
@@ -232,6 +249,8 @@ def diagnose(*, check_db: bool = True) -> dict:
                 checks.append(_check("model_router", "ok", "Approved routing aliases are configured"))
     if check_db:
         checks.append(database_check(settings))
+    from rags.model_cli import readiness_checks
+    checks.extend(readiness_checks(settings))
     status = ("error" if any(check["status"] == "error" for check in checks)
               else "warning" if any(check["status"] == "warning" for check in checks) else "ok")
     return {"status": status, "checks": checks}
@@ -262,6 +281,11 @@ def build_parser() -> argparse.ArgumentParser:
     init = sub.add_parser("init", help="Create private credentials and a deployment profile")
     init.add_argument("--profile", choices=PROFILES, default="offline")
     init.add_argument("--directory", type=Path, default=Path("."))
+    from rags.model_cli import add_commands as add_model_commands
+    from rags.model_cli import add_selection_arguments
+    add_selection_arguments(init)
+    init.add_argument("--interactive", action="store_true", help="Explicit terminal-only selection wizard")
+    add_model_commands(sub)
     doctor = sub.add_parser("doctor", help="Read-only configuration and storage checks")
     doctor.add_argument("--env-file", type=Path)
     doctor.add_argument("--no-db", action="store_true", help="Skip database connection")
@@ -328,11 +352,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "init":
-            paths = init_config(args.directory, args.profile)
-            for path in paths:
-                print("Created " + str(path))
-            print("Start with: rags serve --env-file " + str(paths[0]))
-            return 0
+            from rags.model_cli import run_init
+            return run_init(args, init_config)
+        if args.command in {"models", "tokenizers", "config"}:
+            from rags.model_cli import run
+            return run(args)
         load_env_file(args.env_file)
         if args.command in {"collection", "records", "search"}:
             from rags.collection_cli import run
@@ -451,9 +475,10 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         parser.error("Unknown command")
     except Exception as exc:
+        from rags.model_cli import SelectionError
         # CLI failures must not leak credentials embedded in provider/DB exceptions.
         # Never echo arbitrary configuration content from exception strings.
-        print("rags: " + (str(exc) if args.command == "init" else
+        print("rags: " + (str(exc) if args.command == "init" or isinstance(exc, SelectionError) else
                           "Unable to complete command; validate inputs and selected dependencies"), file=sys.stderr)
         return 1
     return 2

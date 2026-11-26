@@ -55,7 +55,7 @@ jobs:
             requirements/*.txt
       - name: Install locked development dependencies
         run: |
-          uv sync --locked --extra dev --extra pdf --extra mcp --extra vision --extra postgres
+          uv sync --locked --extra dev --extra pdf --extra mcp --extra vision --extra postgres --extra tokenizers
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
       - name: Bootstrap the vector extension before application connections
         run: |
@@ -143,6 +143,8 @@ jobs:
           uv venv --python 3.12 "$RUNNER_TEMP/rags-wheel"
           uv pip install --python "$RUNNER_TEMP/rags-wheel/bin/python" dist/*.whl
           "$RUNNER_TEMP/rags-wheel/bin/rags" --help
+          "$RUNNER_TEMP/rags-wheel/bin/rags" models list --json
+          "$RUNNER_TEMP/rags-wheel/bin/rags" tokenizers list --json
           "$RUNNER_TEMP/rags-wheel/bin/python" -I - <<'PYTHON'
           from importlib import resources
           from pathlib import Path
@@ -158,6 +160,8 @@ jobs:
                        "research/crag_adapter.py", "research/crag_web.py",
                        "client.py", "collection_api.py", "collection_service.py", "collection_store.py",
                        "collection_models.py", "collection_filters.py", "collection_search.py", "collection_cli.py",
+                       "model_catalog.py", "model_cli.py", "model_discovery.py", "embedding_profiles.py",
+                       "embedding_windows.py", "sentence_embeddings.py", "tokenizer_artifacts.py", "database.py",
                        "templates/inkling.env", "templates/inkling-local.env", "templates/litellm.env"):
               assert package.joinpath(name).is_file()
           print("Installed wheel contains the dashboard, Inkling profile and benchmark")
@@ -169,6 +173,8 @@ jobs:
                   notes.add(ids=["one"], documents=["Wheel installation retains source evidence."])
                   assert notes.search(query_texts=["source evidence"], mode="lexical").rows()[0]["id"] == "one"
           assert "rags.api" not in sys.modules
+          assert not any(name in sys.modules for name in ("fastembed", "torch", "sentence_transformers",
+                                                         "tokenizers", "sentencepiece"))
           print("Installed collection SDK executes without importing the application")
           PYTHON
           "$RUNNER_TEMP/rags-wheel/bin/rags" --version | grep -F '0.9.0'
@@ -792,4 +798,66 @@ jobs:
             reports/ci-selfrag-storage-preflight.json
             reports/ci-selfrag-storage-cleanup.json
             /tmp/rags-selfrag/selfrag-manifest.json
+          if-no-files-found: error
+
+  model-selection-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RAGS_ENV: test
+      RAGS_MODEL_CACHE: /tmp/rags-selection-models
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_XET: "1"
+      ORT_DISABLE_TELEMETRY: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.9"
+          enable-cache: true
+          cache-suffix: embedding-selection-cpu
+          cache-dependency-glob: requirements/embedding-runtime.txt
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/rags-selection-models
+          key: embedding-selection-models-v1-${{ hashFiles('rags/model_catalog.py', 'requirements/embedding-runtime.txt') }}
+      - name: Install pinned CPU embedding and native-tokenizer runtime
+        run: |
+          bash scripts/install-embedding-runtime.sh "$RUNNER_TEMP/embedding-runtime"
+          echo "$RUNNER_TEMP/embedding-runtime/bin" >> "$GITHUB_PATH"
+      - name: Prepare checkpoint files without importing inference runtimes
+        run: >-
+          python scripts/prepare_embedding_models.py --cache "$RAGS_MODEL_CACHE"
+          --report reports/testing/embedding-model-artifacts.json
+      - name: Verify all curated local trained embedding presets
+        env:
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+        run: >-
+          sudo --preserve-env=RAGS_ENV,RAGS_MODEL_CACHE,HF_HUB_OFFLINE,TRANSFORMERS_OFFLINE,HF_HUB_DISABLE_TELEMETRY,HF_HUB_DISABLE_XET,ORT_DISABLE_TELEMETRY,OMP_NUM_THREADS,MKL_NUM_THREADS
+          unshare --net "$RUNNER_TEMP/embedding-runtime/bin/python" -m pytest -q -m model_selection --require-no-skips
+          --test-inventory reports/testing/embedding-model-inventory.json
+          --junitxml reports/testing/embedding-models.xml
+      - name: Record actual pretrained encoder latency smoke
+        env:
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+        run: >-
+          sudo --preserve-env=RAGS_ENV,RAGS_MODEL_CACHE,HF_HUB_OFFLINE,TRANSFORMERS_OFFLINE,HF_HUB_DISABLE_TELEMETRY,HF_HUB_DISABLE_XET,ORT_DISABLE_TELEMETRY,OMP_NUM_THREADS,MKL_NUM_THREADS
+          unshare --net "$RUNNER_TEMP/embedding-runtime/bin/python" scripts/benchmark_embedding_selection.py --iterations 10
+          --report reports/testing/embedding-model-latency.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: actual-embedding-model-selection
+          path: |
+            reports/testing/embedding-model-inventory.json
+            reports/testing/embedding-model-artifacts.json
+            reports/testing/embedding-models.xml
+            reports/testing/embedding-model-latency.json
           if-no-files-found: error

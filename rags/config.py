@@ -9,7 +9,9 @@ from urllib.parse import urlparse
 from rags.auth import OAuth2Config, ROLES, TENANT
 from rags.chunking import ChunkConfig
 from rags.collection_models import CollectionConfig
+from rags.embedding_profiles import EmbeddingProfile, PROVIDERS, parse_embedding_profiles
 from rags.features import FeatureFlags
+from rags.file_io import read_regular_text
 from rags.model_profiles import (
     TINKER_BASE_URL, chat_profile, effort_from_env,
     validate_local_no_auth_endpoint, validate_model_auth_mode,
@@ -23,7 +25,7 @@ def secret(name: str) -> str:
     if filename:
         if value:
             raise ValueError(f"Choose {name} or {name}_FILE, not both")
-        value = Path(filename).read_text(encoding="utf-8").strip()
+        value = read_regular_text(filename, max_bytes=65_536).strip()
     return value
 
 
@@ -78,8 +80,27 @@ class Settings:
     generation_auth_mode: str = "required"
     embedding_space_id: str = ""
     collection_config: CollectionConfig = field(default_factory=CollectionConfig)
+    embedding_revision: str = ""
+    embedding_dimensions: int | None = None
+    embedding_query_prefix: str = ""
+    embedding_document_prefix: str = ""
+    embedding_normalize: bool | None = None
+    embedding_auth_mode: str = "required"
+    embedding_input_policy: str = "auto"
+    embedding_tokenizer_config: dict | None = None
+    embedding_token_limit_config: int | None = None
+    embedding_special_tokens: int | None = None
+    embedding_profiles: dict = field(default_factory=dict)
+    tokenizer_artifacts: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        from rags.tokenizer_artifacts import parse_tokenizer_artifacts
+        # Structural validation never loads a model, file, credential or network client.
+        _ = self.embedding_profile
+        object.__setattr__(self, "embedding_profiles", parse_embedding_profiles(self.embedding_profiles))
+        object.__setattr__(self, "tokenizer_artifacts", parse_tokenizer_artifacts(self.tokenizer_artifacts))
+        if self.embedding_auth_mode == "none" and self.embedding_api_key not in {None, ""}:
+            raise ValueError("Unauthenticated embeddings cannot configure an embedding credential")
         if not isinstance(self.collection_config, CollectionConfig):
             raise ValueError("Collection limits require validated CollectionConfig")
         if (not isinstance(self.embedding_space_id, str)
@@ -97,10 +118,29 @@ class Settings:
     def embedding_endpoint(self) -> str:
         if self.embedding_provider == "router":
             return "router"
+        if self.embedding_provider == "ollama":
+            return self.embedding_base_url
         return (self.embedding_base_url or self.openai_base_url) if self.embedding_provider == "openai" else "local"
 
     @property
+    def embedding_profile(self) -> EmbeddingProfile:
+        return EmbeddingProfile(
+            provider=self.embedding_provider,
+            model=(self.fastembed_model if self.embedding_provider == "fastembed" else self.embedding_model),
+            revision=self.embedding_revision, base_url=(self.embedding_base_url
+                if self.embedding_provider in {"openai", "ollama"} else None),
+            auth_mode=self.embedding_auth_mode, dimensions=self.embedding_dimensions,
+            query_prefix=self.embedding_query_prefix, document_prefix=self.embedding_document_prefix,
+            normalize=self.embedding_normalize, input_policy=self.embedding_input_policy,
+            tokenizer=self.embedding_tokenizer_config, token_limit=self.embedding_token_limit_config,
+            special_tokens=self.embedding_special_tokens,
+            space_id=self.embedding_space_id,
+        )
+
+    @property
     def embedding_credential(self) -> str:
+        if self.embedding_auth_mode == "none":
+            return ""
         return self.embedding_api_key if self.embedding_api_key is not None else self.openai_key
 
     @property
@@ -198,11 +238,16 @@ class Settings:
             raise ValueError("Production admin dashboard requires explicit RAGS_KEY_ROLES_JSON")
         embedding_provider = os.getenv("RAGS_EMBEDDING_PROVIDER", "local").lower()
         model_provider = os.getenv("RAGS_MODEL_PROVIDER", "extractive").lower()
-        if embedding_provider not in {"local", "openai", "fastembed", "router"}:
+        if embedding_provider not in PROVIDERS:
             raise ValueError("Unsupported embedding provider")
         if model_provider not in {"extractive", "openai", "anthropic", "router"}:
             raise ValueError("Unsupported model provider")
         generation_auth_mode = validate_model_auth_mode(os.getenv("RAGS_GENERATION_AUTH_MODE", "required"))
+        embedding_auth_mode = validate_model_auth_mode(os.getenv("RAGS_EMBEDDING_AUTH_MODE", "required"))
+        if embedding_auth_mode == "none" and any(os.getenv(name) for name in (
+            "RAGS_EMBEDDING_API_KEY", "RAGS_EMBEDDING_API_KEY_FILE",
+        )):
+            raise ValueError("Unauthenticated embeddings cannot configure an embedding credential")
         if generation_auth_mode == "none" and any(os.getenv(name) for name in (
             "RAGS_GENERATION_API_KEY", "RAGS_GENERATION_API_KEY_FILE",
         )):
@@ -284,9 +329,11 @@ class Settings:
         # configured OpenAI embeddings may still need their own explicit/legacy key.
         local_generation = generation_auth_mode == "none"
         embedding_key = (secret("RAGS_EMBEDDING_API_KEY") or None
-                         if not local_generation or embedding_provider == "openai" else None)
+                         if embedding_auth_mode != "none" and (
+                             not local_generation or embedding_provider in {"openai", "ollama"}) else None)
         openai_key = (secret("OPENAI_API_KEY")
-                      if not local_generation or (embedding_provider == "openai" and not embedding_key) else "")
+                      if (not local_generation or (embedding_provider == "openai" and not embedding_key))
+                      and not (embedding_auth_mode == "none" and local_generation) else "")
         return cls(
             db_path=db_path,
             keys=keys,
@@ -330,4 +377,21 @@ class Settings:
             reasoning_effort=effort,
             generation_auth_mode=generation_auth_mode,
             collection_config=CollectionConfig.from_env(),
+            embedding_revision=os.getenv("RAGS_EMBEDDING_REVISION", ""),
+            embedding_dimensions=(int(os.environ["RAGS_EMBEDDING_DIMENSIONS"])
+                                  if os.getenv("RAGS_EMBEDDING_DIMENSIONS") else None),
+            embedding_query_prefix=os.getenv("RAGS_EMBEDDING_QUERY_PREFIX", ""),
+            embedding_document_prefix=os.getenv("RAGS_EMBEDDING_DOCUMENT_PREFIX", ""),
+            embedding_normalize=(flag("RAGS_EMBEDDING_NORMALIZE")
+                                 if os.getenv("RAGS_EMBEDDING_NORMALIZE") is not None else None),
+            embedding_auth_mode=embedding_auth_mode,
+            embedding_input_policy=os.getenv("RAGS_EMBEDDING_INPUT_POLICY", "auto"),
+            embedding_tokenizer_config=(object_env("RAGS_EMBEDDING_TOKENIZER_JSON", "{}")
+                                        if os.getenv("RAGS_EMBEDDING_TOKENIZER_JSON") else None),
+            embedding_token_limit_config=(int(os.environ["RAGS_EMBEDDING_TOKEN_LIMIT"])
+                                          if os.getenv("RAGS_EMBEDDING_TOKEN_LIMIT") else None),
+            embedding_special_tokens=(int(os.environ["RAGS_EMBEDDING_SPECIAL_TOKENS"])
+                                      if os.getenv("RAGS_EMBEDDING_SPECIAL_TOKENS") is not None else None),
+            embedding_profiles=parse_embedding_profiles(os.getenv("RAGS_EMBEDDING_PROFILES_JSON") or "{}"),
+            tokenizer_artifacts=os.getenv("RAGS_TOKENIZER_ARTIFACTS_JSON") or "{}",
         )

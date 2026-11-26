@@ -216,10 +216,15 @@ class ExternalEmbedding(Contract):
         return valid_text(value, 160)
 
 
+class ProfileEmbedding(Contract):
+    mode: Literal["profile"]
+    profile_id: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_-]{0,59}$")
+
+
 class CollectionCreate(Contract):
     name: str
     metadata: dict = Field(default_factory=dict)
-    embedding: ExternalEmbedding | None = None
+    embedding: ExternalEmbedding | ProfileEmbedding | None = None
     sparse_space_id: str | None = Field(default=None, min_length=1, max_length=160)
     get_or_create: bool = False
 

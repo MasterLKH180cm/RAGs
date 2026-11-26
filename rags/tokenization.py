@@ -5,9 +5,17 @@ the selected text encoding; provider message-envelope costs remain separate.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from importlib.metadata import version
+from collections import OrderedDict
+from copy import deepcopy
+from dataclasses import dataclass, field
+from importlib.metadata import PackageNotFoundError, version
+import json
+from threading import BoundedSemaphore, RLock
 from typing import Callable, Iterator, Literal, Mapping, Protocol, Sequence
+
+from rags.tokenizer_artifacts import (
+    ARTIFACT_BACKENDS, SHA256, TOKENIZER_ALIAS, parse_tokenizer_artifacts, read_tokenizer_artifact,
+)
 
 
 def _integer(value: int, name: str, minimum: int = 0) -> None:
@@ -26,13 +34,17 @@ def _text(value: str) -> None:
 
 @dataclass(frozen=True)
 class TokenizerConfig:
-    backend: Literal["unicode", "tiktoken", "utf8_bytes"] = "unicode"
+    backend: Literal["unicode", "tiktoken", "utf8_bytes", "huggingface", "sentencepiece", "embedding"] = "unicode"
     model: str | None = None
     encoding: str | None = None
+    artifact_sha256: str | None = None
+    embedding_identity: str | None = None
 
     def __post_init__(self) -> None:
-        if self.backend not in {"unicode", "tiktoken", "utf8_bytes"}:
-            raise ValueError("Tokenizer backend must be unicode, utf8_bytes or tiktoken")
+        if not isinstance(self.backend, str) or self.backend not in {
+            "unicode", "tiktoken", "utf8_bytes", "huggingface", "sentencepiece", "embedding",
+        }:
+            raise ValueError("Unsupported tokenizer backend")
         for name in ("model", "encoding"):
             value = getattr(self, name)
             if value is not None and (not isinstance(value, str) or not value.strip()):
@@ -41,6 +53,19 @@ class TokenizerConfig:
             raise ValueError("Fallback counting does not accept a model or encoding")
         if self.backend == "tiktoken" and not (self.model or self.encoding):
             raise ValueError("Tiktoken requires a model or explicit encoding")
+        if self.backend in ARTIFACT_BACKENDS:
+            if not isinstance(self.model, str) or not TOKENIZER_ALIAS.fullmatch(self.model) or self.encoding:
+                raise ValueError("Local tokenizer requires a registered model alias and no encoding override")
+        if self.artifact_sha256 is not None:
+            if (self.backend not in ARTIFACT_BACKENDS or not isinstance(self.artifact_sha256, str)
+                    or not SHA256.fullmatch(self.artifact_sha256)):
+                raise ValueError("Artifact SHA256 is only valid for a registered local tokenizer")
+        if self.embedding_identity is not None:
+            if (self.backend != "embedding" or not isinstance(self.embedding_identity, str)
+                    or not SHA256.fullmatch(self.embedding_identity)):
+                raise ValueError("Embedding tokenizer identity must be its bound SHA256")
+        if self.backend == "embedding" and (self.model is not None or self.encoding is not None):
+            raise ValueError("Embedding tokenizer selects only the configured provider, without model overrides")
 
 
 @dataclass(frozen=True)
@@ -191,6 +216,215 @@ class UTF8ByteTokenizer(_SpanTokenizer):
         return text.encode("utf-8")[-budget:].decode("utf-8", errors="ignore") if budget else ""
 
 
+MAX_EXACT_TEXT_CHARACTERS = 1_000_000
+MAX_SOURCE_WINDOW_CHARACTERS = 16_384
+MAX_NATIVE_TOKENIZERS = 4
+MAX_NATIVE_ARTIFACT_CACHE_BYTES = 128 * 1024 * 1024
+_NATIVE_CACHE: OrderedDict[tuple[str, str, str], tuple[Callable, Callable, int]] = OrderedDict()
+_NATIVE_CACHE_LOCK = RLock()
+_NATIVE_CACHE_BYTES = 0
+# Bound simultaneously retained file buffers as well as the loaded-object cache.
+_NATIVE_LOAD_SLOTS = BoundedSemaphore(2)
+
+
+class ExactEncodingTokenizer(_SpanTokenizer):
+    """An exact counter with source-preserving, bounded character-window slices.
+
+    A provider may supply just its complete-input counter. Token IDs and native
+    decoding are available only when callbacks are supplied. Decoding can be
+    lossy; it is never used to construct source spans. A fitting slice is verified
+    rather than assumed maximal, because token counts need not be monotone.
+    """
+    unit = "model_tokens"
+    count_kind = "exact_encoding"
+
+    def __init__(self, *, tokenizer_id: str, profile: Mapping,
+                 count: Callable[[str], int] | None = None,
+                 encode: Callable[[str], Sequence[int]] | None = None,
+                 decode: Callable[[Sequence[int]], str] | None = None):
+        if not isinstance(tokenizer_id, str) or not 1 <= len(tokenizer_id) <= 240:
+            raise ValueError("An exact tokenizer requires a bounded identity")
+        if not isinstance(profile, Mapping) or not isinstance(profile.get("backend"), str):
+            raise ValueError("An exact tokenizer requires an explicit backend profile")
+        if count is None and encode is None:
+            raise ValueError("An exact tokenizer requires a count or encode callback")
+        if any(callback is not None and not callable(callback) for callback in (count, encode, decode)):
+            raise ValueError("Tokenizer callbacks must be callable")
+        try:
+            self._profile = json.loads(json.dumps(dict(profile), allow_nan=False))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Tokenizer profile must contain JSON-safe values") from exc
+        self._profile.update(id=tokenizer_id, unit=self.unit, count_kind=self.count_kind,
+                             source_window="original-character-slices-v1",
+                             source_window_characters=MAX_SOURCE_WINDOW_CHARACTERS)
+        self.id = tokenizer_id
+        self._count, self._encode, self._decode = count, encode, decode
+
+    @property
+    def profile(self) -> dict:
+        return deepcopy(self._profile)
+
+    @staticmethod
+    def _validate_text(text: str) -> None:
+        _text(text)
+        if len(text) > MAX_EXACT_TEXT_CHARACTERS:
+            raise ValueError("Tokenizer text exceeds its character budget")
+
+    @staticmethod
+    def _validate_ids(tokens: Sequence[int]) -> list[int]:
+        try:
+            values = list(tokens)
+        except TypeError as exc:
+            raise ValueError("Expected a sequence of token integers") from exc
+        if any(type(token) is not int or token < 0 for token in values):
+            raise ValueError("Expected nonnegative token integers")
+        return values
+
+    def encode(self, text: str) -> list[int]:
+        self._validate_text(text)
+        if self._encode is None:
+            raise ValueError("This bound tokenizer exposes counts, not token IDs")
+        return self._validate_ids(self._encode(text))
+
+    def decode(self, tokens: Sequence[int]) -> str:
+        values = self._validate_ids(tokens)
+        if self._decode is None:
+            raise ValueError("This bound tokenizer does not expose native decoding")
+        result = self._decode(values)
+        _text(result)
+        return result
+
+    def count(self, text: str) -> int:
+        self._validate_text(text)
+        result = self._count(text) if self._count is not None else len(self.encode(text))
+        _integer(result, "token count")
+        return result
+
+    def _slice(self, text: str, budget: int, *, from_end: bool) -> str:
+        self._validate_text(text)
+        _integer(budget, "budget")
+        if not budget or not text:
+            return ""
+        candidate = (text[-MAX_SOURCE_WINDOW_CHARACTERS:] if from_end
+                     else text[:MAX_SOURCE_WINDOW_CHARACTERS])
+        if self.count(candidate) <= budget:
+            return candidate
+        low, high, fitted = 1, len(candidate) - 1, ""
+        while low <= high:
+            size = (low + high) // 2
+            value = candidate[-size:] if from_end else candidate[:size]
+            if self.count(value) <= budget:
+                fitted = value
+                low = size + 1
+            else:
+                high = size - 1
+        if fitted and self.count(fitted) > budget:
+            raise ValueError("Tokenizer count changed while selecting a source slice")
+        return fitted
+
+    def truncate(self, text: str, budget: int) -> str:
+        return self._slice(text, budget, from_end=False)
+
+    def suffix(self, text: str, budget: int) -> str:
+        return self._slice(text, budget, from_end=True)
+
+
+def _load_native_callbacks(backend: str, raw: bytes) -> tuple[Callable, Callable]:
+    if backend == "huggingface":
+        try:
+            from tokenizers import Tokenizer as NativeTokenizer
+        except ImportError as exc:
+            raise ValueError("Hugging Face tokenizer requires the optional tokenizers package") from exc
+        try:
+            native = NativeTokenizer.from_buffer(raw)
+            if getattr(native.model, "dropout", None) not in (None, 0):
+                raise ValueError("Stochastic tokenizer dropout is unsupported")
+            native.no_truncation()
+            native.no_padding()
+            # The BPE word cache otherwise retains source-derived data. Supported
+            # 0.22/0.23 runtimes expose this bounded-cache control on the model.
+            resize = getattr(native.model, "_resize_cache", None)
+            if resize is not None:
+                resize(0)
+        except Exception as exc:
+            raise ValueError("Unable to load a deterministic Hugging Face tokenizer artifact") from exc
+
+        def encode(text):
+            return native.encode(text, add_special_tokens=False).ids
+
+        def decode(tokens):
+            if any(native.id_to_token(token) is None for token in tokens):
+                raise ValueError("Unknown tokenizer token ID")
+            return native.decode(tokens, skip_special_tokens=False)
+
+        return encode, decode
+    try:
+        import sentencepiece
+    except ImportError as exc:
+        raise ValueError("SentencePiece tokenizer requires the optional sentencepiece package") from exc
+    try:
+        native = sentencepiece.SentencePieceProcessor(model_proto=raw)
+    except Exception as exc:
+        raise ValueError("Unable to load the registered SentencePiece artifact") from exc
+
+    def encode(text):
+        return native.encode(text, out_type=int, enable_sampling=False, nbest_size=0,
+                             add_bos=False, add_eos=False, reverse=False, num_threads=1)
+
+    def decode(tokens):
+        if any(token >= native.get_piece_size() for token in tokens):
+            raise ValueError("Unknown tokenizer token ID")
+        return native.decode(tokens)
+
+    return encode, decode
+
+
+def _cached_native_callbacks(backend: str, entry: Mapping):
+    global _NATIVE_CACHE_BYTES
+    with _NATIVE_LOAD_SLOTS:
+        # Verify on every resolution, including cache hits. Replacing a file
+        # cannot continue under an old registration; parsing uses these bytes.
+        raw = read_tokenizer_artifact(entry)
+        package = "tokenizers" if backend == "huggingface" else "sentencepiece"
+        try:
+            runtime_version = version(package)
+        except PackageNotFoundError as exc:
+            raise ValueError(f"Tokenizer backend requires the optional {package} package") from exc
+        key = (backend, entry["sha256"], runtime_version)
+        with _NATIVE_CACHE_LOCK:
+            cached = _NATIVE_CACHE.get(key)
+            if cached is None:
+                encode, decode = _load_native_callbacks(backend, raw)
+                cached = (encode, decode, len(raw))
+                if len(raw) <= MAX_NATIVE_ARTIFACT_CACHE_BYTES:
+                    while _NATIVE_CACHE and (len(_NATIVE_CACHE) >= MAX_NATIVE_TOKENIZERS
+                                            or _NATIVE_CACHE_BYTES + len(raw) > MAX_NATIVE_ARTIFACT_CACHE_BYTES):
+                        _, evicted = _NATIVE_CACHE.popitem(last=False)
+                        _NATIVE_CACHE_BYTES -= evicted[2]
+                    _NATIVE_CACHE[key] = cached
+                    _NATIVE_CACHE_BYTES += len(raw)
+            else:
+                _NATIVE_CACHE.move_to_end(key)
+        return cached, runtime_version
+
+
+def _artifact_tokenizer(config: TokenizerConfig, artifacts: Mapping | None) -> ExactEncodingTokenizer:
+    registry = parse_tokenizer_artifacts(artifacts)
+    entry = registry.get(config.model)
+    if entry is None or entry["backend"] != config.backend:
+        raise ValueError("Tokenizer alias is not registered for the selected backend")
+    if config.artifact_sha256 is not None and config.artifact_sha256 != entry["sha256"]:
+        raise ValueError("Tokenizer artifact identity changed; select new processing settings explicitly")
+    cached, runtime_version = _cached_native_callbacks(config.backend, entry)
+    return ExactEncodingTokenizer(
+        tokenizer_id=config.backend + ":" + entry["sha256"], encode=cached[0], decode=cached[1],
+        profile={"backend": config.backend, "model": config.model,
+                 "artifact_sha256": entry["sha256"], "version": runtime_version,
+                 "special_tokens": False, "padding": False, "truncation": False,
+                 "sampling": False},
+    )
+
+
 class TiktokenTokenizer(_SpanTokenizer):
     unit = "model_tokens"
     count_kind = "exact_encoding"
@@ -221,7 +455,9 @@ class TiktokenTokenizer(_SpanTokenizer):
 
     @property
     def profile(self) -> dict:
-        return {**asdict(self._config), "encoding": self._encoding.name, "id": self.id,
+        # New optional selectors must not change historical profile fingerprints.
+        return {"backend": self._config.backend, "model": self._config.model,
+                "encoding": self._encoding.name, "id": self.id,
                 "unit": self.unit, "count_kind": self.count_kind, "version": self._version}
 
     def encode(self, text: str) -> list[int]:
@@ -272,7 +508,9 @@ class TiktokenTokenizer(_SpanTokenizer):
         return suffix
 
 
-def resolve_tokenizer(config: TokenizerConfig | Mapping | None = None) -> Tokenizer:
+def resolve_tokenizer(config: TokenizerConfig | Mapping | None = None, *,
+                      artifacts: Mapping | None = None,
+                      embedding_tokenizer: ExactEncodingTokenizer | None = None) -> Tokenizer:
     if config is None:
         config = TokenizerConfig()
     if isinstance(config, Mapping):
@@ -286,6 +524,19 @@ def resolve_tokenizer(config: TokenizerConfig | Mapping | None = None) -> Tokeni
         return UnicodeTokenizer()
     if config.backend == "utf8_bytes":
         return UTF8ByteTokenizer()
+    if config.backend in ARTIFACT_BACKENDS:
+        return _artifact_tokenizer(config, artifacts)
+    if config.backend == "embedding":
+        if not isinstance(embedding_tokenizer, ExactEncodingTokenizer):
+            raise ValueError("Embedding tokenizer requires an exact configured-provider binding")
+        profile = embedding_tokenizer.profile
+        identity = profile.get("embedding_identity")
+        if (profile.get("backend") != "embedding" or not isinstance(identity, str)
+                or not SHA256.fullmatch(identity)):
+            raise ValueError("Embedding tokenizer has an invalid provider binding")
+        if config.embedding_identity is not None and config.embedding_identity != identity:
+            raise ValueError("Embedding tokenizer identity changed; select new processing settings explicitly")
+        return embedding_tokenizer
     return TiktokenTokenizer(config)
 
 

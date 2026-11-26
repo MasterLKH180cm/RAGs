@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import sys
 
-from rags.client import ClientError, HttpClient, MAX_BYTES
+from rags.client import ClientError, HttpClient, MAX_BYTES, ReembeddingError
 from rags.file_io import BoundedFileError, read_regular_bytes
 from rags.model_profiles import strict_json
 
@@ -26,13 +26,22 @@ def add_commands(subparsers) -> None:
     create = actions.add_parser("create", help="Create a collection with a fixed embedding configuration")
     create.add_argument("name")
     create.add_argument("--metadata-file", type=Path)
-    create.add_argument("--embedding-file", type=Path)
+    embedding = create.add_mutually_exclusive_group()
+    embedding.add_argument("--embedding-file", type=Path)
+    embedding.add_argument("--embedding-profile", help="Approved server embedding profile alias")
     create.add_argument("--sparse-space-id")
     create.add_argument("--get-or-create", action="store_true")
     listing = actions.add_parser("list", help="List a bounded page of visible collections")
     listing.add_argument("--limit", type=int, default=100)
     listing.add_argument("--offset", type=int, default=0)
     collection_parsers = [create, listing]
+    reembed = actions.add_parser("reembed", help="Copy text into a fresh collection using another approved embedding profile")
+    reembed.add_argument("collection")
+    reembed.add_argument("--name", required=True)
+    reembed.add_argument("--embedding-profile", required=True)
+    reembed.add_argument("--batch-size", type=int, default=100)
+    reembed.add_argument("--expected-generation", type=int)
+    collection_parsers.append(reembed)
     for action in ("get", "count", "status", "modify", "delete", "fork"):
         command = actions.add_parser(action)
         command.add_argument("collection")
@@ -113,11 +122,16 @@ def _collection_command(client: HttpClient, args) -> dict:
             options["metadata"] = _read_json(args.metadata_file)
         if args.embedding_file is not None:
             options["embedding"] = _read_json(args.embedding_file)
+        if args.embedding_profile is not None:
+            options["embedding_profile"] = args.embedding_profile
         if args.sparse_space_id is not None:
             options["sparse_space_id"] = args.sparse_space_id
         method = client.get_or_create_collection if args.get_or_create else client.create_collection
         return method(args.name, **options).to_dict()
     collection = client.get_collection(args.collection)
+    if action == "reembed":
+        return collection.reembed(args.name, embedding_profile=args.embedding_profile,
+                                  batch_size=args.batch_size, expected_generation=args.expected_generation)
     if action == "get":
         return collection.to_dict()
     if action == "count":
@@ -193,6 +207,9 @@ def run(args) -> int:
                 result = _search_command(client, args)
         print(json.dumps(result, ensure_ascii=False, allow_nan=False))
         return 0
+    except ReembeddingError as exc:
+        print(json.dumps({"error": exc.code, "status_code": exc.status_code, **exc.progress}), file=sys.stderr)
+        return 1
     except ClientError as exc:
         print(json.dumps({"error": exc.code, "status_code": exc.status_code}), file=sys.stderr)
         return 1

@@ -1019,14 +1019,20 @@ curl --fail-with-body http://127.0.0.1:8000/assets/search \
 
 | Setting | Values / purpose |
 | --- | --- |
-| `RAGS_EMBEDDING_PROVIDER` | `local` (default), `openai`, `fastembed` |
-| `RAGS_MODEL_PROVIDER` | `extractive` (default), `openai`, `anthropic` |
+| `RAGS_EMBEDDING_PROVIDER` | `local` (default), `openai`, `fastembed`, `router`, `sentence_transformers`, `ollama` |
+| `RAGS_MODEL_PROVIDER` | `extractive` (default), `openai`, `anthropic`, `router` |
 | `OPENAI_API_KEY`, `OPENAI_BASE_URL` | Credential and compatible API endpoint |
 | `OPENAI_EMBEDDING_MODEL`, `OPENAI_CHAT_MODEL` | Configured OpenAI model identities |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_CHAT_MODEL` | Anthropic generation/caption configuration |
 | `RAGS_MAX_ITERATIONS` | Bounded model refinement, 1–3 |
 
 Set credentials locally, outside Git. OpenAI embeddings and generation are independent of Anthropic generation and MCP client choice. After editing standalone Compose `.env`, rerun `docker compose up -d --build --wait` to recreate the service with the new environment.
+
+Use [model and tokenizer selection](MODEL_SELECTION.md) for offline discovery,
+Chinese/multilingual presets, safe candidate configuration, exact input contracts
+and approved collection profiles. Native `ollama` embeddings use `/api/embed`
+with `truncate:false`; the older `ollama` deployment template continues to use
+its original OpenAI-compatible settings unless explicitly overridden.
 
 `RAGS_SOURCES_JSON` maps source IDs to fixed RAG API URLs and `tenant_keys` mappings. A `federated` request selects those IDs through `sources`; it cannot supply a URL or tenant. Credentials are distinct per tenant. Remote responses are bounded to 2 MB, redirects/compressed responses are rejected, and a failed source does not produce a misleading partial success.
 
@@ -1056,9 +1062,9 @@ provider methods apply the same guards, including internal strategy dependencies
 | `api_docs`, `mcp` | OpenAPI/docs exposure and shipped MCP entry points |
 | `model_generation`, `federation`, `research`, `admission_scoring` | Optional model calls, configured remote sources/engines and selected evidence scorer |
 | `image_captioning`, `multimodal`, `original_images` | Caption ingestion, original-image indexing/search and independent original-byte download permission |
-| `embedding.local`, `embedding.openai`, `embedding.fastembed` | Embedding providers; FastEmbed permission also covers local ColBERT/CLIP encoders |
+| `embedding.local`, `embedding.openai`, `embedding.fastembed`, `embedding.router`, `embedding.sentence_transformers`, `embedding.ollama` | Embedding providers; FastEmbed permission also covers local ColBERT/CLIP encoders |
 | `index.hierarchy`, `index.graph` | Optional derived-index builders |
-| `tokenizer.unicode`, `tokenizer.tiktoken` | Source and generation counters |
+| `tokenizer.unicode`, `tokenizer.tiktoken`, `tokenizer.utf8_bytes`, `tokenizer.huggingface`, `tokenizer.sentencepiece`, `tokenizer.embedding` | Text counters; the embedding counter is for source chunking |
 | `chunking.fixed`, `chunking.recursive`, `chunking.structure`, `chunking.parent_child`, `chunking.semantic`, `chunking.contextual` | Each source chunker |
 | `strategy.<name>` | Each exact strategy ID returned by `GET /strategies`; complete IDs below |
 
@@ -1109,13 +1115,21 @@ model/endpoint/tokenizer changes can require explicit reindexing.
 | `RAGS_FEATURES_FILE` | `/app/config/rags.features.json` | JSON boolean overrides; mounted from data/config. |
 | `RAGS_FEATURES_JSON` | `{}` | Per-key overrides take precedence over the feature file. |
 | `RAGS_COLLECTION_LIMITS_JSON` | `{}` | Validated limits for collection records, mutation/query batches, scans, responses and filter timeouts; omitted values use built-in defaults. |
-| `RAGS_EMBEDDING_PROVIDER` | `local` | local, openai, fastembed, router. local is deterministic hashing, not a trained semantic encoder. |
+| `RAGS_EMBEDDING_PROVIDER` | `local` | local, openai, fastembed, router, sentence_transformers, ollama. local is deterministic hashing, not a trained semantic encoder. |
 | `RAGS_MODEL_PROVIDER` | `extractive` | extractive, openai, anthropic, router. Flags do not install or configure providers. |
-| `RAGS_EMBEDDING_BASE_URL` | Unset | Optional dedicated OpenAI-compatible embedding endpoint; otherwise legacy OPENAI_BASE_URL. |
+| `RAGS_EMBEDDING_BASE_URL` | Unset | Dedicated compatible endpoint; openai may use legacy OPENAI_BASE_URL. Native ollama requires an explicit server base URL. |
 | `RAGS_EMBEDDING_API_KEY` | Unset | Dedicated embedding credential; choose this or its _FILE, never both. |
 | `RAGS_EMBEDDING_API_KEY_FILE` | Unset | Container-readable secret path, e.g. /app/config/embedding.key. |
 | `RAGS_EMBEDDING_MODEL` | Unset | Dedicated embedding model; otherwise OPENAI_EMBEDDING_MODEL. |
 | `RAGS_EMBEDDING_SPACE_ID` | Unset | Operator-controlled immutable embedding deployment version; changing it requires reindexing. Empty preserves direct/offline profile compatibility. |
+| `RAGS_EMBEDDING_REVISION` | Unset | Required immutable 40-character Hub revision for sentence_transformers. |
+| `RAGS_EMBEDDING_DIMENSIONS` | Unset | Requested output dimensions where the selected adapter supports them. |
+| `RAGS_EMBEDDING_QUERY_PREFIX`, `RAGS_EMBEDDING_DOCUMENT_PREFIX` | Empty | Role-specific instructions included in input validation and vector identity. |
+| `RAGS_EMBEDDING_NORMALIZE` | Unset | Explicit true/false normalization selection; omission preserves adapter defaults. |
+| `RAGS_EMBEDDING_AUTH_MODE` | `required` | none is limited to an explicit validated loopback endpoint without dedicated embedding credentials. |
+| `RAGS_EMBEDDING_INPUT_POLICY` | `auto` | auto, exact or native-Ollama server_reject; unknown hosted encoders require a verified input contract. |
+| `RAGS_EMBEDDING_TOKENIZER_JSON`, `RAGS_EMBEDDING_TOKEN_LIMIT`, `RAGS_EMBEDDING_SPECIAL_TOKENS` | Unset | Custom exact hosted counter, complete input limit and explicit special-token allowance; configure together. |
+| `RAGS_EMBEDDING_PROFILES_JSON` | `{}` | Approved operator embedding aliases for collection creation; client discovery omits endpoints and credential environment names. |
 | `RAGS_GENERATION_BASE_URL` | Unset | Dedicated generation endpoint; otherwise the selected provider's legacy endpoint. |
 | `RAGS_GENERATION_AUTH_MODE` | `required` | `none` requires an explicit literal-loopback OpenAI-compatible endpoint; it cannot be combined with a dedicated generation credential. |
 | `RAGS_GENERATION_API_KEY` | Unset | Dedicated generation credential; choose this or its _FILE, never both. |
@@ -1125,8 +1139,9 @@ model/endpoint/tokenizer changes can require explicit reindexing.
 | `RAGS_REASONING_EFFORT` | Unset | Tinker effort name or numeric 0..0.99; omitted leaves the provider default. |
 | `RAGS_ROUTER_MODEL_OPTIONS_JSON` | `{}` | Per-approved-alias protocol and reasoning effort; unknown aliases/fields fail startup. |
 | `RAGS_ROUTER_CA_FILE` | Unset | Explicit private HTTPS trust bundle: regular nonsymlink PEM, at most 256 KiB. Its content hash binds native-agent approvals. |
-| `RAGS_TOKENIZER_JSON` | Unset | Empty uses the built-in unicode counter; exact option: {"backend":"tiktoken","encoding":"cl100k_base"}. |
+| `RAGS_TOKENIZER_JSON` | Unset | Empty keeps unicode; explicit counters also include utf8_bytes, tiktoken, registered huggingface/sentencepiece and configured embedding. |
 | `RAGS_GENERATION_TOKENIZER_JSON` | Unset | Empty preserves profile defaults; Tinker uses utf8_bytes, ordinary OpenAI generation uses its model tokenizer. |
+| `RAGS_TOKENIZER_ARTIFACTS_JSON` | `{}` | Operator alias registry with backend, absolute artifact path and SHA-256; requests choose aliases only. |
 | `RAGS_CHUNKING_JSON` | Unset | Empty uses structure/max_tokens=850/overlap_tokens=120; JSON overrides are validated. |
 | `RAGS_CONTEXT_BUDGET` | `16000` | Total generation context units. |
 | `RAGS_OUTPUT_BUDGET` | `1024` | Output reserve inside context budget. |

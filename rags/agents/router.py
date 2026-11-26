@@ -140,6 +140,8 @@ class ModelRouter:
             data = payload["data"]
             if not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], dict):
                 raise ValueError("Expected one embedding result")
+            if "index" in data[0] and (type(data[0]["index"]) is not int or data[0]["index"] != 0):
+                raise ValueError("Unexpected embedding result index")
             vector = data[0]["embedding"]
             if not isinstance(vector, list) or not 1 <= len(vector) <= 16000 or any(
                 type(value) not in (int, float) or not math.isfinite(value) for value in vector
@@ -147,7 +149,7 @@ class ModelRouter:
                 raise ValueError("Invalid embedding vector")
             safe_usage = normalized_usage(payload)
             return EmbeddingReply(vector=vector, model=selected, usage=safe_usage)
-        except (ValueError, TypeError, KeyError, IndexError, AttributeError) as exc:
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as exc:
             raise CapabilityError("invalid_embedding", "Invalid Gateway embedding result", 502) from exc
 
     def complete(self, *, model: str, messages: list[dict], tools: list[dict] | None = None,

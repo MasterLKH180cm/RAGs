@@ -8,6 +8,8 @@
   const pending=new Set();
   let searchTimer,toastTimer;
   let documentsRequest=0;
+  let operationsRequest=0;
+  let selectionCatalog={embeddings:[],tokenizers:[],registered_artifacts:[]};
   function el(tag,klass,label){
     const item=document.createElement(tag); if(klass)item.className=klass;
     if(label!==undefined&&label!==null)item.textContent=String(label);return item;
@@ -32,9 +34,11 @@
     state.csrf='';state.tenant='';state.permissions=[];state.offset=0;
     state.search='';state.loading=false;state.deleteTarget=null;state.agentRun=null;
     state.workflowRun=null;state.workflowTemplates=[];
+    selectionCatalog={embeddings:[],tokenizers:[],registered_artifacts:[]};
     clearTimeout(searchTimer);
     for(const id of ['#query-citations','#documents-body',
-        '#activity-list','#feature-list','#permission-list','#overview-chart','#monitor-chart']){
+        '#activity-list','#feature-list','#permission-list','#overview-chart','#monitor-chart',
+        '#model-selection-notes','#approved-model-profiles']){
       $(id).replaceChildren();
     }
     $('#query-output').hidden=true;$('#query-empty').hidden=false;
@@ -46,6 +50,11 @@
     $('#query-form').reset();$('#add-form').reset();$('#delete-form').reset();$('#agent-form').reset();$('#workflow-form').reset();
     $('#document-search').value='';$('#delete-confirm').value='';
     $('#delete-submit').disabled=true;
+    for(const id of ['#model-choice','#source-tokenizer-choice','#generation-tokenizer-choice']){
+      $(id).replaceChildren();$(id).value='';$(id).disabled=true;
+    }
+    txt('#model-selection-summary','選擇模型後可查看語言、執行位置與輸入限制。');
+    txt('#model-selection-command','請先選擇要變更的項目。');
     // Async request finalizers skip a changed identity by design; restore all
     // tenant-specific controls here instead of leaving them busy for the next login.
     $('#query-submit').disabled=false;$('#query-submit').textContent='開始檢索 ↗';
@@ -59,7 +68,8 @@
     for(const id of ['#query-answer','#citation-count','#query-status',
         '#document-count','#document-range','#stat-documents','#stat-chunks',
         '#stat-revisions','#stat-images','#setting-tenant','#setting-auth',
-        '#setting-storage','#setting-embedding','#setting-generation',
+        '#setting-storage','#setting-embedding','#setting-generation','#setting-source-tokenizer',
+        '#setting-generation-tokenizer','#setting-model-readiness',
         '#tenant-sidebar','#session-expiry','#agent-answer','#agent-run-id',
         '#agent-steps','#agent-tool-count','#agent-stop-reason','#agent-pending-tool',
         '#agent-pending-args','#agent-status','#agent-availability',
@@ -230,13 +240,21 @@
     $('#delete-submit').disabled=true;$('#delete-dialog').showModal();$('#delete-confirm').focus();
   }
   async function loadOperations(){
-    const epoch=state.epoch;
+    const epoch=state.epoch,request=++operationsRequest;
     try{
-      const d=await api('operations');
-      if(epoch!==state.epoch)return;
+      const [d,catalog]=await Promise.all([api('operations'),api('models')]);
+      if(epoch!==state.epoch||request!==operationsRequest)return;
       txt('#setting-auth',d.auth_mode);txt('#setting-storage',d.storage);
-      txt('#setting-embedding',d.embedding_provider);
+      txt('#setting-embedding',d.embedding?.model?d.embedding.provider+' · '+d.embedding.model:d.embedding_provider);
       txt('#setting-generation',d.generation_provider);
+      for(const [id,config] of [['#setting-source-tokenizer',d.source_tokenizer],
+          ['#setting-generation-tokenizer',d.generation_tokenizer]]){
+        txt(id,config?config.backend+' · '+config.count_kind:'—');
+      }
+      const readiness=d.embedding?.readiness;
+      txt('#setting-model-readiness',readiness?.enabled===false?'功能已停用':
+        readiness?.dependency?.installed===false?'尚未安裝執行套件':'已設定；尚未執行模型驗證');
+      renderModelChoices(catalog);
       const perms=$('#permission-list');perms.replaceChildren();
       (d.permissions||[]).forEach(p=>perms.append(el('span','scope-chip',p)));
       const flags=$('#feature-list');flags.replaceChildren();
@@ -245,7 +263,68 @@
         item.append(el('span','',pair[0]),el('span',pair[1]?'feature-state':'feature-state disabled',pair[1]?'已啟用':'停用'));
         flags.append(item);
       });
-    }catch(e){if(epoch===state.epoch)notice(errorText(e),true);}
+    }catch(e){if(epoch===state.epoch&&request===operationsRequest)notice(errorText(e),true);}
+  }
+  function renderModelChoices(catalog){
+    selectionCatalog={embeddings:catalog.embeddings||[],tokenizers:catalog.tokenizers||[],
+      registered_artifacts:catalog.registered_artifacts||[]};
+    const models=$('#model-choice');models.replaceChildren();
+    const keep=el('option','','保留目前模型');keep.value='';models.append(keep);
+    for(const model of selectionCatalog.embeddings){
+      const option=el('option','',model.label+' · '+model.provider+(model.enabled===false?'（目前停用）':''));
+      option.value=model.id;models.append(option);
+    }
+    models.value='';models.disabled=false;
+    for(const [id,source] of [['#source-tokenizer-choice',true],['#generation-tokenizer-choice',false]]){
+      const select=$(id);select.replaceChildren();
+      const unchanged=el('option','','保留目前設定');unchanged.value='';select.append(unchanged);
+      for(const tokenizer of selectionCatalog.tokenizers){
+        if(tokenizer.requires_artifact||(!source&&['auto','embedding'].includes(tokenizer.id)))continue;
+        const option=el('option','',tokenizer.label);option.value=tokenizer.id;select.append(option);
+      }
+      for(const artifact of selectionCatalog.registered_artifacts){
+        const option=el('option','',artifact.backend+' · '+artifact.id);
+        option.value=artifact.backend+':'+artifact.id;select.append(option);
+      }
+      select.value='';select.disabled=false;
+    }
+    const profiles=$('#approved-model-profiles');profiles.replaceChildren();
+    for(const profile of catalog.approved_profiles||[]){
+      profiles.append(el('span','scope-chip',profile.id+' · '+profile.model+
+        (profile.enabled===false?'（目前停用）':'')));
+    }
+    if(!(catalog.approved_profiles||[]).length)profiles.append(el('span','','尚未註冊；由部署管理者設定核准別名。'));
+    previewModelSelection();
+  }
+  function shellArg(value){return "'"+String(value).replaceAll("'","'\"'\"'")+"'";}
+  function previewModelSelection(){
+    const model=selectionCatalog.embeddings.find(item=>item.id===$('#model-choice').value);
+    const source=$('#source-tokenizer-choice').value,generation=$('#generation-tokenizer-choice').value;
+    const notes=$('#model-selection-notes');notes.replaceChildren();
+    const args=[];
+    if(model){
+      const runtime={local:'本機',local_service:'本機模型服務',hosted:'遠端服務'}[model.execution]||model.execution;
+      const cost=model.cost_category==='provider_billed'?'供應商計費':'使用本機運算資源';
+      txt('#model-selection-summary',model.label+' · '+(model.languages||[]).join(', ')+' · '+runtime+
+        ' · '+cost+' · '+model.dimensions+' 維 · '+(model.max_input_tokens?model.max_input_tokens+' tokens':
+          model.input_policy==='server_reject'?'服務端檢查輸入限制':'未宣告固定 token 視窗')+' · '+model.input_policy);
+      args.push('--embedding',shellArg(model.id));
+      for(const limitation of model.limitations||[])notes.append(el('li','',limitation));
+      if(model.enabled===false)notes.append(el('li','','目前部署已停用此模型供應商。設定計畫會保留限制並指出阻擋原因。'));
+      if(model.dependency?.installed===false)notes.append(el('li','','尚未安裝此模型的選用套件；計畫會提供安裝指令。'));
+      notes.append(el('li','','切換模型、版本或前處理需要重新產生向量。集合應建立新目標並重新嵌入；fork 會保留原向量空間。'));
+    }else txt('#model-selection-summary','保留目前 Embedding。來源分段與生成提示的計數方式可以分別選擇。');
+    if(source){args.push('--source-tokenizer',shellArg(source));
+      notes.append(el('li','','更改來源計數方式後，既有文件需明確重新索引才能採用新分段設定。'));}
+    else if(model)notes.append(el('li','','來源計數將自動採用可用的精確 Embedding 計數；其餘使用保守 UTF-8 位元組。'));
+    if(generation){args.push('--generation-tokenizer',shellArg(generation));
+      notes.append(el('li','','生成計數只改變提示預算，不會重新產生既有向量；仍須預留聊天與工具封裝成本。'));}
+    if(args.length){
+      const options=args.join(' ');
+      txt('#model-selection-command','rags config plan --env-file .env '+options+'\n\n'+
+        'rags config write --env-file .env '+options+' --output .env.next\n\n'+
+        'rags doctor --env-file .env.next --no-db');
+    }else txt('#model-selection-command','請先選擇要變更的項目。');
   }
   function renderQuery(result){
     $('#query-empty').hidden=true;$('#query-output').hidden=false;
@@ -557,6 +636,9 @@
     $('#workflow-approve').addEventListener('click',()=>decideWorkflow(true));
     $('#workflow-deny').addEventListener('click',()=>decideWorkflow(false));
     $('#workflow-recover').addEventListener('click',recoverWorkflow);
+    for(const id of ['#model-choice','#source-tokenizer-choice','#generation-tokenizer-choice']){
+      $(id).addEventListener('change',previewModelSelection);
+    }
     $('#workflow-template').addEventListener('change',()=>{
       const template=state.workflowTemplates.find(t=>t.name===$('#workflow-template').value);
       txt('#workflow-description',template?.description||'—');

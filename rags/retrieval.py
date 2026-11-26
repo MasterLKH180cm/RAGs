@@ -1,7 +1,7 @@
 """Source-preserving ingestion and explicit, independently observable retrieval paths."""
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from functools import cached_property
 import hashlib
@@ -94,6 +94,29 @@ def _federated_metadata(citation: dict) -> dict:
     return result
 
 
+@dataclass(frozen=True)
+class _RetrievalRequest:
+    """One authorized source snapshot, shared by the selected internal handler."""
+    tenant: str
+    question: str
+    mode: str
+    top_k: int
+    limit: int
+    options: dict
+    scope: list[dict]
+    leaves: list[dict]
+    lookup: dict[str, dict]
+
+
+@dataclass
+class _RankedSelection:
+    """Handler-owned ranking and observations before common response assembly."""
+    scores: list[tuple[str, float]]
+    trace: list[dict] = field(default_factory=list)
+    extra: dict = field(default_factory=dict)
+    engine: str | None = None
+
+
 class RAGService:
     def __init__(self, store: Store, provider: Providers):
         self.store = store
@@ -109,7 +132,10 @@ class RAGService:
     @cached_property
     def tokenizer(self):
         self.settings.features.require("tokenizer." + self.settings.generation_tokenizer_config.get("backend", "unicode"))
-        return resolve_tokenizer(self.settings.generation_tokenizer_config)
+        config = self.settings.generation_tokenizer_config
+        return resolve_tokenizer(config, artifacts=self.settings.tokenizer_artifacts,
+                                 embedding_tokenizer=(self.provider.embedding_tokenizer()
+                                     if config.get("backend") == "embedding" else None))
 
     def _requirements(self, mode: str) -> tuple[str, ...]:
         required = strategy_features(mode)
@@ -203,7 +229,9 @@ class RAGService:
             metadata["_rags_rows"] = rows
         if not isinstance(text, str) or not text.strip() or len(text) > 200_000:
             raise ValueError("Source text must contain 1..200000 characters")
-        tok = resolve_tokenizer(tokenizer_config)
+        tok = resolve_tokenizer(tokenizer_config, artifacts=self.settings.tokenizer_artifacts,
+                                embedding_tokenizer=(self.provider.embedding_tokenizer()
+                                    if tokenizer_config.get("backend") == "embedding" else None))
         doc_id = document_id or str(uuid.uuid4())
         existing = self.store.get_document(tenant, doc_id)
         embedding_endpoint = self.provider.embedding_endpoint
@@ -254,6 +282,9 @@ class RAGService:
             context_model=self.provider.model_identity if config.strategy == "contextual" else None,
             max_records=MAX_INDEX_RECORDS, max_materialized_bytes=MAX_MATERIALIZED_BYTES,
         )
+        preflight = getattr(self.provider, "preflight_embeddings", None)
+        if callable(preflight):
+            preflight([draft.embedding_text for draft in plan.chunks])
         first_vector = self.provider.embedding(plan.chunks[0].embedding_text)
         profile["embedding_dimensions"] = len(first_vector)
         profile_id = index_fingerprint(profile)
@@ -368,7 +399,9 @@ class RAGService:
             raise CapabilityError("not_found", "Document not found", 404)
         profile = doc["index_profile"]
         tokenizer_profile = profile.get("tokenizer", {})
-        tokenizer_config = {k: tokenizer_profile[k] for k in ("backend", "model", "encoding") if tokenizer_profile.get(k) is not None}
+        fields = (("backend", "embedding_identity") if tokenizer_profile.get("backend") == "embedding"
+                  else ("backend", "model", "encoding", "artifact_sha256"))
+        tokenizer_config = {k: tokenizer_profile[k] for k in fields if tokenizer_profile.get(k) is not None}
         metadata = dict(doc["metadata"])
         rows = metadata.pop("_rags_rows", None)
         return self.ingest(
@@ -411,203 +444,266 @@ class RAGService:
         result = self._retrieve(tenant, question, mode, top_k, options)
         return result["chunks"], result["mode_used"]
 
+    # Fixed internal dispatch inventory; no externally registered callables.
+    _RANKED_HANDLERS = {
+        "naive": "_retrieve_dense", "sparse": "_retrieve_sparse", "dense": "_retrieve_dense",
+        "hybrid": "_retrieve_hybrid", "fusion": "_retrieve_fusion", "hyde": "_retrieve_hyde",
+        "contextual": "_retrieve_contextual", "parent_child": "_retrieve_parent_child",
+        "hierarchical": "_retrieve_hierarchical", "graph": "_retrieve_graph",
+        "structured": "_retrieve_structured", "temporal": "_retrieve_temporal", "caption": "_retrieve_caption",
+        **dict.fromkeys(UPSTREAM_IDS, "_retrieve_backend"),
+    }
+    _COMPLETE_HANDLERS = {
+        "adaptive": "_retrieve_adaptive", "corrective": "_retrieve_iterative",
+        "agentic": "_retrieve_iterative", "self_reflective": "_retrieve_iterative",
+        "federated": "_retrieve_federated",
+    }
+
     def _retrieve(self, tenant: str, question: str, mode: str, top_k: int, options: dict) -> dict:
+        """Preflight and scope before dispatch, then assemble ranked evidence."""
         if mode not in MODES:
             raise CapabilityError("unknown_strategy", "Unknown retrieval strategy", 422)
         self.settings.features.require(*self._requirements(mode))
         if mode in MODEL_MODES:
             self.provider.require_generation()
         scope = self.store.scope(tenant, as_of=options.get("as_of"), filters=options.get("filters"), include_embeddings=False)
-        leaves = [c for c in scope if c["role"] == "leaf"]
-        lookup = {c["id"]: c for c in scope}
-        limit = min(100, max(20, top_k * 6))
-        trace = []
-        engine = strategy(mode).implementation if mode not in UPSTREAM_IDS else mode
-        extra = {}
-        if mode in UPSTREAM_IDS:
-            try:
-                backend = self._backend().search(mode, tenant=tenant, question=question, chunks=leaves, top_k=top_k, options=options)
-            except CapabilityError:
-                raise
-            except Exception as exc:
-                # Backend errors may contain credentials; only expose the type.
-                raise CapabilityError("requires_backend", "Backend unavailable: " + type(exc).__name__) from exc
-            hits = backend.get("hits", [])
-            authorized_leaf_ids = {c["id"] for c in leaves}
-            external = backend.get("external_sources", [])
-            if external:
-                config = self._backend().config.get(mode, {})
-                try:
-                    if mode != "crag" or not config.get("require_pinned_upstream"):
-                        raise ValueError("External sources require the pinned CRAG contract")
-                    request = ResearchRequest(
-                        protocol="authorized-evidence-v2", engine="crag", namespace=tenant,
-                        question=question, top_k=top_k,
-                        passages=[{"id": c["id"], "text": c["content"]} for c in leaves],
-                        external_hosts=config.get("external_hosts", []),
-                    )
-                    for source in validate_external_sources(external, request):
-                        lookup[source["id"]] = {
-                            "id": source["id"], "document_id": "web:" + hashlib.sha256(source["url"].encode()).hexdigest(),
-                            "title": source["title"], "source": source["url"], "section": "external web evidence",
-                            "content": source["text"], "revision": source["content_sha256"],
-                            "profile_id": "crag-web-snapshot-v1", "start_char": 0, "end_char": len(source["text"]),
-                            "origin_source": "crag_web", "origin_chunk_id": source["id"], "metadata": {},
-                        }
-                        authorized_leaf_ids.add(source["id"])
-                except (ValueError, TypeError, KeyError) as exc:
-                    raise CapabilityError("invalid_backend_evidence", "Invalid external source provenance", 502) from exc
-            if not isinstance(hits, list) or len(hits) > 100 or any(not isinstance(h, dict) or h.get("chunk_id") not in authorized_leaf_ids for h in hits):
-                raise CapabilityError("invalid_backend_evidence", "Backend returned source IDs outside the authorized corpus", 502)
-            try:
-                if any(type(h.get("score")) not in (int, float) for h in hits):
-                    raise ValueError("Non-numeric score")
-                scored = [(h["chunk_id"], float(h["score"])) for h in hits]
-            except (KeyError, TypeError, ValueError) as exc:
-                raise CapabilityError("invalid_backend_evidence", "Backend returned invalid scores", 502) from exc
-            if any(not math.isfinite(score) for _, score in scored):
-                raise CapabilityError("invalid_backend_evidence", "Backend returned non-finite scores", 502)
-            trace.extend(backend.get("trace", []))
-            engine = backend.get("engine", mode)
-            extra["backend_usage"] = backend.get("usage")
-            grounded = backend.get("grounded_answer")
-            if grounded is not None:
-                try:
-                    if mode not in ANSWER_ENGINES:
-                        raise ValueError("This engine cannot supply an upstream grounded answer")
-                    answer = GroundedAnswer.model_validate(grounded)
-                    if not set(answer.cited_ids) <= {hit["chunk_id"] for hit in hits[:top_k]}:
-                        raise ValueError("Upstream answer cites missing evidence")
-                    # Preserve the selected model text. References are appended
-                    # from the engine's explicit source selection, never guessed.
-                    draft = answer.text + "\n\n" + " ".join("[" + identifier + "]" for identifier in answer.cited_ids)
-                    _answer_citations(draft, set(answer.cited_ids))
-                except (ValueError, TypeError) as exc:
-                    raise CapabilityError("invalid_backend_evidence", "Invalid upstream grounded answer", 502) from exc
-                extra.update(draft_answer=draft, grounded_ids=answer.cited_ids)
-            elif mode in ANSWER_ENGINES and hits:
-                raise CapabilityError("invalid_backend_evidence", "Upstream engine omitted its selected answer", 502)
-        elif mode == "sparse":
-            scored = [(key, 1 / (i + 1)) for i, key in enumerate(self._sparse(tenant, question, leaves, limit))]
-        elif mode in {"dense", "naive"}:
-            scored = [(key, 1 / (i + 1)) for i, key in enumerate(self._dense(tenant, question, leaves, limit))]
-        elif mode == "hybrid":
-            scored = self._hybrid(tenant, question, leaves, limit)
-        elif mode == "fusion":
-            generated = _queries(self.provider.json_task('Generate2–5 distinct search queries. Return {"queries":["..."]}.', {"question": question}).get("queries"))
-            if len(generated) < 2:
-                raise CapabilityError("invalid_model_output", "Fusion requires at least two distinct generated queries", 502)
-            rankings = [[key for key, _ in self._hybrid(tenant, q, leaves, limit)] for q in generated]
-            scored = rrf(rankings, limit)
-            trace.append({"action": "query_fusion", "queries": generated})
-        elif mode == "hyde":
-            hypothetical = _queries(self.provider.json_task('Generate1–3 hypothetical answer documents for retrieval only. Return {"documents":["..."]}.', {"question": question}).get("documents"), 3)
-            vectors = [self.provider.embedding(text) for text in hypothetical]
-            if len({len(v) for v in vectors}) != 1:
-                raise CapabilityError("invalid_embedding", "Hypothetical embeddings have different dimensions", 502)
-            vector = [sum(values) / len(vectors) for values in zip(*vectors, strict=True)]
-            scored = [(key, 1 / (i + 1)) for i, key in enumerate(self._dense(tenant, question, leaves, limit, vector))]
-            trace.append({"action": "hypothetical_embedding", "hypotheses": len(hypothetical), "used_as_evidence": False})
-        elif mode == "contextual":
-            indexed = [c for c in leaves if c["context"] and c["index_profile"].get("chunking", {}).get("strategy") == "contextual"]
-            if not indexed:
-                raise CapabilityError("requires_index", "Ingest documents with contextual chunking first", 409)
-            scored = self._hybrid(tenant, question, indexed, limit)
-        elif mode == "parent_child":
-            indexed = [c for c in leaves if c["parent_id"] in lookup and lookup[c["parent_id"]]["role"] == "parent"]
-            if not indexed:
-                raise CapabilityError("requires_index", "Ingest a parent_child index first", 409)
-            parent_scores = {}
-            for key, score in self._hybrid(tenant, question, indexed, limit):
-                parent = lookup[key]["parent_id"]
-                parent_scores[parent] = max(parent_scores.get(parent, 0.0), score)
-            scored = sorted(parent_scores.items(), key=lambda pair: (-pair[1], pair[0]))
-            trace.append({"action": "parent_expansion", "matched_children": len(indexed), "parents": len(scored)})
-        elif mode == "hierarchical":
-            summaries = [c for c in scope if c["role"] == "summary"]
-            if not summaries:
-                raise CapabilityError("requires_index", "Ingest with the hierarchy index feature first", 409)
-            nodes = self._dense(tenant, question, [*leaves, *summaries], limit)
-            source_scores = {}
-            summary_ids = []
-            for rank, key in enumerate(nodes):
-                node = lookup[key]
-                if node["role"] == "summary":
-                    summary_ids.append(key)
-                for source_id in node["evidence_ids"]:
-                    if source_id in lookup and lookup[source_id]["role"] == "leaf":
-                        source_scores[source_id] = source_scores.get(source_id, 0.0) + 1 / (rank + 1)
-            scored = sorted(source_scores.items(), key=lambda pair: (-pair[1], pair[0]))
-            trace.append({"action": "recursive_summary_search", "levels": sorted({c["level"] for c in summaries}), "summary_nodes": summary_ids, "citations": "original_leaves"})
-        elif mode == "graph":
-            edges = self.store.relations(tenant, {c["id"] for c in leaves})
-            if not edges:
-                raise CapabilityError("requires_index", "No authorized entity relations are indexed", 409)
-            scored, graph_trace = graph_search(edges, terms(question), max_hops=2)
-            trace.append({"action": "graph_traversal", **graph_trace})
-        elif mode == "adaptive":
-            allowed = [item["id"] for item in self.catalog(tenant) if item["status"] == "available" and item["id"] in {"sparse", "dense", "hybrid", "graph", "hierarchical", "parent_child", "temporal", "structured"}]
-            choice = self.provider.json_task('Choose one allowed retrieval mode. Return {"mode":"...","reason":"..."}.', {"question": question, "allowed_modes": allowed})
-            if choice.get("mode") not in allowed:
-                raise CapabilityError("invalid_model_output", "Router chose an unavailable strategy", 502)
-            result = self._retrieve(tenant, question, choice["mode"], top_k, options)
-            result["trace"].insert(0, {"action": "route", "selected": choice["mode"], "reason": _text(choice.get("reason"), "router reason", 500)})
-            return result
-        elif mode in {"corrective", "agentic", "self_reflective"}:
-            return self._iterate(tenant, question, mode, leaves, lookup, top_k, limit, options)
-        elif mode == "structured":
-            matches, candidate_ids = [], set()
-            seen = set()
-            datasets = []
-            for chunk in leaves:
-                key = (chunk["document_id"], chunk["revision"])
-                if key in seen:
-                    continue
-                seen.add(key)
-                if isinstance(chunk["metadata"].get("_rags_rows"), list):
-                    datasets.append({field: chunk[field] for field in ("document_id", "revision", "profile_id")})
-                    if len(datasets) > 20:
-                        raise CapabilityError("structured_dataset_limit", "Exact structured provenance supports at most twenty authorized datasets", 422)
-                offset = 0
-                for row_index, row in enumerate(chunk["metadata"].get("_rags_rows", [])):
-                    row_length = len(json.dumps(row, ensure_ascii=False, sort_keys=True, allow_nan=False))
-                    if row_matches(row, options.get("row_filters") or []):
-                        matches.append({"document_id": chunk["document_id"], "revision": chunk["revision"], "row_index": row_index, "row": row})
-                        candidate_ids.update(c["id"] for c in leaves if (c["document_id"], c["revision"]) == key
-                                             and c["start_char"] is not None and c["start_char"] < offset + row_length and c["end_char"] > offset)
-                    offset += row_length + 1
-            if options.get("row_filters") or options.get("aggregate"):
-                selected = [c for c in leaves if c["id"] in candidate_ids]
-            else:
-                selected = leaves
-            scored = self._hybrid(tenant, question, selected, limit)
-            aggregation = aggregate_rows([m["row"] for m in matches], options.get("aggregate"))
-            if aggregation and aggregation["value"] is not None and not finite(aggregation["value"]):
-                raise CapabilityError("invalid_aggregate", "Structured aggregation did not produce a finite numeric value", 422)
-            extra["structured_result"] = {"rows": matches[:100], "matched_rows": len(matches), "rows_truncated": len(matches) > 100,
-                                          "aggregate": aggregation, "provenance": {"datasets": datasets}}
-            trace.append({"action": "structured_query", "matched_rows": len(matches), "predicates": len(options.get("row_filters") or [])})
-        elif mode == "temporal":
-            at = datetime.fromisoformat(timestamp(options.get("as_of")))
-            scored = self._hybrid(tenant, question, leaves, limit)
-            scored = sorted(((key, score + 0.01 / (1 + max(0, (at - datetime.fromisoformat(lookup[key]["valid_from"])).total_seconds()) / 86400)) for key, score in scored), key=lambda pair: (-pair[1], pair[0]))
-            trace.append({"action": "temporal_query", "as_of": at.isoformat(), "versions": sorted({c["revision"] for c in leaves}), "recency_half_life_days": 1})
-        elif mode == "caption":
-            indexed = [c for c in leaves if c["metadata"].get("kind") == "image"]
-            if not indexed:
-                raise CapabilityError("requires_index", "No image captions are indexed", 409)
-            scored = self._hybrid(tenant, question, indexed, limit)
-            trace.append({"action": "caption_text_search", "native_image_vectors": False})
-        elif mode == "federated":
-            return self._federated(tenant, question, leaves, top_k, options)
-        else:
+        leaves = [chunk for chunk in scope if chunk["role"] == "leaf"]
+        lookup = {chunk["id"]: chunk for chunk in scope}
+        request = _RetrievalRequest(tenant, question, mode, top_k, min(100, max(20, top_k * 6)),
+                                    options, scope, leaves, lookup)
+        complete = self._COMPLETE_HANDLERS.get(mode)
+        if complete is not None:
+            # These mechanisms own routing/iteration/fan-out traces and retain
+            # their existing complete-result contracts.
+            return getattr(self, complete)(request)
+        handler = self._RANKED_HANDLERS.get(mode)
+        if handler is None:
             raise CapabilityError("unknown_strategy", "Strategy has no implementation", 422)
-        trace.insert(0, {"action": "retrieve", "mode": mode, "candidates": len(leaves), "encoder": self.provider.embedding_model})
+        selected = getattr(self, handler)(request)
+        selected.trace.insert(0, {"action": "retrieve", "mode": mode, "candidates": len(leaves),
+                                  "encoder": self.provider.embedding_model})
         sparse_kind = "reciprocal_ts_rank_cd_rank" if self.store.is_postgres else "reciprocal_bm25_rank"
         score_kind = {"sparse": sparse_kind, "dense": "reciprocal_cosine_rank", "naive": "reciprocal_cosine_rank",
                       "graph": "inverse_hop_distance", "hierarchical": "sum_inverse_node_rank", "temporal": "rrf_plus_recency"}.get(mode, "backend_score" if mode in UPSTREAM_IDS else "rrf")
-        return {"chunks": self._selected(scored, lookup, top_k), "mode_used": mode, "engine": engine,
-                "score_kind": score_kind, "trace": trace, **extra}
+        engine = selected.engine if mode in UPSTREAM_IDS else strategy(mode).implementation
+        return {"chunks": self._selected(selected.scores, lookup, top_k), "mode_used": mode, "engine": engine,
+                "score_kind": score_kind, "trace": selected.trace, **selected.extra}
+
+    def _retrieve_backend(self, request: _RetrievalRequest) -> _RankedSelection:
+        trace = []
+        extra = {}
+        try:
+            backend = self._backend().search(request.mode, tenant=request.tenant, question=request.question, chunks=request.leaves, top_k=request.top_k, options=request.options)
+        except CapabilityError:
+            raise
+        except Exception as exc:
+            # Backend errors may contain credentials; only expose the type.
+            raise CapabilityError("requires_backend", "Backend unavailable: " + type(exc).__name__) from exc
+        hits = backend.get("hits", [])
+        authorized_leaf_ids = {c["id"] for c in request.leaves}
+        external = backend.get("external_sources", [])
+        if external:
+            config = self._backend().config.get(request.mode, {})
+            try:
+                if request.mode != "crag" or not config.get("require_pinned_upstream"):
+                    raise ValueError("External sources require the pinned CRAG contract")
+                external_request = ResearchRequest(
+                    protocol="authorized-evidence-v2", engine="crag", namespace=request.tenant,
+                    question=request.question, top_k=request.top_k,
+                    passages=[{"id": c["id"], "text": c["content"]} for c in request.leaves],
+                    external_hosts=config.get("external_hosts", []),
+                )
+                for source in validate_external_sources(external, external_request):
+                    request.lookup[source["id"]] = {
+                        "id": source["id"], "document_id": "web:" + hashlib.sha256(source["url"].encode()).hexdigest(),
+                        "title": source["title"], "source": source["url"], "section": "external web evidence",
+                        "content": source["text"], "revision": source["content_sha256"],
+                        "profile_id": "crag-web-snapshot-v1", "start_char": 0, "end_char": len(source["text"]),
+                        "origin_source": "crag_web", "origin_chunk_id": source["id"], "metadata": {},
+                    }
+                    authorized_leaf_ids.add(source["id"])
+            except (ValueError, TypeError, KeyError) as exc:
+                raise CapabilityError("invalid_backend_evidence", "Invalid external source provenance", 502) from exc
+        if not isinstance(hits, list) or len(hits) > 100 or any(not isinstance(h, dict) or h.get("chunk_id") not in authorized_leaf_ids for h in hits):
+            raise CapabilityError("invalid_backend_evidence", "Backend returned source IDs outside the authorized corpus", 502)
+        try:
+            if any(type(h.get("score")) not in (int, float) for h in hits):
+                raise ValueError("Non-numeric score")
+            scored = [(h["chunk_id"], float(h["score"])) for h in hits]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise CapabilityError("invalid_backend_evidence", "Backend returned invalid scores", 502) from exc
+        if any(not math.isfinite(score) for _, score in scored):
+            raise CapabilityError("invalid_backend_evidence", "Backend returned non-finite scores", 502)
+        trace.extend(backend.get("trace", []))
+        engine = backend.get("engine", request.mode)
+        extra["backend_usage"] = backend.get("usage")
+        grounded = backend.get("grounded_answer")
+        if grounded is not None:
+            try:
+                if request.mode not in ANSWER_ENGINES:
+                    raise ValueError("This engine cannot supply an upstream grounded answer")
+                answer = GroundedAnswer.model_validate(grounded)
+                if not set(answer.cited_ids) <= {hit["chunk_id"] for hit in hits[:request.top_k]}:
+                    raise ValueError("Upstream answer cites missing evidence")
+                # Preserve the selected model text. References are appended
+                # from the engine's explicit source selection, never guessed.
+                draft = answer.text + "\n\n" + " ".join("[" + identifier + "]" for identifier in answer.cited_ids)
+                _answer_citations(draft, set(answer.cited_ids))
+            except (ValueError, TypeError) as exc:
+                raise CapabilityError("invalid_backend_evidence", "Invalid upstream grounded answer", 502) from exc
+            extra.update(draft_answer=draft, grounded_ids=answer.cited_ids)
+        elif request.mode in ANSWER_ENGINES and hits:
+            raise CapabilityError("invalid_backend_evidence", "Upstream engine omitted its selected answer", 502)
+        return _RankedSelection(scores=scored, trace=trace, extra=extra, engine=engine)
+
+    def _retrieve_sparse(self, request: _RetrievalRequest) -> _RankedSelection:
+        scored = [(key, 1 / (i + 1)) for i, key in enumerate(self._sparse(request.tenant, request.question, request.leaves, request.limit))]
+        return _RankedSelection(scores=scored)
+
+    def _retrieve_dense(self, request: _RetrievalRequest) -> _RankedSelection:
+        scored = [(key, 1 / (i + 1)) for i, key in enumerate(self._dense(request.tenant, request.question, request.leaves, request.limit))]
+        return _RankedSelection(scores=scored)
+
+    def _retrieve_hybrid(self, request: _RetrievalRequest) -> _RankedSelection:
+        scored = self._hybrid(request.tenant, request.question, request.leaves, request.limit)
+        return _RankedSelection(scores=scored)
+
+    def _retrieve_fusion(self, request: _RetrievalRequest) -> _RankedSelection:
+        trace = []
+        generated = _queries(self.provider.json_task('Generate2–5 distinct search queries. Return {"queries":["..."]}.', {"question": request.question}).get("queries"))
+        if len(generated) < 2:
+            raise CapabilityError("invalid_model_output", "Fusion requires at least two distinct generated queries", 502)
+        rankings = [[key for key, _ in self._hybrid(request.tenant, q, request.leaves, request.limit)] for q in generated]
+        scored = rrf(rankings, request.limit)
+        trace.append({"action": "query_fusion", "queries": generated})
+        return _RankedSelection(scores=scored, trace=trace)
+
+    def _retrieve_hyde(self, request: _RetrievalRequest) -> _RankedSelection:
+        trace = []
+        hypothetical = _queries(self.provider.json_task('Generate1–3 hypothetical answer documents for retrieval only. Return {"documents":["..."]}.', {"question": request.question}).get("documents"), 3)
+        vectors = [self.provider.embedding(text) for text in hypothetical]
+        if len({len(v) for v in vectors}) != 1:
+            raise CapabilityError("invalid_embedding", "Hypothetical embeddings have different dimensions", 502)
+        vector = [sum(values) / len(vectors) for values in zip(*vectors, strict=True)]
+        scored = [(key, 1 / (i + 1)) for i, key in enumerate(self._dense(request.tenant, request.question, request.leaves, request.limit, vector))]
+        trace.append({"action": "hypothetical_embedding", "hypotheses": len(hypothetical), "used_as_evidence": False})
+        return _RankedSelection(scores=scored, trace=trace)
+
+    def _retrieve_contextual(self, request: _RetrievalRequest) -> _RankedSelection:
+        indexed = [c for c in request.leaves if c["context"] and c["index_profile"].get("chunking", {}).get("strategy") == "contextual"]
+        if not indexed:
+            raise CapabilityError("requires_index", "Ingest documents with contextual chunking first", 409)
+        scored = self._hybrid(request.tenant, request.question, indexed, request.limit)
+        return _RankedSelection(scores=scored)
+
+    def _retrieve_parent_child(self, request: _RetrievalRequest) -> _RankedSelection:
+        trace = []
+        indexed = [c for c in request.leaves if c["parent_id"] in request.lookup and request.lookup[c["parent_id"]]["role"] == "parent"]
+        if not indexed:
+            raise CapabilityError("requires_index", "Ingest a parent_child index first", 409)
+        parent_scores = {}
+        for key, score in self._hybrid(request.tenant, request.question, indexed, request.limit):
+            parent = request.lookup[key]["parent_id"]
+            parent_scores[parent] = max(parent_scores.get(parent, 0.0), score)
+        scored = sorted(parent_scores.items(), key=lambda pair: (-pair[1], pair[0]))
+        trace.append({"action": "parent_expansion", "matched_children": len(indexed), "parents": len(scored)})
+        return _RankedSelection(scores=scored, trace=trace)
+
+    def _retrieve_hierarchical(self, request: _RetrievalRequest) -> _RankedSelection:
+        trace = []
+        summaries = [c for c in request.scope if c["role"] == "summary"]
+        if not summaries:
+            raise CapabilityError("requires_index", "Ingest with the hierarchy index feature first", 409)
+        nodes = self._dense(request.tenant, request.question, [*request.leaves, *summaries], request.limit)
+        source_scores = {}
+        summary_ids = []
+        for rank, key in enumerate(nodes):
+            node = request.lookup[key]
+            if node["role"] == "summary":
+                summary_ids.append(key)
+            for source_id in node["evidence_ids"]:
+                if source_id in request.lookup and request.lookup[source_id]["role"] == "leaf":
+                    source_scores[source_id] = source_scores.get(source_id, 0.0) + 1 / (rank + 1)
+        scored = sorted(source_scores.items(), key=lambda pair: (-pair[1], pair[0]))
+        trace.append({"action": "recursive_summary_search", "levels": sorted({c["level"] for c in summaries}), "summary_nodes": summary_ids, "citations": "original_leaves"})
+        return _RankedSelection(scores=scored, trace=trace)
+
+    def _retrieve_graph(self, request: _RetrievalRequest) -> _RankedSelection:
+        trace = []
+        edges = self.store.relations(request.tenant, {c["id"] for c in request.leaves})
+        if not edges:
+            raise CapabilityError("requires_index", "No authorized entity relations are indexed", 409)
+        scored, graph_trace = graph_search(edges, terms(request.question), max_hops=2)
+        trace.append({"action": "graph_traversal", **graph_trace})
+        return _RankedSelection(scores=scored, trace=trace)
+
+    def _retrieve_adaptive(self, request: _RetrievalRequest) -> dict:
+        allowed = [item["id"] for item in self.catalog(request.tenant) if item["status"] == "available" and item["id"] in {"sparse", "dense", "hybrid", "graph", "hierarchical", "parent_child", "temporal", "structured"}]
+        choice = self.provider.json_task('Choose one allowed retrieval mode. Return {"mode":"...","reason":"..."}.', {"question": request.question, "allowed_modes": allowed})
+        if choice.get("mode") not in allowed:
+            raise CapabilityError("invalid_model_output", "Router chose an unavailable strategy", 502)
+        result = self._retrieve(request.tenant, request.question, choice["mode"], request.top_k, request.options)
+        result["trace"].insert(0, {"action": "route", "selected": choice["mode"], "reason": _text(choice.get("reason"), "router reason", 500)})
+        return result
+
+    def _retrieve_iterative(self, request: _RetrievalRequest) -> dict:
+        return self._iterate(request.tenant, request.question, request.mode, request.leaves, request.lookup, request.top_k, request.limit, request.options)
+
+    def _retrieve_structured(self, request: _RetrievalRequest) -> _RankedSelection:
+        trace = []
+        extra = {}
+        matches, candidate_ids = [], set()
+        seen = set()
+        datasets = []
+        for chunk in request.leaves:
+            key = (chunk["document_id"], chunk["revision"])
+            if key in seen:
+                continue
+            seen.add(key)
+            if isinstance(chunk["metadata"].get("_rags_rows"), list):
+                datasets.append({field: chunk[field] for field in ("document_id", "revision", "profile_id")})
+                if len(datasets) > 20:
+                    raise CapabilityError("structured_dataset_limit", "Exact structured provenance supports at most twenty authorized datasets", 422)
+            offset = 0
+            for row_index, row in enumerate(chunk["metadata"].get("_rags_rows", [])):
+                row_length = len(json.dumps(row, ensure_ascii=False, sort_keys=True, allow_nan=False))
+                if row_matches(row, request.options.get("row_filters") or []):
+                    matches.append({"document_id": chunk["document_id"], "revision": chunk["revision"], "row_index": row_index, "row": row})
+                    candidate_ids.update(c["id"] for c in request.leaves if (c["document_id"], c["revision"]) == key
+                                         and c["start_char"] is not None and c["start_char"] < offset + row_length and c["end_char"] > offset)
+                offset += row_length + 1
+        if request.options.get("row_filters") or request.options.get("aggregate"):
+            selected = [c for c in request.leaves if c["id"] in candidate_ids]
+        else:
+            selected = request.leaves
+        scored = self._hybrid(request.tenant, request.question, selected, request.limit)
+        aggregation = aggregate_rows([m["row"] for m in matches], request.options.get("aggregate"))
+        if aggregation and aggregation["value"] is not None and not finite(aggregation["value"]):
+            raise CapabilityError("invalid_aggregate", "Structured aggregation did not produce a finite numeric value", 422)
+        extra["structured_result"] = {"rows": matches[:100], "matched_rows": len(matches), "rows_truncated": len(matches) > 100,
+                                      "aggregate": aggregation, "provenance": {"datasets": datasets}}
+        trace.append({"action": "structured_query", "matched_rows": len(matches), "predicates": len(request.options.get("row_filters") or [])})
+        return _RankedSelection(scores=scored, trace=trace, extra=extra)
+
+    def _retrieve_temporal(self, request: _RetrievalRequest) -> _RankedSelection:
+        trace = []
+        at = datetime.fromisoformat(timestamp(request.options.get("as_of")))
+        scored = self._hybrid(request.tenant, request.question, request.leaves, request.limit)
+        scored = sorted(((key, score + 0.01 / (1 + max(0, (at - datetime.fromisoformat(request.lookup[key]["valid_from"])).total_seconds()) / 86400)) for key, score in scored), key=lambda pair: (-pair[1], pair[0]))
+        trace.append({"action": "temporal_query", "as_of": at.isoformat(), "versions": sorted({c["revision"] for c in request.leaves}), "recency_half_life_days": 1})
+        return _RankedSelection(scores=scored, trace=trace)
+
+    def _retrieve_caption(self, request: _RetrievalRequest) -> _RankedSelection:
+        trace = []
+        indexed = [c for c in request.leaves if c["metadata"].get("kind") == "image"]
+        if not indexed:
+            raise CapabilityError("requires_index", "No image captions are indexed", 409)
+        scored = self._hybrid(request.tenant, request.question, indexed, request.limit)
+        trace.append({"action": "caption_text_search", "native_image_vectors": False})
+        return _RankedSelection(scores=scored, trace=trace)
+
+    def _retrieve_federated(self, request: _RetrievalRequest) -> dict:
+        return self._federated(request.tenant, request.question, request.leaves, request.top_k, request.options)
 
     def _evidence(self, question: str, chunks: list[dict]):
         prefix = f"{SYSTEM}\nQUESTION:\n{question}\nEVIDENCE:\n"

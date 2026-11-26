@@ -81,6 +81,16 @@ input:not([type="checkbox"]),textarea,select{width:100%;background:var(--surface
 .workflow-actions .metric-list{margin-top:20px}
 #workflow-run-id{overflow-wrap:anywhere}
 #workflow-recover{margin-top:12px}
+.model-selection-panel{margin-top:20px}
+.model-selection-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.model-selection-grid>div{min-width:0}.model-selection-grid label{display:block;margin-bottom:8px;font-size:12px}
+.model-selection-grid select{width:100%;min-height:44px}
+.model-selection-summary{font-size:13px;line-height:1.8;color:var(--text);overflow-wrap:anywhere}
+.model-selection-notes{font-size:12px;line-height:1.8;color:var(--muted);padding-left:20px}
+.model-selection-command{max-height:240px;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
+.model-profiles-title{font-size:13px;margin:20px 0 12px}
+#setting-embedding,#setting-source-tokenizer,#setting-generation-tokenizer{overflow-wrap:anywhere}
+@media(max-width:960px){.model-selection-grid{grid-template-columns:1fr}}
 @media(max-width:960px){.workflow-layout{grid-template-columns:1fr}}
 @media(max-width:650px){.workflow-graph-pane{padding:16px}.workflow-studio{margin-top:15px}
 .workflow-node{min-height:58px}.workflow-step-number{min-width:40px}

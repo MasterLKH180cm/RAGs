@@ -4,12 +4,14 @@ The HTTP adapter is an integration boundary, not a reimplementation of the
 named research systems. Only the operator selects endpoints and credentials.
 """
 import asyncio
+from collections import OrderedDict
 import hashlib
 import importlib.util
 import json
 import math
 from numbers import Real
 import os
+import sys
 from threading import Lock
 import time
 from urllib.parse import urlparse
@@ -27,6 +29,64 @@ PAPER_BACKENDS = {
     "lightrag": "LightRAG", "hipporag": "HippoRAG", "self_rag": "Self-RAG",
     "crag": "CRAG", "multimodal_native": "Aligned multimodal retrieval",
 }
+DEFAULT_BACKEND_CACHE_BYTES = 64 * 1024 * 1024
+MAX_BACKEND_CACHE_ENTRIES = 1000
+
+
+class _TokenVectorCache:
+    """Per-encoder LRU, bounded by immutable Python payload bytes and entries.
+
+    Container/key/scalar sizes are charged conservatively, even for shared scalar
+    objects. Dictionary bookkeeping, in-flight encodings and model weights are
+    outside this retained-payload budget; it is deliberately not an RSS limit.
+    """
+
+    def __init__(self, max_bytes: int, max_entries: int = MAX_BACKEND_CACHE_ENTRIES):
+        if type(max_bytes) is not int or max_bytes < 0 or type(max_entries) is not int or max_entries < 1:
+            raise ValueError("Token-vector cache limits require nonnegative bytes and positive entries")
+        self.max_bytes = max_bytes
+        self.max_entries = max_entries
+        self._entries = OrderedDict()
+        self._bytes = 0
+        self._lock = Lock()
+
+    @staticmethod
+    def payload_bytes(key: str, matrix: tuple[tuple[float, ...], ...]) -> int:
+        return (sys.getsizeof(key) + sys.getsizeof(matrix)
+                + sum(sys.getsizeof(row) + sum(sys.getsizeof(value) for value in row) for row in matrix))
+
+    def get(self, key: str):
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is None:
+                return None
+            self._entries.move_to_end(key)
+            return entry[0]
+
+    def put(self, key: str, matrix) -> None:
+        if self.max_bytes == 0:
+            return
+        # Freeze the retained shape so callers cannot invalidate accounting by
+        # mutating a list returned by an encoder after this operation.
+        retained = tuple(tuple(row) for row in matrix)
+        size = self.payload_bytes(key, retained)
+        with self._lock:
+            previous = self._entries.pop(key, None)
+            if previous is not None:
+                self._bytes -= previous[1]
+            if size > self.max_bytes:
+                return
+            while self._entries and (self._bytes + size > self.max_bytes
+                                     or len(self._entries) >= self.max_entries):
+                _, (_, evicted_size) = self._entries.popitem(last=False)
+                self._bytes -= evicted_size
+            self._entries[key] = (retained, size)
+            self._bytes += size
+
+    def info(self) -> dict[str, int]:
+        with self._lock:
+            return {"entries": len(self._entries), "payload_bytes": self._bytes,
+                    "max_entries": self.max_entries, "max_bytes": self.max_bytes}
 
 
 class BackendUnavailable(ValueError):
@@ -152,7 +212,11 @@ class BackendManager:
                 raise ValueError("Research backend model must be a bounded operator label")
         self._encoder = None
         self._lock = Lock()
-        self._vectors = {}
+        try:
+            cache_bytes = int(os.getenv("RAGS_BACKEND_CACHE_BYTES", str(DEFAULT_BACKEND_CACHE_BYTES)))
+            self._vectors = _TokenVectorCache(cache_bytes)
+        except ValueError as exc:
+            raise ValueError("RAGS_BACKEND_CACHE_BYTES must be a nonnegative integer") from exc
         self._observed = {}
 
     def _requirements(self, mode: str) -> tuple[str, ...]:
@@ -267,15 +331,14 @@ class BackendManager:
             for chunk in chunks:
                 # Content-addressed cache; no cross-tenant document identifiers are cached.
                 digest = hashlib.sha256(chunk["content"].encode()).hexdigest()
-                with self._lock:
-                    vectors = self._vectors.get(digest)
+                vectors = self._vectors.get(digest)
+                uncached = vectors is None
                 if vectors is None:
                     vectors = self.encode_tokens(chunk["content"])
-                    with self._lock:
-                        if len(self._vectors) >= 1000:
-                            self._vectors.clear()
-                        self._vectors[digest] = vectors
-                hits.append({"chunk_id": chunk["id"], "score": maxsim(query, vectors)})
+                score = maxsim(query, vectors)
+                if uncached:
+                    self._vectors.put(digest, vectors)
+                hits.append({"chunk_id": chunk["id"], "score": score})
             hits.sort(key=lambda hit: (-hit["score"], hit["chunk_id"]))
             return {"hits": hits[:top_k], "trace": [{"operation": "token_maxsim", "candidates": len(chunks)}],
                     "engine": "fastembed:" + self.model_name, "usage": {"provider": "local_onnx"}}

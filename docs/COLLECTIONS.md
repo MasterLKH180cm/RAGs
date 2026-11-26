@@ -16,6 +16,10 @@ Collection records are **one vector per record**. They are not automatically
 chunked or added to the existing document API. Use the document ingestion API for
 long-document chunking and the existing research retrieval pipelines.
 
+For approved per-collection embedding choices and safe copying into a new vector
+space, see [model selection and re-embedding](MODEL_SELECTION.md#let-collection-users-choose-approved-models).
+Forks keep their original model binding; they do not regenerate vectors.
+
 ## Start locally
 
 Install this repository's package as described in the [installation guide](../README.md#quick-start).

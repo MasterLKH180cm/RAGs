@@ -319,11 +319,24 @@
         <div class="page-heading"><div><span class="eyebrow">PLATFORM CONFIGURATION</span><h1 id="settings-title">設定與權限</h1><p>了解目前服務的執行環境及允許的操作。此頁不暴露機密設定。</p></div></div>
         <div class="overview-grid settings-layout">
           <article class="panel"><div class="panel-heading"><div><h2>平台組態</h2><p>目前有效的執行模式</p></div></div>
-            <dl class="metric-list"><div><dt>身分驗證</dt><dd id="setting-auth">—</dd></div><div><dt>儲存後端</dt><dd id="setting-storage">—</dd></div><div><dt>Embedding Provider</dt><dd id="setting-embedding">—</dd></div><div><dt>Generation Provider</dt><dd id="setting-generation">—</dd></div><div><dt>租戶</dt><dd id="setting-tenant">—</dd></div></dl>
+            <dl class="metric-list"><div><dt>身分驗證</dt><dd id="setting-auth">—</dd></div><div><dt>儲存後端</dt><dd id="setting-storage">—</dd></div><div><dt>Embedding</dt><dd id="setting-embedding">—</dd></div><div><dt>Generation Provider</dt><dd id="setting-generation">—</dd></div><div><dt>來源文字計數</dt><dd id="setting-source-tokenizer">—</dd></div><div><dt>生成提示計數</dt><dd id="setting-generation-tokenizer">—</dd></div><div><dt>模型檢查狀態</dt><dd id="setting-model-readiness">—</dd></div><div><dt>租戶</dt><dd id="setting-tenant">—</dd></div></dl>
           </article>
           <article class="panel"><div class="panel-heading"><div><h2>有效權限</h2><p>以登入憑證的實際 Scopes 為準</p></div></div>
             <div id="permission-list" class="chip-grid"></div><div class="info-callout"><strong>最小權限</strong><p>本頁的管理員權限，不會繞過 API 的租戶隔離、模型授權或功能開關。</p></div></article>
         </div>
+        <article class="panel model-selection-panel" aria-labelledby="model-selection-title">
+          <div class="panel-heading"><div><span class="eyebrow">MODEL CHOICE</span><h2 id="model-selection-title">選擇模型與文字計數方式</h2><p>比較需求、預覽變更，再由部署管理者建立新的設定檔。此頁只產生操作指令。</p></div></div>
+          <div class="model-selection-grid">
+            <div><label for="model-choice">Embedding 模型</label><select id="model-choice" disabled><option value="">載入模型目錄中…</option></select></div>
+            <div><label for="source-tokenizer-choice">來源分段計數</label><select id="source-tokenizer-choice" disabled><option value="">保留目前設定</option></select></div>
+            <div><label for="generation-tokenizer-choice">生成提示計數</label><select id="generation-tokenizer-choice" disabled><option value="">保留目前設定</option></select></div>
+          </div>
+          <p id="model-selection-summary" class="model-selection-summary" aria-live="polite">選擇模型後可查看語言、執行位置與輸入限制。</p>
+          <ul id="model-selection-notes" class="model-selection-notes"></ul>
+          <div class="info-callout"><strong>先預覽，再建立候選設定</strong><p>指令保留原設定與既有權限限制。先在服務主機上檢視計畫，再檢查新的設定並重新啟動。列出模型不代表已下載權重或通過效能測試。</p></div>
+          <pre id="model-selection-command" class="tool-preview model-selection-command" tabindex="0" aria-label="設定變更指令">請先選擇要變更的項目。</pre>
+          <h3 class="model-profiles-title">已核准的集合模型設定</h3><div id="approved-model-profiles" class="chip-grid"></div>
+        </article>
         <article class="panel feature-panel"><div class="panel-heading"><div><h2>功能開關</h2><p>目前部署的有效啟用狀態（唯讀）</p></div></div><div id="feature-list" class="feature-grid"></div></article>
       </section>
       <footer class="main-footer"><span>RAGs Control Center <span class="tiny-dot">·</span> v0.9</span><span>Self-hosted · Tenant isolated · Designed for clarity</span></footer>

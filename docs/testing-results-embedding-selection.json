@@ -1,0 +1,1167 @@
+{
+  "schema_version": "embedding-tokenizer-selection-validation-v1",
+  "status": "passed",
+  "recorded_at": "2026-11-27T00:51:53.445563+08:00",
+  "repository": "RAGs",
+  "base_commit": "50436763b63f895054b315f9732eb1979901f80b",
+  "working_branch": "feat/embedding-tokenizer-selection",
+  "evidence_scope": "Local final source snapshot; published and merged commits receive independent GitHub CI. Source hashes identify the tested production, test, packaging and documentation files.",
+  "pytest": {
+    "unique_passed": 2895,
+    "failures": 0,
+    "errors": 0,
+    "selected_skips": 0,
+    "suites": {
+      "unit": {
+        "tests": 1948,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 1948,
+        "elapsed_seconds": 25.237,
+        "selection": "unit",
+        "collected": 2920,
+        "selected": 1948,
+        "deselected": 972,
+        "skip_policy": "--require-no-skips"
+      },
+      "integration": {
+        "tests": 878,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 878,
+        "elapsed_seconds": 123.842,
+        "selection": "integration and not external",
+        "collected": 2920,
+        "selected": 878,
+        "deselected": 2042,
+        "skip_policy": "--require-no-skips"
+      },
+      "postgres": {
+        "tests": 56,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 56,
+        "elapsed_seconds": 20.0,
+        "selection": "postgres",
+        "collected": 2920,
+        "selected": 56,
+        "deselected": 2864,
+        "skip_policy": "--require-no-skips"
+      },
+      "http": {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 3,
+        "elapsed_seconds": 18.154,
+        "selection": "tests/test_collection_http_e2e.py and not postgres",
+        "collected": 4,
+        "selected": 3,
+        "deselected": 1,
+        "skip_policy": "--require-no-skips"
+      },
+      "pretrained_models": {
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 10,
+        "elapsed_seconds": 10.228,
+        "selection": "model_selection",
+        "pretrained_presets": 5,
+        "skip_policy": "--require-no-skips",
+        "inference_network": "Linux network namespace without outbound network access",
+        "model_provisioning": "Separate Hugging Face download-only process; no inference runtime imported"
+      }
+    },
+    "separately_gated_cases": [
+      {
+        "nodeid": "tests/test_backends.py::test_real_colbert_checkpoint_query_document_encoding_and_maxsim",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_collection_encoder_actual.py::test_real_bge_collection_lifecycle_preserves_space_and_rejects_truncation",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_crag_actual.py::test_actual_evaluator_runs_all_three_correction_branches_and_reference_padding",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_crag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_crag_actual.py::test_actual_evaluator_rejects_native_token_overflow_before_forward",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_crag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_standard_index_communities_local_graph_retrieval_and_duplicate_lineage",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_cannot_swallow_provider_failure_and_leave_a_private_index[extraction]",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_cannot_swallow_provider_failure_and_leave_a_private_index[community_report]",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_cannot_swallow_provider_failure_and_leave_a_private_index[entity_embedding]",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_keeps_token_budget_refusal_instead_of_hiding_it_as_model_failure",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_parser_preserves_validated_records_names_and_final_weight[plain]",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_parser_preserves_validated_records_names_and_final_weight[field_spacing]",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_parser_preserves_validated_records_names_and_final_weight[quoted_names]",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_parser_preserves_validated_records_names_and_final_weight[html_identity]",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_graphrag_actual.py::test_actual_upstream_parser_preserves_validated_records_names_and_final_weight[control_identity]",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_graphrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_hipporag_upstream.py::test_actual_openie_fact_selection_and_ppr_preserve_source_snapshots",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external",
+          "research_hipporag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_hipporag_upstream.py::test_actual_upstream_swallowed_provider_failure_is_rethrown[ner]",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external",
+          "research_hipporag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_hipporag_upstream.py::test_actual_upstream_swallowed_provider_failure_is_rethrown[triples]",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external",
+          "research_hipporag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_hipporag_upstream.py::test_actual_upstream_swallowed_provider_failure_is_rethrown[filter]",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external",
+          "research_hipporag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_hipporag_upstream.py::test_actual_upstream_dense_fallback_is_an_explicit_error",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external",
+          "research_hipporag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_hipporag_upstream.py::test_actual_modified_upstream_source_fails_before_inference",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external",
+          "research_hipporag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_multimodal.py::test_real_clip_text_image_and_image_image_retrieval",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_research_upstreams.py::test_actual_raptor_umap_gmm_summary_retrieval_and_source_lineage",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_raptor"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_research_upstreams.py::test_actual_lightrag_extracts_and_retrieves_hybrid_graph_with_source_mapping",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_lightrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_selfrag_runtime_integration.py::test_actual_trained_selfrag_selects_original_source_and_preserves_its_generated_answer",
+        "layer": "integration",
+        "resources": [
+          "external",
+          "research_selfrag"
+        ],
+        "selected": false
+      },
+      {
+        "nodeid": "tests/test_semantic_encoder.py::test_real_bge_semantic_boundaries_and_dense_retrieval",
+        "layer": "integration",
+        "resources": [
+          "encoders",
+          "external"
+        ],
+        "selected": false
+      }
+    ]
+  },
+  "coverage": {
+    "scope": "Complete production Python package in ordinary unit/integration/PostgreSQL parent processes; native-model subprocesses, live HTTP, wheel, browser and container checks do not contribute.",
+    "files": 72,
+    "line_percent": 87.28589753263412,
+    "branch_percent": 81.15119578435346,
+    "minimum_lines": 80,
+    "minimum_branches": 72,
+    "new_exclusions": false,
+    "passed": true
+  },
+  "readme_onboarding": {
+    "status": "passed",
+    "checks": [
+      {
+        "id": "internal_markdown_links",
+        "passed": true,
+        "files": 50,
+        "links": 390
+      },
+      {
+        "id": "readme_onboarding",
+        "passed": true,
+        "storage": "sqlite",
+        "unauthenticated_status": 401,
+        "collection_records": 2,
+        "document_chunks": 1,
+        "data_survived_restart": true,
+        "installed_package_used": true,
+        "model_profile": "offline",
+        "model_credentials_required": false,
+        "port_rebound_for_isolation": true
+      }
+    ],
+    "measured_at": "2026-11-26T16:47:02.330643+00:00"
+  },
+  "isolated_wheel": {
+    "status": "passed",
+    "isolated_wheel_import": true,
+    "package_version": "0.9.0",
+    "client_imports_application": false,
+    "bounded_file_helper_packaged": true,
+    "discovery_without_optional_dependencies": true,
+    "wheel": "rags_platform-0.9.0-py3-none-any.whl",
+    "wheel_sha256": "89dcd2bd27c8a7b73fbb6804ae6d4cd37ee904cc0e4caf556438be136242110b"
+  },
+  "static_checks": {
+    "ruff_source_tests_scripts": "E4,E7,E9,F passed",
+    "ruff_production": "B,RUF021 passed",
+    "admin_javascript_syntax": "passed",
+    "admin_selection_and_stale_response_regressions": "passed",
+    "git_diff_check": "passed"
+  },
+  "actual_model_latency": {
+    "schema_version": 1,
+    "workload": "actual_pretrained_embedding_latency_smoke",
+    "runtime": {
+      "rags-platform": "0.9.0",
+      "sentence-transformers": "5.7.0",
+      "transformers": "4.57.6",
+      "torch": "2.15.0+cpu",
+      "tokenizers": "0.22.2",
+      "fastembed": "0.9.1",
+      "onnxruntime": "1.32.0"
+    },
+    "machine": {
+      "architecture": "x86_64",
+      "python": "3.12.14",
+      "logical_cpus": 9,
+      "OMP_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2"
+    },
+    "limitations": [
+      "Small sequential workload, not concurrency/production capacity or retrieval quality.",
+      "First-use timing includes checkpoint loading and any missing downloads.",
+      "Warm timings include adapter preflight; model RAM and process RSS are not measured."
+    ],
+    "models": [
+      {
+        "id": "bge-small-en",
+        "provider": "fastembed",
+        "model": "BAAI/bge-small-en-v1.5",
+        "revision": null,
+        "trained_model": true,
+        "dimensions": 384,
+        "embedding_identity": "fastembed:BAAI/bge-small-en-v1.5",
+        "input_policy": "exact",
+        "input_limit": 512,
+        "document_input_tokens": 23,
+        "query_input_tokens": 15,
+        "load_and_first_document_ms": 2139.879,
+        "cache_state_before_load": "not_inspected_includes_download_if_required",
+        "warm_samples_per_role": 10,
+        "warm": {
+          "document": {
+            "median_ms": 37.714,
+            "p95_ms": 52.372,
+            "min_ms": 12.805,
+            "max_ms": 52.372
+          },
+          "query": {
+            "median_ms": 32.896,
+            "p95_ms": 47.45,
+            "min_ms": 9.451,
+            "max_ms": 47.45
+          }
+        },
+        "overflow_rejected": true,
+        "original_source_spans": 5,
+        "quality_claim": "none_smoke_only_no_admission_promotion"
+      },
+      {
+        "id": "bge-small-zh",
+        "provider": "fastembed",
+        "model": "BAAI/bge-small-zh-v1.5",
+        "revision": null,
+        "trained_model": true,
+        "dimensions": 512,
+        "embedding_identity": "fastembed:BAAI/bge-small-zh-v1.5",
+        "input_policy": "exact",
+        "input_limit": 512,
+        "document_input_tokens": 32,
+        "query_input_tokens": 17,
+        "load_and_first_document_ms": 419.531,
+        "cache_state_before_load": "not_inspected_includes_download_if_required",
+        "warm_samples_per_role": 10,
+        "warm": {
+          "document": {
+            "median_ms": 27.946,
+            "p95_ms": 58.679,
+            "min_ms": 14.271,
+            "max_ms": 58.679
+          },
+          "query": {
+            "median_ms": 19.817,
+            "p95_ms": 70.212,
+            "min_ms": 6.827,
+            "max_ms": 70.212
+          }
+        },
+        "overflow_rejected": true,
+        "original_source_spans": 7,
+        "quality_claim": "none_smoke_only_no_admission_promotion"
+      },
+      {
+        "id": "fastembed-minilm",
+        "provider": "fastembed",
+        "model": "sentence-transformers/all-MiniLM-L6-v2",
+        "revision": null,
+        "trained_model": true,
+        "dimensions": 384,
+        "embedding_identity": "fastembed:sentence-transformers/all-MiniLM-L6-v2",
+        "input_policy": "exact",
+        "input_limit": 256,
+        "document_input_tokens": 23,
+        "query_input_tokens": 15,
+        "load_and_first_document_ms": 377.573,
+        "cache_state_before_load": "not_inspected_includes_download_if_required",
+        "warm_samples_per_role": 10,
+        "warm": {
+          "document": {
+            "median_ms": 4.522,
+            "p95_ms": 7.294,
+            "min_ms": 4.005,
+            "max_ms": 7.294
+          },
+          "query": {
+            "median_ms": 3.841,
+            "p95_ms": 5.552,
+            "min_ms": 3.343,
+            "max_ms": 5.552
+          }
+        },
+        "overflow_rejected": true,
+        "original_source_spans": 5,
+        "quality_claim": "none_smoke_only_no_admission_promotion"
+      },
+      {
+        "id": "st-e5-small",
+        "provider": "sentence_transformers",
+        "model": "intfloat/multilingual-e5-small",
+        "revision": "614241f622f53c4eeff9890bdc4f31cfecc418b3",
+        "trained_model": true,
+        "dimensions": 384,
+        "embedding_identity": "sentence_transformers:intfloat/multilingual-e5-small@64292554c4fc639786bed4d6ce925ec954a5fe5c1db7ede57160bbc96f9f573b",
+        "input_policy": "exact",
+        "input_limit": 512,
+        "document_input_tokens": 27,
+        "query_input_tokens": 17,
+        "load_and_first_document_ms": 5998.572,
+        "cache_state_before_load": "not_inspected_includes_download_if_required",
+        "warm_samples_per_role": 10,
+        "warm": {
+          "document": {
+            "median_ms": 25.109,
+            "p95_ms": 34.544,
+            "min_ms": 21.051,
+            "max_ms": 34.544
+          },
+          "query": {
+            "median_ms": 21.272,
+            "p95_ms": 26.796,
+            "min_ms": 17.824,
+            "max_ms": 26.796
+          }
+        },
+        "overflow_rejected": true,
+        "original_source_spans": 5,
+        "quality_claim": "none_smoke_only_no_admission_promotion"
+      },
+      {
+        "id": "st-minilm",
+        "provider": "sentence_transformers",
+        "model": "sentence-transformers/all-MiniLM-L6-v2",
+        "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+        "trained_model": true,
+        "dimensions": 384,
+        "embedding_identity": "sentence_transformers:sentence-transformers/all-MiniLM-L6-v2@2e90b7de82cb46c50d0d2d27a58bc4dd58e3169d8e2555e8b28ec3f2b9aac4cf",
+        "input_policy": "exact",
+        "input_limit": 256,
+        "document_input_tokens": 23,
+        "query_input_tokens": 15,
+        "load_and_first_document_ms": 86.644,
+        "cache_state_before_load": "not_inspected_includes_download_if_required",
+        "warm_samples_per_role": 10,
+        "warm": {
+          "document": {
+            "median_ms": 11.626,
+            "p95_ms": 26.32,
+            "min_ms": 10.027,
+            "max_ms": 26.32
+          },
+          "query": {
+            "median_ms": 9.554,
+            "p95_ms": 13.226,
+            "min_ms": 8.494,
+            "max_ms": 13.226
+          }
+        },
+        "overflow_rejected": true,
+        "original_source_spans": 5,
+        "quality_claim": "none_smoke_only_no_admission_promotion"
+      }
+    ]
+  },
+  "actual_model_artifacts": {
+    "schema_version": 1,
+    "phase": "download_only_no_inference_runtime",
+    "models": [
+      {
+        "id": "bge-small-en",
+        "repository": "Qdrant/bge-small-en-v1.5-onnx-Q",
+        "revision": "aa8f8b060edb00e03bfdd08813a2949946c8ba55",
+        "files": [
+          {
+            "name": "config.json",
+            "bytes": 706,
+            "sha256": "13582bcf2effc85b7bf3d3f5532e686bc1c9ce86bb009d10f0ec33cbe92299dd"
+          },
+          {
+            "name": "model_optimized.onnx",
+            "bytes": 66465124,
+            "sha256": "51f1bd0addd6e859e42c2c8021a5e5461385bb676a649f4b269aa445449f2431"
+          },
+          {
+            "name": "special_tokens_map.json",
+            "bytes": 695,
+            "sha256": "5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a"
+          },
+          {
+            "name": "tokenizer.json",
+            "bytes": 711396,
+            "sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"
+          },
+          {
+            "name": "tokenizer_config.json",
+            "bytes": 1242,
+            "sha256": "0b29c7bfc889e53b36d9dd3e686dd4300f6525110eaa98c76a5dafceb2029f53"
+          },
+          {
+            "name": "vocab.txt",
+            "bytes": 231508,
+            "sha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3"
+          }
+        ]
+      },
+      {
+        "id": "bge-small-zh",
+        "repository": "Qdrant/bge-small-zh-v1.5",
+        "revision": "46fbe35fd4374a00fee7de77dfddaeb6dd6a2c59",
+        "files": [
+          {
+            "name": "config.json",
+            "bytes": 739,
+            "sha256": "9088751d39abbf86ec3d19ffca92ad62ad19075f7e59712e6c71217fa125d1d3"
+          },
+          {
+            "name": "model_optimized.onnx",
+            "bytes": 94781076,
+            "sha256": "1294ea4b6331115a353d81f96b85e8c8d7fdcc284453d5b2fab5b016230aad38"
+          },
+          {
+            "name": "special_tokens_map.json",
+            "bytes": 125,
+            "sha256": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3"
+          },
+          {
+            "name": "tokenizer.json",
+            "bytes": 439125,
+            "sha256": "48cea5d44424912a6fd1ea647bf4fe50b55ab8b1e5879c3275f80e339e8fae26"
+          },
+          {
+            "name": "tokenizer_config.json",
+            "bytes": 367,
+            "sha256": "e6f3b96db926a37d4039995fbf5ad17de158dfb8f6343d607e4dbaad18d75f5a"
+          },
+          {
+            "name": "vocab.txt",
+            "bytes": 109540,
+            "sha256": "45bbac6b341c319adc98a532532882e91a9cefc0329aa57bac9ae761c27b291c"
+          }
+        ]
+      },
+      {
+        "id": "fastembed-minilm",
+        "repository": "Qdrant/all-MiniLM-L6-v2-onnx",
+        "revision": "d13954661f83248295ba75c1ed411eef3b7b936e",
+        "files": [
+          {
+            "name": "config.json",
+            "bytes": 650,
+            "sha256": "1b4d8e2a3988377ed8b519a31d8d31025a25f1c5f8606998e8014111438efcd7"
+          },
+          {
+            "name": "model.onnx",
+            "bytes": 90387630,
+            "sha256": "bbd7b466f6d58e646fdc2bd5fd67b2f5e93c0b687011bd4548c420f7bd46f0c5"
+          },
+          {
+            "name": "special_tokens_map.json",
+            "bytes": 695,
+            "sha256": "5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a"
+          },
+          {
+            "name": "tokenizer.json",
+            "bytes": 711649,
+            "sha256": "851ca67100d372ca3ae031a6abd168f53489eebfd7d89523f35c5c9b4d372c3c"
+          },
+          {
+            "name": "tokenizer_config.json",
+            "bytes": 1412,
+            "sha256": "abda01c8c14c5151ae498aceb30db406d6b91242c394fd88d3b6fd5a63a101e6"
+          },
+          {
+            "name": "vocab.txt",
+            "bytes": 231508,
+            "sha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3"
+          }
+        ]
+      },
+      {
+        "id": "st-e5-small",
+        "repository": "intfloat/multilingual-e5-small",
+        "revision": "614241f622f53c4eeff9890bdc4f31cfecc418b3",
+        "files": [
+          {
+            "name": "1_Pooling/config.json",
+            "bytes": 200,
+            "sha256": "987f7a67a38fa564c849bb5d277c52ab9088a84368fc0be31a354125aebb12a0"
+          },
+          {
+            "name": "config.json",
+            "bytes": 655,
+            "sha256": "69137736cab8b8903a07fe8afaafdda25aac55415a12a55d1bffa9f581abf959"
+          },
+          {
+            "name": "model.safetensors",
+            "bytes": 470641600,
+            "sha256": "1a55775f53449dac10a2bcbc312469fac40b96d53198c407081a831f81c98477"
+          },
+          {
+            "name": "modules.json",
+            "bytes": 387,
+            "sha256": "c6e29747481e8b5dd2b58401966aeac910de39092f90cda9a704b1545f902b04"
+          },
+          {
+            "name": "sentence_bert_config.json",
+            "bytes": 57,
+            "sha256": "948201d8329907aae938fa62f9ceeed53f5694dacc2b87b9f3b78b37ee986529"
+          },
+          {
+            "name": "sentencepiece.bpe.model",
+            "bytes": 5069051,
+            "sha256": "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865"
+          },
+          {
+            "name": "special_tokens_map.json",
+            "bytes": 167,
+            "sha256": "d05497f1da52c5e09554c0cd874037a083e1dc1b9cfd48034d1c717f1afc07a7"
+          },
+          {
+            "name": "tokenizer.json",
+            "bytes": 17082730,
+            "sha256": "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39"
+          },
+          {
+            "name": "tokenizer_config.json",
+            "bytes": 443,
+            "sha256": "a1d6bc8734a6f635dc158508bef000f8e2e5a759c7d92f984b2c86e5ff53425b"
+          }
+        ]
+      },
+      {
+        "id": "st-minilm",
+        "repository": "sentence-transformers/all-MiniLM-L6-v2",
+        "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+        "files": [
+          {
+            "name": "1_Pooling/config.json",
+            "bytes": 190,
+            "sha256": "4be450dde3b0273bb9787637cfbd28fe04a7ba6ab9d36ac48e92b11e350ffc23"
+          },
+          {
+            "name": "config.json",
+            "bytes": 612,
+            "sha256": "953f9c0d463486b10a6871cc2fd59f223b2c70184f49815e7efbcab5d8908b41"
+          },
+          {
+            "name": "model.safetensors",
+            "bytes": 90868376,
+            "sha256": "53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9db"
+          },
+          {
+            "name": "modules.json",
+            "bytes": 349,
+            "sha256": "84e40c8e006c9b1d6c122e02cba9b02458120b5fb0c87b746c41e0207cf642cf"
+          },
+          {
+            "name": "sentence_bert_config.json",
+            "bytes": 53,
+            "sha256": "fc1993fde0a95c24ec6c022539d41cf6e2f7c9721e5415d6fb6897472a9cd4b7"
+          },
+          {
+            "name": "special_tokens_map.json",
+            "bytes": 112,
+            "sha256": "303df45a03609e4ead04bc3dc1536d0ab19b5358db685b6f3da123d05ec200e3"
+          },
+          {
+            "name": "tokenizer.json",
+            "bytes": 466247,
+            "sha256": "be50c3628f2bf5bb5e3a7f17b1f74611b2561a3a27eeab05e5aa30f411572037"
+          },
+          {
+            "name": "tokenizer_config.json",
+            "bytes": 350,
+            "sha256": "acb92769e8195aabd29b7b2137a9e6d6e25c476a4f15aa4355c233426c61576b"
+          },
+          {
+            "name": "vocab.txt",
+            "bytes": 231508,
+            "sha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3"
+          }
+        ]
+      }
+    ]
+  },
+  "ollama_transport": {
+    "actual_http_process_fixture_tests": 25,
+    "live_ollama_model_inference": false,
+    "hosted_paid_embedding_inference": false
+  },
+  "architecture_repairs": {
+    "shared_connection_lifecycle": "SQLite setup/commit/rollback/close shared by Store and AssetStore; PostgreSQL lifecycle delegated unchanged.",
+    "sqlite_scoping": {
+      "history_revisions_per_document": [
+        0,
+        40,
+        160
+      ],
+      "tenant_chunks": [
+        4,
+        124,
+        484
+      ],
+      "effective_document_rows_materialized": [
+        4,
+        4,
+        4
+      ],
+      "authorized_chunks_materialized": [
+        3,
+        3,
+        3
+      ],
+      "bound_scope_ids_tested": 1290,
+      "sqlite_variable_limit_tested": 32,
+      "claim": "Reduced Python materialization; no constant-time or ANN claim."
+    },
+    "token_matrix_cache": {
+      "default_payload_bytes": 67108864,
+      "entry_limit": 1000,
+      "fixture_retained_entries": 2,
+      "fixture_accounted_bytes": 836,
+      "concurrent_operations": 400,
+      "process_rss_limit": false
+    },
+    "retrieval_dispatch": {
+      "advertised_strategies": 27,
+      "central_method_lines_before": 197,
+      "central_method_lines_after": 29
+    }
+  },
+  "frozen_contracts": {
+    "unchanged_from_base": true,
+    "paths": [
+      "docs/testing-baseline.json",
+      "docs/testing-results-qwen-20261123.json",
+      "examples/admission_calibration_v03.json",
+      "examples/admission_holdout_v03.json",
+      "examples/benchmark_cases.json",
+      "examples/eval_baseline.json",
+      "examples/eval_v02.json",
+      "profiles/admission-bge-v03.json",
+      "profiles/admission-qwen-v03.json",
+      "reports/admission-calibration-qwen-v03.json",
+      "reports/admission-calibration-v03.json",
+      "reports/admission-holdout-v03.json",
+      "reports/admission-verification-qwen-v03.json",
+      "reports/agent_admission_http_v03.json",
+      "reports/collections-postgres.json",
+      "reports/collections-sqlite.json",
+      "reports/crag_public_fetch_readiness_v10.json",
+      "reports/crag_web_v10.junit.xml",
+      "reports/inkling-local-readiness-v09.json",
+      "reports/inkling-mini-readiness-actions-v09.json",
+      "reports/inkling-mini-readiness-v09.json",
+      "reports/research_core_verification_v10.json",
+      "reports/research_crag_http_v10.json",
+      "reports/research_crag_v10.json",
+      "reports/research_crag_v10.junit.xml",
+      "reports/research_full_graphrag_http_v10.json",
+      "reports/research_full_graphrag_v10.json",
+      "reports/research_full_graphrag_v10.junit.xml",
+      "reports/research_hipporag_http_v10.json",
+      "reports/research_hipporag_v10.json",
+      "reports/research_hipporag_v10.junit.xml",
+      "reports/research_lightrag_http_v03.json",
+      "reports/research_lightrag_v03.json",
+      "reports/research_raptor_http_v03.json",
+      "reports/research_raptor_v03.json",
+      "reports/research_selfrag_cpu_comparison_v10.json",
+      "reports/research_selfrag_eager_exit_diagnostic_v10.json",
+      "reports/research_selfrag_eager_initial_failure_v10.json",
+      "reports/research_selfrag_http_initial_failure_v10.json",
+      "reports/research_selfrag_http_timeout_v10.json",
+      "reports/research_selfrag_http_v10.json",
+      "reports/research_selfrag_paging_after_v10.json",
+      "reports/research_selfrag_paging_before_v10.json",
+      "reports/research_selfrag_phase_diagnostic_v10.json",
+      "reports/research_selfrag_provenance_v10.json",
+      "reports/research_selfrag_sidecar_diagnostic_v10.json",
+      "reports/research_selfrag_v10.json",
+      "reports/research_selfrag_v10.junit.xml",
+      "requirements/answerability.txt",
+      "requirements/research-crag.in",
+      "requirements/research-crag.txt",
+      "requirements/research-full_graphrag.in",
+      "requirements/research-full_graphrag.txt",
+      "requirements/research-hipporag.in",
+      "requirements/research-hipporag.txt",
+      "requirements/research-lightrag.txt",
+      "requirements/research-raptor.txt",
+      "requirements/research-selfrag-convert.txt",
+      "tests/test_layers.json"
+    ],
+    "dependency_changes": "pyproject.toml and uv.lock add optional embedding/tokenizer dependencies; previous frozen research/admission requirements are unchanged.",
+    "qwen_admission_quality": "Historical report remains 7 of 11 quality gates passed, not promoted. No new Qwen/Inkling performance result is claimed.",
+    "router_agent_memory_defaults": "true, unchanged"
+  },
+  "source_sha256": {
+    ".env.example": "eb8395caf48c793423ac4dabb179993ae46ea50299208fae521b444184e54ec4",
+    ".github/workflows/ci.yml": "76b486e92db19178ba25e8f21dadd7f34738a75108e3220f8b392b46f9574a65",
+    ".github/workflows/model-benchmark.yml": "18ee99c27aba3ef5d9c67757da3397677dfa8357388fad34e2d234753a252059",
+    "Dockerfile": "52a5856c6ec238075082806c69fe84f81de7d9d62cea77cc40106af280b031ff",
+    "README.md": "401e37b5cbf1ec1f121a90e106d3f5a8e982417d25b24985fee420cae74377d3",
+    "compose.yaml": "5d1f2360fe9f7be0b05211b565578102b53b1ed7a06d5374cc8e890f57fa9378",
+    "conftest.py": "456ab00ece30eb9bedad5d2e1beeb43a7ecafac90f71a8218426308d814481a6",
+    "docker/init-databases.sh": "c9ec3612e354a4f32c8dac09f60039fd1c7069b41d6449a3b42899f97022f639",
+    "docker/otel-collector.yaml": "f170f649be9931e8fbd7c94a15381265edba95cfadfc897f98b6ccf8be461049",
+    "docs/CODE_SMELL_REVIEW.md": "d69536202881f9843b4e89320142369e31a8f09626dbca7b032859032691a2d7",
+    "docs/COLLECTIONS.md": "e11dc20e4731aaede613f1bb251b4b20a2644b247ab3bb1e8a3615b4893fb94c",
+    "docs/MODEL_SELECTION.md": "10952d32a2c3358474add13c657387f253645e5b02149b95150f9d2a38ef173c",
+    "docs/README_REFERENCE.md": "99c5129ae710bf08431efa3f23bcad32ba5328aa3c750d95b602316d72533e10",
+    "pyproject.toml": "9e2348738c6b65755cc097ab1d3fb849dcc6a25870935b029196e7e56f2a8aeb",
+    "rags/__init__.py": "eb421d96c421e8977ce6970f51f13d67d7b88da34996f6370bf5bc80408c96c2",
+    "rags/__main__.py": "47bea09506b87026270063771d6660147e220b5a9a0e47a7bec4ddcbc3cfeaf9",
+    "rags/admin.py": "5aeb68c6faad88e0685761a41c9830a494d36feec12b8116ae64e3bb1b1f1db7",
+    "rags/admin_static/app.js": "01a6021b08fe577f39918d8a1a164fbb5ddda8820baf37ea9df2629ff10974ce",
+    "rags/admin_static/index.html": "d9fcb8ee92c7ae8e55c0d1b0ab370ec9b0d1df5f239e544a00c1c3a6d70c93ef",
+    "rags/admin_static/style.css": "5a71b6aa54b7ff2c88dcf566ce016f449001983a7dc13ae4e40a62c70381d49c",
+    "rags/admission.py": "3bbd1906a976ebef13bf6c9e54c837af68b48a88537976fa63d5a0d74a0d380b",
+    "rags/admission_eval.py": "a99abc96bbf74884cb1f77cb31b5f97eeb202e1a01642c5d6a561be5b119c319",
+    "rags/agents/__init__.py": "095d5fc505a5edd2352d70201017f1854cf21f50eb35bb501477902c00d5dbc3",
+    "rags/agents/api.py": "cf68d1079369c961d1ba38363f7671c491e26757c4649a16892f9999bebc46e6",
+    "rags/agents/config.py": "9bb9e9a15fed199f0a6c6bb9501dfee0aea9128f9e20ddad9d0f9c831a2dc825",
+    "rags/agents/deadline.py": "30b2ac4c50ab68525c4b56a73172226e581bab4ebd616d1b9808ec8ce0ceb671",
+    "rags/agents/engine.py": "c981ed43ce54121c81c95f78120f937043d6b501fef8fe6e49f522281d90d557",
+    "rags/agents/memory.py": "1cb22295911e4076b4ab38bb122c88c37786ba80b8cef9ad2909687333236a6d",
+    "rags/agents/router.py": "08d9862abd8fba42c007f892e7521d30e2f3254e8e1fa44bacfc92246b5518fd",
+    "rags/agents/state.py": "f16b381711bc9b58a532abb559e17facde85ed7d49b5f6215065d2831af82e8a",
+    "rags/agents/templates.py": "c7e1f6b194e0532c1eb461a39f6063122c303a9b17761235547878100bd6f00f",
+    "rags/agents/workflow.py": "64645c8300770c8c9694717738b88b5d7decc866bf297279bd9f1177ff7515de",
+    "rags/answerability.py": "8b0c107bb16be006fbe49c2118be97cc673970882390c23f4c616737b361345e",
+    "rags/api.py": "8285c625bcb7b7e3ca6b653054f6eec83438a3d578c0b65976c1ad9c8be085b6",
+    "rags/auth.py": "0d0302e1cb433c2393e7fe0096881038a0ed7deb28b86834633825b4ef35778b",
+    "rags/backends.py": "4f5b283dcc4b5e9fb866e2348113614f46314a884fb4d20cc4c4ab256a5249df",
+    "rags/benchmark.py": "2940b417b7ede3bdcba17f7e025b4338157386c5f2e019c08436896bd734879e",
+    "rags/chunking.py": "94290418b8bf12994aa50a9e467a1a207004b06af813334af88bfb59b9b122d1",
+    "rags/cli.py": "75eeafd761a2f6df576a62bf2a363a275b6e5fcb26514722594a070a1c17f0ca",
+    "rags/client.py": "9761dfd4f620351dff397a500df6ddc398cdd5f59f1639d6966305483de1983a",
+    "rags/collection_api.py": "cc41a0597c2185f70ed770007efe7972cc98e348206acea07c4f92c15e7e1dfc",
+    "rags/collection_cli.py": "834e1bb9b59fe89ff38d45cc09c174b4678ebd2ed457467370a8716d682d23c4",
+    "rags/collection_filters.py": "9d847b30adf873ac8b79508857545a9a8ecc72c215de2f9ae8979c2e81c5aeb3",
+    "rags/collection_models.py": "5b7b479056b9b312dd36c502f050fe20c646650fd832b55286722397906a61b8",
+    "rags/collection_search.py": "fbfbb6cc73625d944690d0478d055ca1b96dda5229d0fd68f0a5767cd2f8168b",
+    "rags/collection_service.py": "4fa28787e798d257dd828c4cc90c7082e74c247b214f329b244ec488f236d4cc",
+    "rags/collection_store.py": "4c7c106df61f932f3df9434c7ad811317e0ac96e4fd9046289a22cdaa3e79fc3",
+    "rags/config.py": "14e475798046fdf98abc64d7934a82a264339fa5e5317805c768c155375519e2",
+    "rags/database.py": "93f7ce6c24b96832c6720437a1eacc7af17a864bdfc4edd7c7bf8852594aeeb3",
+    "rags/embedding_profiles.py": "12d26c9e61e7812ff7012a1c67131fcc24f661b8895d88e9c616ff01b6c4f095",
+    "rags/embedding_windows.py": "af458b3a12b52a1ca9f8a2b11a4ef6a36ff22595b8c750107ebb6129824174e9",
+    "rags/evaluate.py": "55f34ef9d56ed9cf35193d8b34e3b17ac53e4828b621ea04fc6cb01add2e6518",
+    "rags/features.py": "b7e9a5a3a1d7381a21e194041b486bd510055a0f48cac79dba30ffa605d3a927",
+    "rags/file_io.py": "ea6e5f7921332ce6f444b2e193def5378a0e8cc632f5d262e2f911a472e5a54f",
+    "rags/limits.py": "ee20a69c4c3057e5c2e4b9bb245dd42b1b5ebd597007a5c9b0a46209598059de",
+    "rags/mcp_server.py": "28fd9315513763acf2279fd18c64ac72ec0c22c5cee4128f99ed3fadc5b84a3f",
+    "rags/migrate.py": "15f0375b0e4385cbd251a9fdfa4ddc93854b485f8fba34896099cc8f8f710c6d",
+    "rags/model_benchmark.py": "6dcd1ff0dd2dc48b329c906e31cf01afa1dbe1a212d8d2b72aad0fe2a6eeb444",
+    "rags/model_catalog.py": "f7da0c6e739b8818b5d588808c03c974726db0271d4ea880c3a8fa444e9bbd43",
+    "rags/model_cli.py": "c0a1bb5184b7422127f3deacb5479367b7dc40e6e6ce8df3fb4645e68c39e9bf",
+    "rags/model_discovery.py": "0d132abb6cd3fc808c822d457056acd837ada617d09aa05e620dc59831d7b522",
+    "rags/model_profiles.py": "c1977e25a425e7b502848e0c550ba4c04326716326a3f5e730f638d9e2f9ed28",
+    "rags/monitoring.py": "ed8816083058e2c38b394568baec920990ee6dd1059935ab9d5b5822cf731355",
+    "rags/multimodal.py": "274001807b0509e0202d9d54e56e9a88952d1148e2550a74fa2d298627dc56a0",
+    "rags/native.py": "672ef1b8def8ea680ef3b41d2e56ee834af3dcf072ab8d2f4b1af1b70cf98054",
+    "rags/postgres.py": "f93fec27864376f80f3645fc8f2681a959c1b4b5b2800dc9fb13253788f79bcd",
+    "rags/provider_transport.py": "6e6f065da17e1dc58c11ba8583650076a34ec2b4b0c9421cdc39938cd58811d0",
+    "rags/providers.py": "b014fef66c15d7bdcacb84e30f47337325ab43c8d0b7dd1aa5801b572d7f53ec",
+    "rags/registry.py": "125ba7209a2b503be7b1253e1b5c3c2d474133132eccf4034b212be76ca41418",
+    "rags/research/__init__.py": "7166dd4d357e8625fdfdb5ac49b7a030993de3b791ad1b87ba920ba0fbf927fc",
+    "rags/research/common.py": "f1768233c0471291ae60921c6ccfa2a0a65e0efcea49809b34d7105ab66aae81",
+    "rags/research/crag_adapter.py": "94922ff5957ff63c5251d5f2bb97d479f8e026e4d06b86d02c3c41227978dd34",
+    "rags/research/crag_web.py": "cc48a2319d5788d84a8edadb8dfe101163dca72e9ed33ac00e3e0981007bb7f3",
+    "rags/research/graphrag_adapter.py": "378a507bc44528ac6355dc897a87e397340ec4a981d8f6cb7a87811578f8cecb",
+    "rags/research/hipporag_adapter.py": "f6dc520b45236889bc5affd341c0ba0a71fa5bacc1cad5a0a9365490e6f12925",
+    "rags/research/lightrag_adapter.py": "f21835b3c20ab57dc8743a1259def4ca14172ceadd921d34835a86bdf17dfec9",
+    "rags/research/raptor_adapter.py": "e5b4dd013a35dfacc2e24c595fdbf7bfa679d758bb30087cfaac3557062e1420",
+    "rags/research/selfrag_adapter.py": "7a2631c417318b1c80f0a875e147955d5db1cf5f0d9e4d2bad7148963c215dab",
+    "rags/research/selfrag_runtime.py": "c5d9984b57b471bf509e1d1b72a2db89897edf84c81d9f2f907102767fdcfe1e",
+    "rags/research_protocol.py": "a0dd2545c6e61d8f7341373d11c8667efd11ecb7bac31389e6a5946475f016be",
+    "rags/research_service.py": "8cc61d47f975a06a9a94a78316c068dfbfdb84331a0a35c3b3b3aed6d0fb1ae5",
+    "rags/research_worker.py": "ded8da453b5191c63052d2aa42b5d838351a0ed6d7cfc0ee50eec0879773d573",
+    "rags/retrieval.py": "6f0aa1cdf22fa142f4e7e903e092fb9876c7554aa0aabda406c00242ac15e681",
+    "rags/sentence_embeddings.py": "daf8349760b37d1a1543969fd21bffa870f499a5cc55435da55f5a9521fbc409",
+    "rags/storage.py": "09027c26c6b07c3a814152592cdd56cc1558b76242d9f86fb1b964e2a4a99e71",
+    "rags/templates/anthropic.env": "cabfb192e8e5555cd9f2b0cc2dee517958da53774c8e6a4724da616d26d82dcc",
+    "rags/templates/inkling-local.env": "654c13f8fd32ae481bb886131ad58fc522fbfab4ae4976c2bf231c023953f6b9",
+    "rags/templates/inkling.env": "5f134a8e607682b713225872f0c514a1334dc4f694fbbfd86b883a2a46b9bbbd",
+    "rags/templates/litellm.env": "241a73d899d3f2ea249f427250ceb317e2bef13b1b1716a4f588ce59ddb3b6ef",
+    "rags/templates/offline.env": "532cb6cbb71afa30628bfab9a0de97297f27a8149f3a0c42032760d912011bbd",
+    "rags/templates/ollama.env": "9ce152307875b091ddf4dbfd9daf93a6a7a90ae4075718f7655c3a88fc0bf49d",
+    "rags/templates/openai.env": "da17ce3ae47511f6088749e4f1276a8ceb2a31f79bc1fa269fd23f8fc2c9a611",
+    "rags/templates/postgres.env": "39f578ae5df97b2dd6e6899adb8b047853e38367d865db04332d9b582bbfb18b",
+    "rags/tokenization.py": "ebe6ddc12e96fecab2d60b9aa41d64041a059b4c66defed8c00993ca32950046",
+    "rags/tokenizer_artifacts.py": "8178f398e3fdab46dde55231e3917b9f7e817041865e7ddc8cf3acb8eb2e5600",
+    "rags/verify_admission.py": "284e0f583dc95382e45a4ed88dee87b2b5ba6c8f0910e347109905dcfb40be4d",
+    "rags/vision.py": "8efc461a82097f4af050f60a8965e60dd325345b1c06207e2c65d74cea46b8f4",
+    "requirements/answerability.txt": "ddaaab18f3f1a18cd8d8d98191a38c2b251151f31984b3bfb2b9a22123ea58ff",
+    "requirements/embedding-runtime.txt": "a9037a74af2b681e899f55e64e7d4aff22188100ac603a2f9660b8a8204af9f0",
+    "requirements/research-crag.in": "b4a4d75b93dc0346b40b2e01d02cb70ccfd356afbadac365d780b481e53c92f4",
+    "requirements/research-crag.txt": "d49864c267be3150bb51bc813e6f7fc7cc3918fe47c4cff6a925b3251823b813",
+    "requirements/research-full_graphrag.in": "4ba9fcd0c1a779c5930fd9e180e7ee0b7f01fa6330ef81c41830315caa07097a",
+    "requirements/research-full_graphrag.txt": "8543b1ac633dc0c75a5bcb600b8a15569480dfa0bf2198d566feb30c61a511b9",
+    "requirements/research-hipporag.in": "d46934f21cf594126ebfa5e2670ab5aba442d7213fe44953c22e46ffcc3416c4",
+    "requirements/research-hipporag.txt": "c8f7721df754d14a3e9cc0843240d7fb41c3df6ac473b90297a5f8c7b348ea6d",
+    "requirements/research-lightrag.txt": "f763ebc967ee6c0796ddec0468d8470de52d6a50d71b1e0fd704b192840c0d2d",
+    "requirements/research-raptor.txt": "4653acf2c0896cd4cd876513708b733e2a775ed1212a203ef5c65d59bd86f4c1",
+    "requirements/research-selfrag-convert.txt": "8f3fa32dd8b29c75633efc92cc2611b2908739bf94168c7a7d86bc5a59006a9b",
+    "scripts/benchmark_collections.py": "c66c5bb3959263cdada785dbc267bb691bf920b8f3d52cac78c03cf246e61720",
+    "scripts/benchmark_embedding_selection.py": "41bc0d198def18ce83bf305a27f6125dc5b46588fc93ce0c5b7f9273b2482484",
+    "scripts/bootstrap_compose.py": "69070ba6f089e26963a75d33ce5cd22fd6de3aea85861f3a2c610bd19aa679e9",
+    "scripts/check_compose.py": "1f0b07f09acbbca534b9af04c4fe4b95fa9fc49316bbbae9105f0cc26cd1efde",
+    "scripts/check_coverage.py": "3ca07c59d35d92c61db0cb8bedbef9544556baf837e7774df6e8305d62f7b43c",
+    "scripts/check_readme.py": "2d73c4116da1fb0bcda869739befa6ef7fae1ea3929efa62cba34303bb606a90",
+    "scripts/crag_local.py": "335da814daf7faf86c3ce6c2dc165ed8f4566661b745c3f817cf2576cfea63fc",
+    "scripts/e2e_agent_platform.py": "12afd719b93382fd4cc181bdfa6b60a6245def331a3c3bc960106c44944443b5",
+    "scripts/e2e_crag_v10.py": "b21f74b7b38e1ebec82e3a088b51c564214ac8b357b7aa97a01e2c6297a0cc32",
+    "scripts/e2e_research_v03.py": "f5cea4d66bbecaa2531b5d113c36414e4700f38442eb27beed9efa116106ee6a",
+    "scripts/e2e_selfrag_v10.py": "191864d96100fc84fcea0a70af480b1cb78b011962597c707e3df35d2ff22f25",
+    "scripts/inkling_local.py": "58fef6553699da00d0dafb873fed5671ea6ad0598342a8bf70036be4ee3d8d6f",
+    "scripts/install-answerability.sh": "98f4cac585a4a8f62852a7e340aa455f696f8917e70566e2155b0891ab674ae7",
+    "scripts/install-embedding-runtime.sh": "d42e6d0a43e502712fabbd9d0c6dc025007b647df15ce35dba7d4eb93d4dbb8c",
+    "scripts/install_research.sh": "bb86fee7eb057f4862d47d1af48e686556e656479b290a5cce1e7cc834ce942c",
+    "scripts/local_model.py": "d53cfa062ea3c5fc0b7dd6a8d7f2d219f2c349a836e655e3caf629ad61625985",
+    "scripts/migrate_sqlite_to_postgres.py": "d7ae56f1a5c3648fe2ce99f3b14bbfa0d8ba1233a4c885b8e7909cc08855ad37",
+    "scripts/prepare_embedding_models.py": "cd554ff8e25cda8abddd411e37c5fa00c18be341c3e5844d50d883f7e1644c96",
+    "scripts/qwen_local.py": "7876425b41696554d8964c597e19b3e4bdccdbc2bb89bc2757054ab552445210",
+    "scripts/selfrag_local.py": "421b24de949437880d3e71e7b3a2972248c5ae5f96ac114b207ed19bce833202",
+    "scripts/test_admin_ui.mjs": "8f6df929df8af7ed0e646c722ccb997290da6eb709222be65124d8fe9622f39c",
+    "scripts/verify_admission_runtime.py": "486904fd207dc06449d46acc108344cb669f1416feea8713f197a43f37021a4e",
+    "tests/crag_fixture_provider.py": "28aaaae602b0cf9f09541941f5b68627239fc92b61c1765e6a2ca476b2fcd418",
+    "tests/graphrag_fixture_provider.py": "52c4074ad96dc1c1d9ecf46049819f89925a13d71df1fa5ec5d44352e545714b",
+    "tests/hipporag_fixture_provider.py": "4106806a1734d7977757a90fa6d790d1d575e32563e8d2d38dd0bfaeebfe3728",
+    "tests/research_fixture_provider.py": "6c121afcc885c2c9d7de160af2b51d05521359c0462ed1f1db129105ddc012df",
+    "tests/test_admin.py": "73cb614b93444e608f6de6a7529b2e43789f5587054f60fa3958e7cb1e9569c5",
+    "tests/test_admission.py": "76b32eb19f0ecc1476c1c71e155053d447f966c2f211cfc0bbcb7c5e4757abac",
+    "tests/test_agent_admin_integration.py": "b74e787da853b47e807b79fa837fbfd9eabfc91b1b234b4dadd12c3a96a759a6",
+    "tests/test_agent_api_integration.py": "ee39f3e1e01c8fcc0d5eb68de1a6b15562bb7318735563af4223d47a8823f898",
+    "tests/test_agent_contracts_unit.py": "70b0b7566b92576685cff5ddc37ce451fa50ef66d9ac1d992e7d573793d84b0a",
+    "tests/test_agent_engine_integration.py": "dcd7efded07e8857e06109fce682c21cb6b20c750015dcd6d05a3089ffbef47c",
+    "tests/test_agent_postgres.py": "fc7d9c82ef960d69994937e1b75fb9eda36be1db6210d581abf059387628d5dd",
+    "tests/test_agent_router_unit.py": "65dc1051f257712b2c8af012dcf89c1b53726bf82d0b68e6fb812b8bc033e0b3",
+    "tests/test_agent_workflow_api.py": "111cfbc7ff21649556b0b266d68ca3e591ef2bbb178f2071f90b2915f6389e68",
+    "tests/test_agent_workflow_integration.py": "ac7eaed132349dae9a3d3402294d10d44052a4cad06d4c5274ef73574ac1d735",
+    "tests/test_answerability.py": "cb07b4ee586d6f931c4beea5d7a446d80845e418b15b456b95ce327bf1a95305",
+    "tests/test_api.py": "b84c7ea6b4cd865baee0d1fe6ca1678fa589910546967a7a96c49bee9c55a27b",
+    "tests/test_auth_integration.py": "0d2d8b824ad14b5a1a6f89d588939eef26e4b060f78b88c2cd4ad7b1fc848478",
+    "tests/test_auth_unit.py": "d85ac2c8c478efa52e6032cd3e5e8c522a3ccabce5796d4ecc1658b61218b276",
+    "tests/test_backend_cache.py": "727ae8fda13548319a57f236a36daa95643eec3904fc19b2255f1f71ce466d72",
+    "tests/test_backends.py": "4aab7fa19d78a26c664824a3bde9129dd3bb74beaf7b1d8958e520ad385828bc",
+    "tests/test_chunk_resource_limits.py": "70ac1e43a13a7df79bc58f48df7bc9c2b84c04d8e9e6eb1d7fd07ba7d26e1f01",
+    "tests/test_chunking.py": "4329296b6ca5db91e4dc3968546bc5b98f19ab0d5bbe5b81e1d6473e6e1335a5",
+    "tests/test_cli.py": "78726aaa51b5928977e712d96156b4621784ef22cd5410a5c5d68c61f818fb8b",
+    "tests/test_collection_api.py": "a7698fd3714f7ddef5d6cce1e1f82a83573480cd9e12479df35794ea4f248f98",
+    "tests/test_collection_benchmark.py": "d6c2bc6560e97a946d21ad7177020b9d7b03d501df77f6489bf3ee91d5d93831",
+    "tests/test_collection_cli.py": "ee5493f14d550e50f6469e85e71d33b64ae4399f754bc68463e0bd840eee7210",
+    "tests/test_collection_client.py": "d30900512ca7fc1c320687a8a4d16bb158489ac8dfda1976675a9055c1cd3d4c",
+    "tests/test_collection_client_integration.py": "df51e229e4bad07adc38b6b31373d1adb0f3e7ce04d9325893d59622f3e2d391",
+    "tests/test_collection_encoder_actual.py": "46cfae95db720ada36f416cbc07c1af158616632051fce396bbde5d5a602f0fd",
+    "tests/test_collection_filters.py": "365bc9de4a81e1054e359865a105bee1704545d463082799d63fa85a4033637a",
+    "tests/test_collection_http_e2e.py": "6ca6efadbfc7cc87c850e2e5a73bf287161c26183c0a8229f79d5eb342eeceb7",
+    "tests/test_collection_models.py": "3c639b17cd7398c306ee28c794619b02502b972f2f4d36cbd5a8bd4bf70f76d4",
+    "tests/test_collection_postgres.py": "6108b1047b43e8cde0ac12046a3ed8b25721d0383986c912c52ec16cb32180b0",
+    "tests/test_collection_search.py": "a35829a4fc7bce8663d94932ec35caf09d2f631f04efcccd949009cd170a85e3",
+    "tests/test_collection_service.py": "854e93332021981b063d2dfcaba9f41867b5840955bcd9a167383d996add6794",
+    "tests/test_collection_storage.py": "f7474b8b3ad66f9e229228e9987134b7bc7774fbe06e04502b588e1be6fbef58",
+    "tests/test_config.py": "a83fe747ee63534f4ef47660a241b4c4b58cf9895c08a2c099b4cff412763679",
+    "tests/test_crag_actual.py": "8ce0f83b62ffa2fbbbec3cf439f12ccebd4f326de4bd908410acd031e7204fd1",
+    "tests/test_crag_adapter.py": "8b1cf07648e797111c225146eb0292c9063b7f918c23975996cf3b71c26ee1a3",
+    "tests/test_crag_combined_v10.py": "645ae93cb863ed3487c4ecfeb95ec94a31540d7cbb9213be861ee608f5343d28",
+    "tests/test_crag_local.py": "41805cc03349ee6fdb27c17230055bde0c462765b3d4eff7aa52ac6d191d5440",
+    "tests/test_crag_web.py": "f5edbeb0f3feb373c8a6987fb81345423e41d3a245c9abfb824434808a65d29f",
+    "tests/test_database.py": "d9009b951302f5e612b1da6c659629113419df62a0fcbb0c5efd7f4921caf91f",
+    "tests/test_deployment.py": "57f3cecec834b023922060d07953f1e12594ea2e69914f462e4801652d4db497",
+    "tests/test_embedding_contracts.py": "83d04c27fcc70a0406137bfa5dc65ec4aab0a2b59542b2dfe09fb9a77fc46807",
+    "tests/test_embedding_models_resource.py": "7a8430b357a3ac60d5deac21fb7044d9f0c8430846c4d065737b4cc2044eaac6",
+    "tests/test_embedding_selection_integration.py": "4c0b17d9fe6e972faa9203d4fa3cfb924a935d0d98c8be279cd81b56d352d347",
+    "tests/test_evaluate.py": "8afe073ed7fc96a513e4dff72099d3cd7c154f2948f8ee4ca1d89e3f1a281940",
+    "tests/test_features_integration.py": "d679fc73ec4862088958f4b6cdffb20a7a66a4303b786b8ae3575df7d81488ed",
+    "tests/test_features_unit.py": "a70363d4f7e24308bffa85d185d487fdd2139567f72cd54a1a4ff1575f94daad",
+    "tests/test_federated_contexts.py": "6b50f562ec0a145cb7787f8d4e45bc3887b5bd3038f31f7f68734bbca5772297",
+    "tests/test_file_io.py": "70e279e3b69377f33f4074ddf246ccb7b445719c152235d01fc63e04e63a8713",
+    "tests/test_graphrag_actual.py": "029cc08c2790b13d36323437e2fd820ef43a847d1828db2365789899865363f3",
+    "tests/test_graphrag_adapter.py": "7eccf7a2d6c87e546cb0d6c88fcf3fcf4f55dc424b0f43be0f92906e27a86480",
+    "tests/test_hipporag_adapter.py": "af1e525dea0f4fd44ce2f65c577bb0c1491273215bd19ab0b0049d929072de47",
+    "tests/test_hipporag_upstream.py": "e0bc8f21be15642e0c9e00fb4c999b1cbcd5049639a93c4bdf1abafaef156043",
+    "tests/test_inkling_integration.py": "b47a947b89d7ea83e0ce5e28dc8ea6eac8aae9bad419dc0e69145c850909021e",
+    "tests/test_inkling_local_setup.py": "b9a081cca1ea668a1b03dd2f217934cf45260debaafa5d31874471dd560f524a",
+    "tests/test_layers.json": "b631d60d3858a24a0e714c0c9ae1db6282e1c8729c7fa3588a133d8f6c151365",
+    "tests/test_limits.py": "b0ebd97e2ecf72ede3d1e4b1cf7f6c6c261bfbfa1d148c7292cc3c20db5aedf2",
+    "tests/test_local_model_auth.py": "7a0afff3aab36b4c2cc1de1571530d7cdfe02c08faeb3e45eca93776bc434351",
+    "tests/test_model_benchmark.py": "4c8d219d950a19c8f92ec2397ab5426c1fad0a22a997086c0949ff7016456350",
+    "tests/test_model_cli.py": "025fab509969dda404255b91a97e086d728e1dfc62a6b1ba918659829de56546",
+    "tests/test_model_profiles.py": "f806feac4d59dfbbbe6023aa800c134a43dff5ccf9c7ff5d12f779c0e4e0e27a",
+    "tests/test_monitoring.py": "4d6d70244aece1473da506aebc3ed9a36c0b90b779b39a21521fe88a1bd5a6ab",
+    "tests/test_multimodal.py": "c06c4509d8d7c2d97b4228e9d6cc3f239c3b7a366caa925792eda7cea5515d2e",
+    "tests/test_multimodal_features.py": "be8f5411d0757d2c9d0195d2683c977bbe4bef8916dbc2a49b0fe6eb026bd916",
+    "tests/test_native_integration.py": "10f4cfe1ffa5b9fb75770bd85008ea3148240a00c16a4a7a75cc9bf67434fd4a",
+    "tests/test_native_tokenizers.py": "85e69c626f60ea08e6d55b65946e24157cbe252dbe6b502620bc4d833b7096c2",
+    "tests/test_native_units.py": "65eb74dff9dc7e2950a1ee2687a4e86a9862db56f4412bf16f439c92bf08ce1a",
+    "tests/test_ollama_embeddings_http.py": "ad70fa8e146b335d949d66852183170226d53e3fb003d8655300f1932bff33a4",
+    "tests/test_postgres_storage.py": "3d3158885d34b33f1568b961ccf56cf42d0aa10b7dc09e5a4fe55b1b715c74ac",
+    "tests/test_postgres_unit.py": "715a34dd0e1c4e0716c6ad4763bc62b4df0124c0b9a634124b26e691ffc4b391",
+    "tests/test_provider_api.py": "9533c89b4cee8ef0fba36d7579938768f0b01c8bf4f3b310a3c417de95348761",
+    "tests/test_provider_endpoints.py": "96229f860027832054b848262815060c82961905aaf9d4abd4aa463df77a56da",
+    "tests/test_provider_transport.py": "082e17a2411d23aebdde643e52afeaa795e04204dbd19a5aeb96153930d38f77",
+    "tests/test_providers.py": "1ca49953a32046fcb33cf09d9a1594ea089a2d79eeafe7837a7dcc9f2b970c33",
+    "tests/test_qwen_local_setup.py": "8c4f575d7a6195df5bf19fa7d750c190fd32a0ae0528c983f76161a87a6edca2",
+    "tests/test_reembedding_wire_contracts.py": "d1e1f0bbc4a48b4b329ef5d1b4f96390aa803796df6f03db314337d694bf3624",
+    "tests/test_reindex.py": "ee1a4e52f58fd5f1285ec39aa8834ac199140ba273a241296352a1152aabdd99",
+    "tests/test_request_boundaries.py": "4bffe686b6c1a9709df28e54ba13aa06531934b1c3afb2278a6f9eaec65df874",
+    "tests/test_research_credentials_v10.py": "d2784baf3becefaf027def87db6e82cb728781e1623cefa7ed3c67964ea5cb22",
+    "tests/test_research_features.py": "092e31d0ccada3b5c06121e83aaf2f2ca126b726b67268154471d67afe9fe432",
+    "tests/test_research_http_errors_v10.py": "9e40683c1cba0a82bcd954e46b2b1a895fe60a3bb207b0da491f27fbc60e3b7d",
+    "tests/test_research_provenance_v10.py": "33676a11b98f96231fed8512364785653225e02d7687ec76dc6ee37d30df3bb8",
+    "tests/test_research_scope_v10.py": "2f7d150e436cf78994059b2296ad124bf451539aa190c0af02c4dcad50f215c1",
+    "tests/test_research_service.py": "9d91e21e5c9253a6cb50f21dd16592d27765c5311a700239888b4626ba55feec",
+    "tests/test_research_upstreams.py": "9590b5f4e9d03ed9384076d7abbe755f940a076cd181af276173bbbe4848b190",
+    "tests/test_research_v10_contracts.py": "73235608fa1afb170a6c1de7c8d3b75fa5bf4ca41e35f77a1738343250a5d1ac",
+    "tests/test_retrieval_dispatch.py": "724f521a8e39703c7d18f805d25dd9d50466be7077891c17547f30d25f3f2b5e",
+    "tests/test_review_data.py": "9e6d67a841076cfd54639fec767b4443aadc29f687809820d8d3585b83ea3994",
+    "tests/test_router_rag_integration.py": "c5b371d2ca18df61b4043008a63c79bd10f9592818538bcdae4554174a5f0d96",
+    "tests/test_runtime_regressions.py": "f23c1871ecc117f5e116f22c0fb70969f92fb000bc44f9d8af362d33d5522b60",
+    "tests/test_selfrag.py": "f1522a92b41c3b9ba9ffa65792e3e151a7c931591be33a345ba80cba6b2eb4b6",
+    "tests/test_selfrag_local.py": "1a9c58f6fd136b8469d3606161118518a58579623bbd9ef83770158f90fbc91a",
+    "tests/test_selfrag_runtime_integration.py": "bc522418946628fb475c9193423760897e61879118ca228b1aeebe15909fb5b1",
+    "tests/test_selfrag_setup_integration.py": "58305b8d3ad15f7a9ab35866a13cd795e2fe41abaac4d277788da5529056a110",
+    "tests/test_semantic_encoder.py": "f0d2c0ff9dc0290f679efe4b983a7505c89556c3ba4915c62715214f665fb5de",
+    "tests/test_sqlite_scoping.py": "282c42044ecec80ae77ef15ac003f8c27b05d3e0228366a57a632454a201a38f",
+    "tests/test_storage_atomicity.py": "71cd8ce02602e9b8eab9049aebe136c4b5469a2d21f64445ec6df791751072b9",
+    "tests/test_testing_contracts.py": "76ad35d3759f51c2becf725168316c1ce2005c2c69d06d5e3ea6adcbda1fdf23",
+    "tests/test_tokenization.py": "7a2cc954dd08cf6b7c25f32ef57d277e557b812f54dab66897fd03f8e0fa3326",
+    "tests/test_tokenizer_registry_integration.py": "2029ad3333a2c54ef0f3fd3ca64e861b7ad06b100c5dc7c665366e3ec4fabfc3",
+    "tests/test_tokenizer_selection_unit.py": "e549ed95569149bec6bf8c1dd8a25424c511b1bb052a410e63005ae2c76e1275",
+    "tests/test_uploads.py": "a04b9a29f1497f82929fdc1a2e1e8b6bcd71d0b3181d5b54d432c89cb46c18fd",
+    "tests/test_verify_admission.py": "8d6ebb7a05d837d6660507d2ed195cfe5fc19f3ab7c0f30f23b3ed2343f301bc",
+    "tests/test_vision.py": "8de81f9b7aaec2b453f86bfdb51f409105e43758a288020101e2d695f7866867",
+    "tests/test_vision_providers.py": "5a2f5c31f8b6a28365a0974c5d2a7679332f0dab1bb1254fe97b52d0709c26fa",
+    "uv.lock": "5d42e7c73162b4ab8fb76e4ab06f7a0e892e7578cb4b3691d05f243370d7c10a"
+  },
+  "evidence_sha256": {
+    "embedding-model-artifacts.json": "f2ecadefe9247925e5034866702da9474252894abcf874c921129f7946bcf922",
+    "embedding-model-latency.json": "b2d7c4ba4e8fd095d6336572f77300070f32613d4f6b3ff9a95f5b85e6101724",
+    "embedding-models.xml": "92b12bd50f99a9d44362b4553d08e54c5e029cc5146761164d0d16bf5ea35f6a",
+    "selection-coverage-core.json": "cfcaa508e898fa59f8803683a55e31a8ed855d190513c887aaf718c80a5a1900",
+    "selection-coverage-unit.json": "43a1f17388a7a6ca5f14880f71bad0197d79cbb47d10843c9eee2480bc8152cd",
+    "selection-coverage.log": "a95fbc82ca131e7e094e61289b6ceea69d2bea8dd371ab721d743e88a3d1837a",
+    "selection-doclinks.json": "8e48b293d5bb69afdb02d2142f4e7ab206bbb766806a4247cdcd882f2644ab00",
+    "selection-http.log": "dfba553a090c00ead15d66c0c216993288b2da6f0c582443be67594e3a540724",
+    "selection-http.xml": "b1cfb15cc0e1c357bce85a992bd6b797ffdd69b7fffa05a77ade514b91cd6dea",
+    "selection-integration.log": "adef368b26bdc0cc44e3f85fc2f24d18beba1d6bedf157eb4da479a961dbdd1d",
+    "selection-integration.xml": "1307cc23ed81b12b3185b5a0633a4b0abf3f383f9160a2cb8a56512279262d63",
+    "selection-inventory-http.json": "7e827b27b4d33d17c5f20cdd30a6a11131c8b1f2bb18b8ab858434610404566e",
+    "selection-inventory-integration.json": "c104a1a740195a7e0896ff8e407d35fa93a04e949dab86bf0f0ff70f973264d1",
+    "selection-inventory-postgres.json": "bee5d83aa1ed0fd8d6e0c0e101d444532d8311a4bd5d8c0b27d570ba19dd1429",
+    "selection-inventory-unit.json": "c8da7b93ca3064313a104fc48cfe6646917c9e5ccb2db8d3aa3ae51898381904",
+    "selection-postgres.log": "d1067f9a20dee4bc038847140250ac6a2946b0f59c8b7b7e3aeb6071c55fdda0",
+    "selection-postgres.xml": "c8bc4a240a3ea540ed12e156e0d239f9048a5db2548a69395ccb6f5a0a3abdd3",
+    "selection-readme.json": "fcf2ce8a98031d4dbe2ac8465a9dcc47ee9939fa26fbe3cd6cc939ff389e42fe",
+    "selection-unit.log": "ff9cfd5cbe0b6a55020ff45bd350bf449c013bf60a3289caa6415b881340b9de",
+    "selection-unit.xml": "d2765d6d20af040b306132d8abfb1910162c7262c67414040bf25eb35df20ed6",
+    "selection-wheel.json": "a8699e71efcfc92b52806dfbc2aac426ec80fab01d1eaaa7acf77c9bc570c270",
+    "selection-wheel.log": "acc7d23e9c01da36869a8694b34c5ea56818a738acd1a7f700a9e06cc1775c1a"
+  },
+  "limitations": [
+    "Five trained encoder presets were actually executed. Offline hash vectors and HTTP fixture vectors are not trained-model performance evidence.",
+    "Ten sequential warm samples per role on a shared CPU establish a smoke measurement, not retrieval quality, concurrent capacity, memory usage or production latency. With this estimator and sample size, p95 equals the maximum.",
+    "Sentence Transformers checkpoints use immutable revisions. FastEmbed preparation resolves main and records the actual resolved revisions and file hashes; those download inputs are not immutable pins.",
+    "Weights were provisioned before the recorded offline inference. First-use timings measure runtime loading and encoding with those cached artifacts, not download duration.",
+    "An initial network-enabled native test was blocked by automatic approval review for attempted Microsoft telemetry. It is excluded from passing evidence; successful inference used an OS network namespace with all outbound networking unavailable.",
+    "The remaining 25 explicit resource/E2E cases retain their separate CI gates; they are not selected skips. The full frozen Qwen admission benchmark remains an unchanged manual job.",
+    "Upstream Starlette/httpx deprecation warnings remain; they do not change the zero-skip gate."
+  ]
+}

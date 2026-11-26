@@ -440,7 +440,8 @@ def chunk_document(
             metadata={"strategy": config.strategy, "algorithm": ALGORITHM_VERSION,
                       "source_offset_unit": "python_characters", "count_kind": tokenizer.count_kind,
                       "embedding_token_count": tokenizer.count(embedding_text),
-                      "context_token_count": tokenizer.count(context), "context_truncated": context_truncated,
+                      "context_token_count": tokenizer.count(context) if context else 0,
+                      "context_truncated": context_truncated,
                       **extra},
         )
         chunks.append(draft)
@@ -451,5 +452,7 @@ def chunk_document(
     leaves = [chunk for chunk in chunks if chunk.role == "leaf"]
     for previous, current in pairwise(leaves):
         overlap = text[current.start_char:min(previous.end_char, current.end_char)] if current.start_char < previous.end_char else ""
-        current.metadata["overlap_with_previous"] = tokenizer.count(overlap)
+        # No shared source slice means zero overlap, even when an encoder's
+        # complete-input counter charges BOS/EOS or a document prefix on "".
+        current.metadata["overlap_with_previous"] = tokenizer.count(overlap) if overlap else 0
     return ChunkPlan(chunks, profile)

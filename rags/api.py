@@ -334,6 +334,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "collections": collections.capabilities(principal),
                 "image_assets": multimodal.capability()}
 
+    @app.get("/v1/models")
+    def models(tenant: Annotated[str, Depends(auth)]) -> dict:
+        from rags.model_discovery import model_discovery
+        return model_discovery(config)
+
+    @app.get("/v1/tokenizers")
+    def tokenizers(tenant: Annotated[str, Depends(auth)]) -> dict:
+        from rags.model_discovery import tokenizer_discovery
+        return tokenizer_discovery(config)
+
     @app.get("/strategies")
     def strategies(request: Request, tenant: Annotated[str, Depends(auth)]) -> dict:
         principal = request.state.principal

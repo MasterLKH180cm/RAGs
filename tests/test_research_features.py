@@ -91,7 +91,7 @@ def test_invalid_explicit_permissions_are_not_replaced_with_environment_defaults
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("embedding", ["fastembed", "openai"])
+@pytest.mark.parametrize("embedding", ["fastembed", "openai", "sentence_transformers"])
 def test_exact_injected_counter_remains_usable_without_native_tiktoken(embedding, monkeypatch):
     # An explicit Settings snapshot remains authoritative over ambient defaults.
     monkeypatch.setenv("RAGS_FEATURES_JSON", '{"research":false}')

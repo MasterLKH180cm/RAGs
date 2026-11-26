@@ -86,7 +86,7 @@ def routed_service(store, host, calls, *, space_id="", key="synthetic-key"):
 
     provider = Providers(settings)
     provider.model_router = ModelRouter(AgentPlatformConfig(gateway_url=host, gateway_key=key,
-                                                           models={"embed": "openai/synthetic-embedding"}))
+                                                           models={"embed": "openai/text-embedding-3-small"}))
     provider.model_router._client = lambda *_: httpx.AsyncClient(transport=httpx.MockTransport(gateway))
     return RAGService(store, provider)
 

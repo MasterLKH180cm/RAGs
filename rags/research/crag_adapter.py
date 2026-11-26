@@ -100,7 +100,12 @@ class GenerationBridge:
         provider.require_generation()
         config = settings.generation_tokenizer_config
         features.require("tokenizer." + config.get("backend", "unicode"))
-        self.tokenizer = resolve_tokenizer(config)
+        binding = getattr(provider, "embedding_tokenizer", None)
+        self.tokenizer = resolve_tokenizer(
+            config, artifacts=getattr(settings, "tokenizer_artifacts", {}),
+            embedding_tokenizer=(binding() if config.get("backend") == "embedding"
+                                 and callable(binding) else None),
+        )
         self.input_budget = settings.context_budget - settings.output_budget - settings.envelope_budget
         self.generation_calls = 0
 

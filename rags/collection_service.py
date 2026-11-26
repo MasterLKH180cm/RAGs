@@ -69,10 +69,12 @@ def _fingerprint(value: object) -> str:
 
 
 class CollectionService:
-    def __init__(self, store: Store, provider: Providers, config: CollectionConfig | None = None):
+    def __init__(self, store: Store, provider: Providers, config: CollectionConfig | None = None,
+                 *, profile_id: str | None = None):
         self.store = store
         self.provider = provider
         self.settings = provider.settings
+        self.profile_id = profile_id
         self.config = config if config is not None else self.settings.collection_config
         if not isinstance(self.config, CollectionConfig):
             raise ValueError("Collection service needs validated limits")
@@ -143,6 +145,9 @@ class CollectionService:
     def _dispatch(self, principal: Principal, operation: str, cid: str | None, request):
         tenant = principal.tenant
         if operation == "create":
+            if request.embedding is not None and request.embedding.mode == "profile":
+                selected = self._profile_service(request.embedding.profile_id)
+                return selected._create(tenant, request.model_copy(update={"embedding": None}))
             return self._create(tenant, request)
         if operation == "list":
             if request.name is not None:
@@ -165,10 +170,11 @@ class CollectionService:
             info = self.database.get(tenant, cid)
             result = {"collection_id": cid, "generation": info["generation"], "count": info["record_count"]}
             if operation == "indexing_status":
+                selected = self._service_for_info(info, required=False)
                 result.update(state="ready", consistency="transactional", record_count=info["record_count"],
                               vector_count=info["record_count"], pending_operations=0,
                               embedding=info["configuration"]["embedding"],
-                              text_query_profile_matches=self._configured_matches(info),
+                              text_query_profile_matches=selected is not None and selected._configured_matches(info),
                               index="pgvector_exact" if self.store.is_postgres else "float32_cosine_exact")
             return result
         if operation in {"add", "update", "upsert"}:
@@ -188,19 +194,40 @@ class CollectionService:
             return self._ask(principal, cid, request)
         raise _invalid()
 
+    def _profile_service(self, alias: str):
+        # Authorization and tenant-scoped lookup happen in dispatch before this
+        # request-local selection. No shared provider/settings objects are mutated.
+        selected = self.provider.for_embedding_profile(alias)
+        return CollectionService(self.store, selected, self.config, profile_id=alias)
+
+    def _service_for_info(self, info: dict, *, required: bool = True):
+        alias = info["configuration"]["embedding"].get("profile_id")
+        if alias is None or self.profile_id == alias:
+            return self
+        try:
+            return self._profile_service(alias)
+        except CapabilityError:
+            if required:
+                raise
+            return None
+
     def _configured_identity(self) -> dict:
         model = valid_text(self.provider.embedding_model, 160)
         endpoint = valid_text(self.provider.embedding_endpoint, 4096)
         space = self.settings.embedding_space_id or ("configured:" + _fingerprint({"model": model, "endpoint": endpoint}))
-        return {"mode": "configured", "model": model, "endpoint": endpoint, "space_id": space,
-                "dimensions": None, "normalization": "l2-f32-v1"}
+        result = {"mode": "configured", "model": model, "endpoint": endpoint, "space_id": space,
+                  "dimensions": self.settings.embedding_dimensions, "normalization": "l2-f32-v1"}
+        if self.profile_id is not None:
+            result["profile_id"] = self.profile_id
+        return result
 
     def _configured_matches(self, info: dict) -> bool:
         binding = info["configuration"]["embedding"]
         if binding["mode"] != "configured":
             return False
         active = self._configured_identity()
-        return all(binding[key] == active[key] for key in ("model", "endpoint", "space_id"))
+        return (binding.get("profile_id") == active.get("profile_id")
+                and all(binding[key] == active[key] for key in ("model", "endpoint", "space_id")))
 
     def _create(self, tenant: str, request: CollectionCreate) -> dict:
         if request.sparse_space_id is not None:
@@ -228,6 +255,10 @@ class CollectionService:
         self.settings.features.require("embedding." + self.settings.embedding_provider)
         for text in texts:
             valid_text(text, 20_000)
+        preflight = getattr(self.provider, "preflight_embeddings", None)
+        if callable(preflight):
+            preflight(texts, query=query)
+            return
         callback = getattr(self.provider, "embedding_token_count", None)
         if callable(callback):
             maximum = getattr(self.provider, "embedding_token_limit", None)
@@ -299,6 +330,18 @@ class CollectionService:
             info = snapshot.collection
             _expected(info, request.expected_generation)
             existing = {record["id"]: record for record in snapshot.records}
+        # Preserve provider-free explicit-vector and metadata-only operations.
+        # Only text that really needs encoding resolves an approved runtime.
+        needs_profile = request.embeddings is None and any(
+            not existing.get(identifier) or (request.documents is not None
+                and request.documents[index] is not None
+                and request.documents[index] != existing[identifier]["document"])
+            for index, identifier in enumerate(request.ids)
+        )
+        if needs_profile:
+            selected = self._service_for_info(info)
+            if selected is not self:
+                return selected._write(tenant, cid, mode, request)
         if mode == "add" and existing:
             raise CapabilityError("collection_conflict", "At least one record already exists", 409)
         if mode == "update" and len(existing) != len(request.ids):
@@ -385,6 +428,10 @@ class CollectionService:
         if len(request.searches) > 1:
             self.settings.features.require("collections.batch")
         info = self.database.get(tenant, cid)
+        if any(search.uses_dense and search.query_embedding is None for search in request.searches):
+            selected = self._service_for_info(info)
+            if selected is not self:
+                return selected._search(tenant, cid, request)
         for search in request.searches:
             self._preflight_search(search, info)
         to_encode = [search.query_text for search in request.searches

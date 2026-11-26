@@ -6,6 +6,12 @@ The [specification](MAINTAINABILITY_REVIEW_SPEC.md) was committed before impleme
 This report covers the current RAGs repository; downloaded model weights and
 upstream dependency implementations are outside its scope.
 
+The CR-01–CR-18 findings, original README measurements, validation totals and
+file inventory below preserve that completed review. The subsequent
+[core architecture follow-up](#core-architecture-follow-up-on-2026-11-26)
+records the disposition of the retained concerns during the embedding/tokenizer
+selection work. Historical test and inventory counts are not current-task totals.
+
 ## Outcome
 
 The review found **18 confirmed code defects: 17 P2 and one P3**. All are fixed
@@ -348,8 +354,12 @@ fixtures with semantic-model performance.
 
 ## Architectural observations deliberately retained
 
-These are concrete future change/scaling concerns, rather than unresolved
-instances of the defects above.
+These numbered observations record the original review's change/scaling
+concerns, rather than unresolved instances of CR-01–CR-18. Their original
+descriptions are preserved here. The dated follow-up resolves the dispatcher,
+connection-lifecycle, historical candidate-materialization and late-interaction
+cache concerns in items **1, 3, 4 and 5**; their remaining operational limits are
+stated separately below.
 
 1. **The retrieval dispatcher coordinates several strategy contracts.**
    `RAGService._retrieve` combines strategy selection, ranking, model loops,
@@ -357,6 +367,9 @@ instances of the defects above.
    metadata. Extract a cohesive handler when extending that strategy, with the
    existing tenant/evidence tests as contracts. A blanket dispatcher rewrite
    would obscure which semantics changed during this repair.
+
+   **Follow-up status: resolved.** Fixed internal handler maps, cohesive handlers
+   and a complete strategy-inventory regression now replace the mixed dispatcher.
 
 2. **Authentication, route capabilities and request models have parallel maps.**
    Collection routing, SDK dispatch, feature scopes and request models must evolve
@@ -370,6 +383,9 @@ instances of the defects above.
    connection-policy change should cover both; an extraction must retain those
    differences explicitly.
 
+   **Follow-up status: resolved.** Both stores use the shared connection lifecycle
+   while retaining their schema ownership and explicit foreign-key policies.
+
 4. **SQLite and PostgreSQL have different scaling paths.** Some SQLite retrieval
    paths materialize historical tenant candidates before Python filtering;
    PostgreSQL pushes selected revisions or allowed IDs into queries. Measure
@@ -377,11 +393,19 @@ instances of the defects above.
    immutable fork payload sharing and O(record-count) mapping copies remain the
    documented contracts; no ANN or Chroma Cloud throughput equivalence is claimed.
 
+   **Follow-up status: historical candidate materialization resolved.** SQLite
+   now applies revision and authorized-ID predicates in SQL before materializing
+   chunk candidates. The exact-search and collection-copy scaling contracts remain.
+
 5. **Optional caches bound entries rather than resident bytes.** In particular,
    the late-interaction cache's vector matrices vary in size. A memory-budgeted
    eviction policy would make its operational ceiling clearer. The encoder
    construction lock fixes duplicated initialization but does not impose an RSS
    limit or establish a throughput improvement.
+
+   **Follow-up status: late-interaction payload cache resolved.** The cache now
+   enforces byte and entry ceilings with synchronized LRU eviction. Model weights,
+   in-flight computations and process RSS remain outside that payload budget.
 
 6. **Operator callbacks remain trusted and cooperative.** Late read-only tool
    results can be discarded, but Python threads cannot safely kill arbitrary
@@ -427,7 +451,147 @@ instances of the defects above.
     passed**, unpromoted and not enabled by default. This review did not alter
     profiles, datasets, recorded quality results, thresholds or promotion status.
 
+## Core architecture follow-up on 2026-11-26
+
+This follow-up implements the four actionable retained concerns against baseline
+`50436763b63f895054b315f9732eb1979901f80b`, under the specification committed as
+`13a0dbfd9a77099b68f8c793b765cbe80ecf4e16`: [Embedding and tokenizer selection](EMBEDDING_TOKENIZER_SELECTION_SPEC.md).
+It does not replace or renumber the original confirmed findings.
+
+| Original observation | Current implementation | Behavior regressions |
+| --- | --- | --- |
+| 1 · Mixed retrieval dispatcher | [`retrieval.py`](../rags/retrieval.py) keeps common preflight, authorized source selection and ranked-result assembly in `_retrieve`; fixed internal maps select cohesive `_retrieve_*` handlers. Routing, iterative review and federation retain their existing complete-result contracts. | [`test_retrieval_dispatch.py`](../tests/test_retrieval_dispatch.py), [`test_native_integration.py`](../tests/test_native_integration.py), [`test_features_integration.py`](../tests/test_features_integration.py) and [`test_research_scope_v10.py`](../tests/test_research_scope_v10.py). |
+| 3 · Duplicated connection lifecycle | New [`database.connect`](../rags/database.py) owns SQLite setup, commit, rollback and close, and delegates PostgreSQL lifecycle to its native adapter. [`Store`](../rags/storage.py) and [`AssetStore`](../rags/multimodal.py) keep their own schema initialization. | [`test_database.py`](../tests/test_database.py), [`test_storage_atomicity.py`](../tests/test_storage_atomicity.py) and [`test_multimodal.py`](../tests/test_multimodal.py). |
+| 4 · Historical candidates loaded before filtering | [`Store.scope`, `dense`, `sparse` and `relations`](../rags/storage.py) apply selected revision or chunk/evidence-ID predicates in SQL. SQLite scope reads use an explicit transaction snapshot. | [`test_sqlite_scoping.py`](../tests/test_sqlite_scoping.py), existing storage atomicity tests and native retrieval regressions. |
+| 5 · Entry-only late-interaction cache | [`_TokenVectorCache` and `BackendManager`](../rags/backends.py) use synchronized LRU eviction with retained-payload byte accounting and an entry ceiling. Oversized results still serve the query without being retained. | [`test_backend_cache.py`](../tests/test_backend_cache.py) and [`test_backends.py`](../tests/test_backends.py). |
+
+### SQL scoping and snapshot evidence
+
+The actual SQLite fixture keeps three visible current documents, one excluded
+document in the same tenant and one document in a different tenant. It increases
+the processing history of each visible document while measuring rows fetched
+into Python, independently of the final returned result count:
+
+| Historical revisions per visible document | Stored chunks in the queried tenant | Effective document rows materialized before metadata filtering | Authorized chunk rows materialized |
+| ---: | ---: | ---: | ---: |
+| 0 | 4 | 4 | 3 |
+| 40 | 124 | 4 | 3 |
+| 160 | 484 | 4 | 3 |
+
+The four document rows represent one effective revision per tenant document;
+the metadata filter then selects three. Revision projection excludes unused
+source bodies and checksums. Retrieval's chunk projection also omits vectors
+until dense ranking needs them. This preserves Python's existing distinction
+between boolean and numeric metadata values without loading excluded chunk text
+or historical vectors. Evidence is
+`test_scope_materializes_only_live_authorized_chunks_as_history_grows` in
+[`test_sqlite_scoping.py`](../tests/test_sqlite_scoping.py).
+
+Connection-local temporary scope tables use bound inserts, so the implementation
+does not require JSON1 or a placeholder for every allowed ID in a single SQL
+statement. With SQLite's variable limit reduced to **32**, the large-scope
+regression checks scope selection for 90 documents and passes **1,290 allowed
+IDs**—90 stored and 1,200 missing—to dense, sparse and graph reads. Each returns
+the expected tenant rows. The temporary tables disappear when their connection
+closes.
+
+A separate deterministically interleaved regression deletes a source through
+another real SQLite connection after revision selection and before chunk selection. The
+in-progress scope still returns the original source snapshot; the next scope
+returns no source. Ranking regressions compare dense cosine, global FTS BM25 and
+graph results with the prior formulas and ordering, including tied scores,
+historical revisions, excluded records and a foreign tenant.
+
+These measurements establish reduced candidate materialization. SQLite still
+evaluates revision history internally, and exact dense ranking still evaluates
+the authorized vectors. They do not establish constant query time, an ANN index
+or a general throughput improvement.
+
+### Lifecycle, cache and dispatch boundaries
+
+The shared connection helper preserves the 20-second SQLite connection/busy
+timeout and WAL policy. `Store` explicitly enables foreign keys; `AssetStore`
+explicitly retains its disabled policy. Both roll back on failures, including
+`BaseException`, and close after success, setup failure or body failure. No
+connection or schema is created by importing the helper. PostgreSQL connection
+configuration remains owned by [`postgres.connect`](../rags/postgres.py).
+
+The late-interaction cache defaults to **64 MiB of retained payload** and
+**1,000 entries**. Operators can set `RAGS_BACKEND_CACHE_BYTES`; zero disables
+retention. Matrices are retained as immutable tuples so later mutation of an
+encoder-returned list cannot invalidate accounting. Cache operations, recency
+updates and byte totals share one lock. Only least-recently-used entries needed
+to fit the new value are evicted; an oversized matrix is used without caching.
+
+On the reviewed CPython 3.12 runtime, the variable-size LRU fixture retained
+exactly two expected keys, `a` and `d`, at **836 accounted bytes against an
+836-byte budget** after evicting `b` and `c`. The test derives its budget from
+actual object sizes, so this byte total is interpreter-dependent. A separate
+400-task concurrent test verifies both ceilings and recomputes the exact
+retained-payload total. Search tests preserve MaxSim scores and each requesting
+tenant's own source IDs with caching enabled, disabled and too small to retain a
+matrix. This budget excludes cache bookkeeping, in-flight encoding allocations
+and model weights; it is not a process-RSS ceiling.
+
+The dispatcher now separates the authorized request snapshot from a handler's
+ranked selection. Its central method decreased from **197 to 29 lines**, but the
+meaningful contract is the inventory regression: every one of the **27 advertised
+strategies** has exactly one owned callable, with no overlap between ranked and
+complete-result paths. Unknown strategies still fail before reading service
+dependencies. Real SQLite tests verify one filtered snapshot, unchanged source
+identity, score labels and common trace assembly for the ranked paths. The
+internal maps do not provide external plugin registration.
+
+Focused behavior checks can be reproduced in the configured test environment:
+
+```bash
+python -m pytest -q \
+  tests/test_database.py tests/test_sqlite_scoping.py \
+  tests/test_backend_cache.py tests/test_retrieval_dispatch.py \
+  --require-no-skips
+```
+
+This follow-up records the implemented behavior and focused measurements. Final
+integrated validation for the embedding/tokenizer selection work is recorded in
+[`testing-results-embedding-selection.json`](testing-results-embedding-selection.json);
+the completed totals below belong to the original review.
+
+### Remaining observations checked against current code
+
+No new unresolved defect was confirmed in the four repaired areas during this
+follow-up. The other original observations remain bounded design or operational
+concerns, with the following current scope:
+
+- Collection operations, request models and feature requirements still have
+  parallel declarations in [`collection_service.py`](../rags/collection_service.py),
+  with HTTP routing in [`collection_api.py`](../rags/collection_api.py) and SDK
+  dispatch in [`client.py`](../rags/client.py). No current permission-order or
+  route mismatch was demonstrated by this follow-up.
+- [`Workflow`](../rags/agents/workflow.py) still waits for trusted registered
+  callbacks; snapshots do not make those callbacks an OS sandbox. The research
+  process boundary in [`research_service.py`](../rags/research_service.py) retains
+  its separate lifecycle and resource responsibilities.
+- [`ObservationStore.recent`](../rags/agents/memory.py) excludes expired facts
+  without physically purging history. Admin sessions and telemetry remain
+  process-local in [`admin.py`](../rags/admin.py) and
+  [`monitoring.py`](../rags/monitoring.py).
+- The HTTPX fixture in [`conftest.py`](../conftest.py) is still a test transport
+  guard, not a sandbox for all native libraries or child processes. Explicit
+  resource jobs and their independent evidence remain necessary.
+- Broad dependency-boundary sanitization, side-effect-free SDK imports, exact
+  search, collection copy costs, separate evidence types and frozen admission
+  artifacts remain the intentional contracts described in observations 4–12.
+
+These observations do not reopen the four resolved items or certify unreviewed
+runtime behavior. The new production module added by this core follow-up is
+[`database.py`](../rags/database.py); the other affected runtime and test files
+are listed in the disposition table. The historical whole-repository inventory
+below is preserved rather than presented as an inventory of the expanded tree.
+
 ## Compatibility and validation
+
+This section records compatibility and completed validation for the original
+maintainability review, before the subsequent embedding/tokenizer selection work.
 
 Public routes, tenant/owner ordering, exact source references, storage schemas,
 provider/model identities, router/agent/memory defaults and coverage/resource
@@ -486,9 +650,11 @@ have their own CI gates. The review does not claim a new model-performance measu
 
 ## File coverage inventory
 
-The following inventory is generated from the reviewed working tree. Every
-production module and executable script is listed explicitly; data fixtures,
-model weights and dependency source are not included in the source inventory.
+The following historical inventory records the working tree from the original
+maintainability review. Every production module and executable script reviewed
+at that stage is listed explicitly; data fixtures, model weights and dependency
+source are not included. It does not include modules added by the subsequent
+embedding/tokenizer selection work.
 
 ### Production Python modules (64)
 

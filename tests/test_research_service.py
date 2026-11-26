@@ -152,6 +152,8 @@ def test_child_environment_does_not_receive_service_keys_or_unrelated_secrets(mo
     monkeypatch.setenv("RAGS_MODEL_CACHE", "relative-cache")
     monkeypatch.setenv("RAGS_MODEL_PROVIDER", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "explicit-generation-credential")
+    registry = '{"selected":{"backend":"huggingface","path":"/models/tokenizer.json","sha256":"' + "a" * 64 + '"}}'
+    monkeypatch.setenv("RAGS_TOKENIZER_ARTIFACTS_JSON", registry)
     environment = worker_environment(ResearchSettings("raptor", {"key": "a"}, raptor_source=str(tmp_path)))
     assert not any("credential-sentinel" in value for value in environment.values())
     assert environment["OPENAI_API_KEY"] == "explicit-generation-credential"
@@ -159,6 +161,56 @@ def test_child_environment_does_not_receive_service_keys_or_unrelated_secrets(mo
     assert environment["PYTHONPATH"].split(os.pathsep)[0] == str(tmp_path)
     assert environment["ORT_DISABLE_TELEMETRY"] == "1"
     assert environment["RAGS_ADMISSION_POLICY"] == "compatibility"
+    assert environment["RAGS_TOKENIZER_ARTIFACTS_JSON"] == registry
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("provider", ["sentence_transformers", "openai"])
+def test_selected_embedding_contract_survives_actual_worker_settings(monkeypatch, tmp_path, provider):
+    from rags.config import Settings
+    from rags.research_worker import provider_settings
+
+    for name in tuple(os.environ):
+        if name.startswith(("RAGS_", "OPENAI_", "ANTHROPIC_")):
+            monkeypatch.delenv(name)
+    values = {
+        "RAGS_ENV": "test", "RAGS_MODEL_PROVIDER": "openai", "OPENAI_API_KEY": "fixture-generation",
+        "RAGS_GENERATION_TOKENIZER_JSON": '{"backend":"unicode"}',
+        "RAGS_EMBEDDING_PROVIDER": provider, "RAGS_EMBEDDING_DIMENSIONS": "128",
+        "RAGS_EMBEDDING_QUERY_PREFIX": "query: ", "RAGS_EMBEDDING_DOCUMENT_PREFIX": "document: ",
+        "RAGS_EMBEDDING_NORMALIZE": "true", "RAGS_EMBEDDING_INPUT_POLICY": "exact",
+        "RAGS_EMBEDDING_PROFILES_JSON": json.dumps({"unused": {
+            "provider": "openai", "model": "unused", "api_key_env": "UNRELATED_PROVIDER_TOKEN",
+        }}),
+    }
+    if provider == "sentence_transformers":
+        values.update(RAGS_EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2",
+                      RAGS_EMBEDDING_REVISION="a" * 40, RAGS_EMBEDDING_AUTH_MODE="required")
+    else:
+        values.update(
+            RAGS_EMBEDDING_MODEL="custom-exact-encoder", RAGS_EMBEDDING_AUTH_MODE="none",
+            RAGS_EMBEDDING_BASE_URL="http://127.0.0.1:9999", RAGS_EMBEDDING_TOKEN_LIMIT="512",
+            RAGS_EMBEDDING_SPECIAL_TOKENS="2",
+            RAGS_EMBEDDING_TOKENIZER_JSON='{"backend":"huggingface","model":"selected"}',
+            RAGS_TOKENIZER_ARTIFACTS_JSON=json.dumps({"selected": {
+                "backend": "huggingface", "path": str(tmp_path / "not-loaded.json"), "sha256": "b" * 64,
+            }}),
+        )
+    for name, value in values.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("UNRELATED_PROVIDER_TOKEN", "must-not-cross-boundary")
+    before = Settings.from_env()
+    environment = worker_environment(ResearchSettings("lightrag", {"service-key": "tenant"}))
+    assert "RAGS_EMBEDDING_PROFILES_JSON" not in environment
+    assert "UNRELATED_PROVIDER_TOKEN" not in environment
+    monkeypatch.setattr("rags.tokenization.read_tokenizer_artifact",
+                        lambda *_: pytest.fail("Worker configuration must not load tokenizer files"))
+    with monkeypatch.context() as child:
+        child.setattr(os, "environ", dict(environment))
+        restored = provider_settings()
+    assert restored.embedding_profile == before.embedding_profile
+    assert restored.tokenizer_artifacts == before.tokenizer_artifacts
+    assert restored.generation_tokenizer_config == before.generation_tokenizer_config
 
 
 def test_actual_fixed_worker_empty_request_and_missing_provider(monkeypatch, tmp_path):

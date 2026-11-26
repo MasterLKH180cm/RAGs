@@ -172,7 +172,32 @@ changing models or index settings.
 ## Use a model provider
 
 Embeddings and answer generation are configured separately. Changing only the
-chat model does not improve the embedding index. Open a **fresh terminal** and
+chat model does not improve the embedding index. Discover local English, Chinese,
+multilingual and hosted choices without downloading anything:
+
+```bash
+rags models list --language zh
+rags models show st-e5-small
+rags tokenizers list
+```
+
+For a new deployment with local Chinese embeddings:
+
+```bash
+python -m pip install -e '.[encoders]'
+mkdir chinese-rag
+rags init --embedding bge-small-zh --directory chinese-rag
+rags doctor --env-file chinese-rag/.env --no-db
+```
+
+Use `--interactive` for a terminal wizard, or select embedding and source/generation
+tokenizers with independent flags. The [model selection guide](docs/MODEL_SELECTION.md)
+compares runtimes and costs, explains custom models and registered tokenizer
+artifacts, and shows how to preview an existing configuration change with
+`rags config plan`. Model changes require deliberate re-embedding; collection
+forks retain their original vector space.
+
+Open a **fresh terminal** and
 activate your Python environment before switching profiles: exported variables
 take precedence over `--env-file`. Select a profile in a new, empty configuration
 directory, then supply its required models or credentials:
@@ -189,7 +214,7 @@ weights. Stop the first server before using the same port.
 | Goal | Profile or guide | What you supply |
 | --- | --- | --- |
 | Offline demonstration | `offline` | Nothing; hashing embeddings and extractive answers. |
-| Trained local semantic retrieval | [Pretrained encoders](docs/README_REFERENCE.md#pretrained-encoders-and-image-assets) | `encoders` extra, selected model weights and index configuration. |
+| Trained local semantic retrieval | [Model and tokenizer selection](docs/MODEL_SELECTION.md) | `encoders` or `sentence-transformers` extra, selected model weights and index configuration. |
 | Local Ollama models | `ollama` | Running Ollama plus the configured chat and embedding models. |
 | OpenAI-compatible hosted models | `openai` | Separate embedding/generation credentials and endpoint/model settings. |
 | Anthropic generation | `anthropic` | Generation credential; embeddings remain local unless changed separately. |
@@ -286,6 +311,7 @@ and the [uv workflow](docs/README_REFERENCE.md#uv-environment-workflow).
 | Topic | Guide |
 | --- | --- |
 | SDK, CLI, filters, embedding spaces and dataset forks | [Collections](docs/COLLECTIONS.md) |
+| Model choices, tokenizer artifacts, safe switching and approved collection profiles | [Model selection](docs/MODEL_SELECTION.md) |
 | Architecture, retrieval modes and capability boundaries | [Architecture](docs/ARCHITECTURE.md) · [Twenty-family coverage](docs/README_REFERENCE.md#twenty-family-coverage) |
 | Source chunking, citations, admission and historical queries | [Detailed reference](docs/README_REFERENCE.md#chunking-and-token-budgets) |
 | Agent routing, approvals, workflows and memory | [Agent Platform](docs/README_REFERENCE.md#agent-platform-model-routing-workflows-and-memory-v08) |

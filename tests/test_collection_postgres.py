@@ -3,6 +3,7 @@ import json
 import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from threading import Barrier
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
@@ -10,11 +11,57 @@ import pytest
 
 from rags.collection_models import canonical_dense
 from rags.collection_store import TABLE_FIELDS, CollectionStore
+from rags.client import ClientError, PersistentClient
+from rags.config import Settings
 from rags.migrate import import_sqlite
 from rags.registry import CapabilityError
 from rags.storage import Store
 
 pytestmark = [pytest.mark.integration, pytest.mark.external, pytest.mark.postgres]
+
+
+def test_approved_profiles_reembed_exact_sources_with_native_pgvector(database, monkeypatch):
+    """Real PostgreSQL storage with deterministic offline embedding fixtures."""
+    settings = Settings(db_path=database, keys={"owner-key": "tenant", "foreign-key": "other"},
+                        embedding_provider="local", model_provider="extractive", openai_key="",
+                        openai_base_url="https://unused.invalid/v1", embedding_model="offline-hash-v1",
+                        chat_model="", anthropic_key="", anthropic_model="", embedding_profiles={
+                            "first": {"provider": "local", "model": "offline-hash-v1", "document_prefix": "first: "},
+                            "second": {"provider": "local", "model": "offline-hash-v1", "document_prefix": "second: "},
+                        })
+    monkeypatch.setattr("rags.collection_store.cosine", lambda *_: pytest.fail("Native pgvector ranking required"))
+    with PersistentClient(database, "owner-key", settings=settings) as client:
+        source = client.create_collection("source", embedding_profile="first", metadata={"purpose": "contract"})
+        source.add(ids=["a", "b"], documents=["Exact\r\noriginal é", "繁體中文證據"], metadatas=[{"rank": 1}, {}])
+        before = source.refresh().to_dict()
+        records = source.get(include=["document", "metadata", "embedding"])
+        branch = source.fork("branch")
+        assert branch.to_dict()["configuration"] == before["configuration"]
+        assert source.search(query_text="original", mode="dense").rows()
+        result = source.reembed("new-space", embedding_profile="second", batch_size=1, expected_generation=1)
+        target = client.get_collection(collection_id=result["target_collection_id"])
+        copied = target.get(include=["document", "metadata", "embedding"])
+        assert result["completed"] and result["copied_records"] == 2 and result["target_generation"] == 2
+        assert [(r["id"], r["document"], r["metadata"]) for r in copied["items"]] == [
+            (r["id"], r["document"], r["metadata"]) for r in records["items"]]
+        assert copied["items"][0]["embedding"] != records["items"][0]["embedding"]
+        assert target.search(query_text="original", mode="dense").rows()
+        assert source.refresh().to_dict() == before
+        assert source.get(include=["document", "metadata", "embedding"]) == records
+        with PersistentClient(database, "foreign-key", settings=settings) as foreign:
+            with pytest.raises(ClientError) as denied:
+                foreign.get_collection(collection_id=source.id)
+            assert denied.value.status_code == 404
+        changed = replace(settings, embedding_profiles={"first": {
+            "provider": "local", "model": "offline-hash-v1", "document_prefix": "rebound: "}})
+        with PersistentClient(database, "owner-key", settings=changed) as updated:
+            bound = updated.get_collection("source")
+            assert bound.indexing_status()["text_query_profile_matches"] is False
+            with pytest.raises(ClientError, match="embedding_space_mismatch"):
+                bound.search(query_text="original", mode="dense")
+    with Store(database).connect() as connection:
+        assert {row["kind"] for row in connection.execute(
+            "SELECT pg_typeof(embedding)::text AS kind FROM rag_collection_versions")} == {"vector"}
 
 
 @pytest.fixture

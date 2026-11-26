@@ -1,14 +1,11 @@
 """Tenant-scoped, versioned source records and transactional derived indexes."""
 import json
 import re
-import sqlite3
-from collections.abc import Iterator
-from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
 from rags.native import cosine, equal_value
-from rags import postgres
+from rags import database, postgres
 from rags.registry import CapabilityError
 
 SCHEMA = """
@@ -45,6 +42,7 @@ CREATE TABLE IF NOT EXISTS graph_relations (
  source TEXT NOT NULL, predicate TEXT NOT NULL, target TEXT NOT NULL, evidence_id TEXT NOT NULL,
  PRIMARY KEY(tenant,document_id,revision,source,predicate,target,evidence_id)
 );
+CREATE INDEX IF NOT EXISTS graph_relations_evidence ON graph_relations(tenant,evidence_id);
 """
 DOC_COLUMNS = {"revision": "TEXT NOT NULL DEFAULT 'legacy'", "profile_id": "TEXT NOT NULL DEFAULT 'legacy'",
                "index_profile": "TEXT NOT NULL DEFAULT '{\"legacy\":true}'", "valid_from": "TEXT", "valid_to": "TEXT"}
@@ -59,6 +57,17 @@ CHUNK_COLUMNS = {
 CHUNK_FIELDS = ("id", "tenant", "document_id", "ordinal", "section", "content", "embedding", "embedding_model", *CHUNK_COLUMNS)
 REVISION_FIELDS = ("tenant", "id", "revision", "title", "source", "body", "metadata", "checksum",
                    "recorded_at", "valid_from", "valid_to", "profile_id", "index_profile")
+REVISION_SCOPE_FIELDS = tuple(field for field in REVISION_FIELDS if field not in {"body", "checksum"})
+
+
+def _sqlite_allowed_ids(connection, identifiers: set[str]) -> None:
+    """Bind large authorized sets without JSON extensions or parameter limits.
+
+    Every caller owns a fresh connection, so this private TEMP table is isolated
+    from other requests and disappears when the shared lifecycle closes it.
+    """
+    connection.execute("CREATE TEMP TABLE authorized_chunks(id TEXT PRIMARY KEY) WITHOUT ROWID")
+    connection.executemany("INSERT INTO authorized_chunks(id) VALUES(?)", ((key,) for key in identifiers))
 
 
 def timestamp(value: str | None = None) -> str:
@@ -112,25 +121,8 @@ class Store:
                 "valid_to,profile_id,index_profile FROM documents"
             )
 
-    @contextmanager
-    def connect(self) -> Iterator[sqlite3.Connection]:
-        if self.is_postgres:
-            with postgres.connect(self.path) as connection:
-                yield connection
-            return
-        conn = sqlite3.connect(self.path, timeout=20)
-        try:
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA foreign_keys=ON")
-            conn.execute("PRAGMA busy_timeout=20000")
-            conn.execute("PRAGMA journal_mode=WAL")
-            yield conn
-            conn.commit()
-        except BaseException:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+    def connect(self):
+        return database.connect(self.path, foreign_keys=True)
 
     @staticmethod
     def decode_document(row) -> dict:
@@ -264,32 +256,35 @@ class Store:
               include_embeddings: bool = True) -> list[dict]:
         """Choose one valid revision per document before retrieval or expansion.
 
-        Read revisions and chunks from one transaction snapshot. PostgreSQL pushes
-        the authorized revision pairs into the chunk query; tenant-wide chunk
-        scans must not spill unrelated content or vectors into the client.
+        Read revisions and chunks from one transaction snapshot. Both backends
+        push authorized revision pairs into the chunk query; unrelated historical
+        content and vectors never become Python candidate rows.
         """
         at = timestamp(as_of)
         filters = filters or {}
         order_column = "revision_order" if self.is_postgres else "rowid"
+        revision_fields = ",".join(REVISION_SCOPE_FIELDS)
         with self.connect() as conn:
             if self.is_postgres:
                 conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+            else:
+                # SELECT alone does not begin a Python sqlite3 transaction.
+                conn.execute("BEGIN")
             rows = conn.execute(
-                "SELECT * FROM (SELECT *,"
+                f"SELECT {revision_fields} FROM (SELECT *,ROW_NUMBER() OVER ("
+                "PARTITION BY id ORDER BY recorded_at DESC,selection_order DESC) AS source_order "
+                f"FROM (SELECT {revision_fields},"
                 f"{order_column} AS selection_order,ROW_NUMBER() OVER ("
                 f"PARTITION BY id,valid_from ORDER BY recorded_at DESC,{order_column} DESC) AS processing_order "
                 "FROM document_revisions WHERE tenant=? AND valid_from<=?) AS revisions "
-                "WHERE processing_order=1 AND (valid_to IS NULL OR valid_to>?) "
+                "WHERE processing_order=1 AND (valid_to IS NULL OR valid_to>?)) AS sources "
+                "WHERE source_order=1 "
                 "ORDER BY recorded_at DESC,selection_order DESC",
                 (tenant, at, at),
             ).fetchall()
-            docs = {}
+            selected = {}
             for row in rows:
                 doc = self.decode_document(row)
-                if doc["id"] not in docs:
-                    docs[doc["id"]] = doc
-            selected = {}
-            for doc_id, doc in docs.items():
                 if filters.get("source") is not None and doc["source"] != filters["source"]:
                     continue
                 if any(k not in doc["metadata"] or not equal_value(doc["metadata"][k], v)
@@ -299,7 +294,7 @@ class Store:
                     continue
                 if filters.get("valid_before") and doc["valid_from"] >= timestamp(filters["valid_before"]):
                     continue
-                selected[(doc_id, doc["revision"])] = doc
+                selected[(doc["id"], doc["revision"])] = doc
             if not selected:
                 return []
             fields = "c.*" if include_embeddings else ",".join(
@@ -318,8 +313,18 @@ class Store:
                     (revision_keys, tenant),
                 ).fetchall()
             else:
+                conn.execute(
+                    "CREATE TEMP TABLE authorized_revisions("
+                    "document_id TEXT NOT NULL,revision TEXT NOT NULL,"
+                    "PRIMARY KEY(document_id,revision)) WITHOUT ROWID"
+                )
+                conn.executemany("INSERT INTO authorized_revisions VALUES(?,?)", selected)
                 chunk_rows = conn.execute(
-                    f"SELECT {fields} FROM chunks c WHERE c.tenant=?", (tenant,)
+                    f"SELECT {fields} FROM chunks c WHERE c.tenant=? AND (c.document_id,c.revision) "
+                    "IN (SELECT document_id,revision FROM authorized_revisions) "
+                    # Preserve the existing chunks_revision index traversal,
+                    # including ingestion order for nodes with the same role.
+                    "ORDER BY c.document_id,c.revision,c.role,c.rowid", (tenant,)
                 ).fetchall()
         result = []
         for row in chunk_rows:
@@ -354,7 +359,10 @@ class Store:
             if self.is_postgres:
                 connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
             dimensions = "vector_dims(c.embedding) AS dimensions," if self.is_postgres else "c.embedding,"
-            predicate = " AND c.id=ANY(?)" if self.is_postgres else ""
+            if not self.is_postgres:
+                _sqlite_allowed_ids(connection, allowed_ids)
+            predicate = (" AND c.id=ANY(?)" if self.is_postgres else
+                         " AND c.id IN (SELECT id FROM authorized_chunks)")
             parameters = (tenant, sorted(allowed_ids)) if self.is_postgres else (tenant,)
             rows = connection.execute(
                 "SELECT c.id,c.embedding_model,c.profile_id," + dimensions +
@@ -362,7 +370,7 @@ class Store:
                 "ON r.tenant=c.tenant AND r.id=c.document_id AND r.revision=c.revision "
                 "WHERE c.tenant=?" + predicate, parameters,
             ).fetchall()
-            candidates = [row for row in rows if row["id"] in allowed_ids]
+            candidates = rows
             try:
                 for row in candidates:
                     profile = json.loads(row["index_profile"])
@@ -416,16 +424,28 @@ class Store:
                 ).fetchall()
             return [row["id"] for row in rows]
         with self.connect() as conn:
+            _sqlite_allowed_ids(conn, allowed_ids)
             rows = conn.execute(
                 "SELECT c.id FROM chunks_fts f JOIN chunks c ON c.id=f.chunk_id "
-                "WHERE c.tenant=? AND chunks_fts MATCH ? ORDER BY bm25(chunks_fts),c.id", (tenant, match_query)
+                "WHERE c.tenant=? AND c.id IN (SELECT id FROM authorized_chunks) AND chunks_fts MATCH ? "
+                "ORDER BY bm25(chunks_fts),c.id LIMIT ?", (tenant, match_query, limit)
             ).fetchall()
-        return [r["id"] for r in rows if r["id"] in allowed_ids][:limit]
+        return [r["id"] for r in rows]
 
     def relations(self, tenant: str, allowed_ids: set[str]) -> list[dict]:
+        if not allowed_ids:
+            return []
         with self.connect() as conn:
-            rows = conn.execute("SELECT * FROM graph_relations WHERE tenant=?", (tenant,)).fetchall()
-        return [dict(r) for r in rows if r["evidence_id"] in allowed_ids]
+            if self.is_postgres:
+                predicate, parameters = "evidence_id=ANY(?)", (tenant, sorted(allowed_ids))
+            else:
+                _sqlite_allowed_ids(conn, allowed_ids)
+                predicate, parameters = "evidence_id IN (SELECT id FROM authorized_chunks)", (tenant,)
+            rows = conn.execute(
+                "SELECT * FROM graph_relations WHERE tenant=? AND " + predicate +
+                " ORDER BY document_id,revision,source,predicate,target,evidence_id", parameters,
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     def graph_documents(self, tenant: str, terms: list[str], limit: int = 20) -> list[str]:
         allowed = {c["id"] for c in self.scope(tenant)}

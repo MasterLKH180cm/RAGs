@@ -7,12 +7,16 @@ import re
 from collections import Counter
 from contextvars import ContextVar
 from functools import cached_property, lru_cache
+from itertools import islice
+from dataclasses import replace
 from threading import Lock
 
 import httpx
 
 from rags import provider_transport
 from rags.config import Settings
+from rags.embedding_profiles import contract_digest
+from rags.embedding_windows import disable_encoder_telemetry, fastembed_token_window
 from rags.model_profiles import chat_profile, normalized_usage, strict_json
 from rags.registry import CapabilityError
 from rags.agents.deadline import remaining_timeout
@@ -104,6 +108,7 @@ def _cached_semantic_encoder(model: str, cache_dir: str | None = None):
     except ImportError as exc:
         raise CapabilityError("requires_provider", "Install the encoders extra for FastEmbed embeddings") from exc
     try:
+        disable_encoder_telemetry()
         return TextEmbedding(model_name=model, cache_dir=cache_dir, threads=2)
     except Exception as exc:
         raise CapabilityError("requires_provider", "Configured FastEmbed checkpoint is unavailable") from exc
@@ -137,8 +142,36 @@ def local_embedding(text: str, dims: int = 384) -> list[float]:
 
 
 class Providers:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, *, credential_env: str | None = None):
         self.settings = settings
+        self._credential_env = credential_env
+
+    def for_embedding_profile(self, alias: str):
+        profile = self.settings.embedding_profiles.get(alias)
+        if profile is None:
+            raise CapabilityError("unknown_embedding_profile", "Select an approved embedding profile", 422)
+        self.settings.features.require("embedding." + profile.provider)
+        selected = replace(
+            self.settings, embedding_provider=profile.provider, embedding_model=profile.model,
+            fastembed_model=profile.model if profile.provider == "fastembed" else self.settings.fastembed_model,
+            embedding_revision=profile.revision, embedding_base_url=profile.base_url,
+            embedding_api_key="", embedding_auth_mode=profile.auth_mode,
+            embedding_dimensions=profile.dimensions, embedding_query_prefix=profile.query_prefix,
+            embedding_document_prefix=profile.document_prefix, embedding_normalize=profile.normalize,
+            embedding_tokenizer_config=profile.tokenizer, embedding_token_limit_config=profile.token_limit,
+            embedding_special_tokens=profile.special_tokens,
+            embedding_input_policy=profile.input_policy, embedding_space_id=profile.space_id,
+        )
+        return Providers(selected, credential_env=profile.api_key_env)
+
+    @property
+    def _embedding_credential(self) -> str:
+        if self.settings.embedding_auth_mode == "none":
+            return ""
+        if self._credential_env is not None:
+            from rags.config import secret
+            return secret(self._credential_env)
+        return self.settings.embedding_credential
 
     @cached_property
     def model_router(self):
@@ -210,13 +243,12 @@ class Providers:
         return parsed
 
     def contextualize(self, document: str, chunk: str, title: str, *, max_units: int = 96, tokenizer=None) -> str:
-        from rags.tokenization import resolve_tokenizer
         self.require_generation()
         source_config = tokenizer.profile if tokenizer is not None else self.settings.tokenizer_config
         self.settings.features.require("tokenizer." + source_config.get("backend", "unicode"),
                                        "tokenizer." + self.settings.generation_tokenizer_config.get("backend", "unicode"))
-        tok = tokenizer or resolve_tokenizer(self.settings.tokenizer_config)
-        generation_tok = resolve_tokenizer(self.settings.generation_tokenizer_config)
+        tok = tokenizer or self.resolve_text_tokenizer(self.settings.tokenizer_config)
+        generation_tok = self.resolve_text_tokenizer(self.settings.generation_tokenizer_config)
         # Document context may be larger than a provider window. Preserve the
         # source chunk, and bound the surrounding document explicitly.
         document_budget = max(64, (self.settings.context_budget - self.settings.output_budget - self.settings.envelope_budget) // 2)
@@ -240,61 +272,269 @@ class Providers:
 
     @property
     def embedding_model(self) -> str:
+        base = self._embedding_model_name
+        if self._has_embedding_options:
+            return base[:90] + "@" + contract_digest(self.embedding_contract)
+        return base
+
+    @property
+    def _embedding_model_name(self) -> str:
         if self.settings.embedding_provider == "router":
             return "router:" + self.model_router.config.models.get(
                 self.settings.embedding_model, self.settings.embedding_model)
         if self.settings.embedding_provider == "fastembed":
             return "fastembed:" + self.settings.fastembed_model
+        if self.settings.embedding_provider in {"sentence_transformers", "ollama"}:
+            return self.settings.embedding_provider + ":" + self.settings.embedding_model
         return (
             "offline-hash-v1"
             if self.settings.embedding_provider == "local"
             else "openai:" + self.settings.embedding_model
         )
 
-    def embedding(self, text: str) -> list[float]:
-        self.settings.features.require("embedding." + self.settings.embedding_provider)
+    @property
+    def _has_embedding_options(self) -> bool:
+        s = self.settings
+        return bool(s.embedding_provider in {"sentence_transformers", "ollama"} or s.embedding_revision
+                    or s.embedding_dimensions is not None or s.embedding_query_prefix or s.embedding_document_prefix
+                    or s.embedding_normalize is not None or s.embedding_tokenizer_config is not None)
+
+    @property
+    def embedding_contract(self) -> dict:
+        """Side-effect-free identity apart from the already configured router map."""
+        s = self.settings
+        counter = dict(s.embedding_tokenizer_config) if s.embedding_tokenizer_config is not None else None
+        if counter and counter.get("backend") in {"huggingface", "sentencepiece"}:
+            artifact = s.tokenizer_artifacts.get(counter.get("model"), {})
+            counter["artifact_sha256"] = counter.get("artifact_sha256") or artifact.get("sha256")
+        return {"model": self._embedding_model_name, "endpoint": self.embedding_endpoint,
+                "revision": s.embedding_revision, "dimensions": s.embedding_dimensions,
+                "query_prefix": s.embedding_query_prefix, "document_prefix": s.embedding_document_prefix,
+                "normalize": s.embedding_normalize, "tokenizer": counter,
+                "token_limit": s.embedding_token_limit_config,
+                "special_tokens": s.embedding_special_tokens,
+                "adapter": "sentence-transformers-5.7.0-text-v1"
+                if s.embedding_provider == "sentence_transformers" else "complete-input-v1"}
+
+    def _embedding_input(self, text: str, *, query: bool) -> str:
+        if not isinstance(text, str) or len(text) > 1_000_000:
+            raise CapabilityError("invalid_model_input", "Embedding text must be bounded text", 422)
+        try:
+            text.encode("utf-8")
+        except UnicodeError as exc:
+            raise CapabilityError("invalid_model_input", "Embedding text must be valid UTF-8", 422) from exc
+        return (self.settings.embedding_query_prefix if query else self.settings.embedding_document_prefix) + text
+
+    @cached_property
+    def _sentence_encoder(self):
+        from rags.sentence_embeddings import sentence_encoder
+        return sentence_encoder(self.settings.embedding_model, self.settings.embedding_revision,
+                                os.getenv("RAGS_MODEL_CACHE") or None)
+
+    @cached_property
+    def _embedding_window(self):
+        from rags.tokenization import resolve_tokenizer
+        s = self.settings
+        s.features.require("embedding." + s.embedding_provider)
+        if s.embedding_tokenizer_config is not None:
+            s.features.require("tokenizer." + s.embedding_tokenizer_config["backend"])
+            tok = resolve_tokenizer(s.embedding_tokenizer_config, artifacts=s.tokenizer_artifacts)
+            return lambda text, query=False: tok.count(text) + s.embedding_special_tokens, s.embedding_token_limit_config
+        if s.embedding_provider == "fastembed":
+            encoder = _semantic_encoder(s.fastembed_model, os.getenv("RAGS_MODEL_CACHE") or None)
+            counter, limit = fastembed_token_window(encoder)
+            # Sentence Transformers' source recipe has a shorter effective window
+            # than some converted ONNX tokenizer configurations for this model.
+            effective_limits = {"sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": 128,
+                                "sentence-transformers/all-MiniLM-L6-v2": 256}
+            if s.fastembed_model in effective_limits:
+                limit = min(limit, effective_limits[s.fastembed_model])
+            return counter, limit
+        if s.embedding_provider == "sentence_transformers":
+            return lambda text, query=False: self._sentence_encoder.count(text), self._sentence_encoder.limit
+        if s.embedding_provider == "local":
+            return lambda text, query=False: len(text), 1_000_000
+        name = s.embedding_model
+        if s.embedding_provider == "router":
+            if not self.model_router.config.router_ready:
+                raise CapabilityError("router_unconfigured", "Model gateway is not configured", 503)
+            if name not in self.model_router.config.models:
+                raise CapabilityError("model_not_allowed", "Embedding model alias is not approved", 403)
+            resolved = self.model_router.config.models.get(name, "")
+            name = resolved.removeprefix("openai/") if resolved.startswith("openai/") else ""
+        if s.embedding_provider not in {"openai", "router"} or name not in {
+            "text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002",
+        }:
+            raise CapabilityError("requires_provider", "Configure a verified embedding tokenizer and input limit for this model")
+        s.features.require("tokenizer.tiktoken")
+        tok = resolve_tokenizer({"backend": "tiktoken", "model": name})
+        return lambda text, query=False: tok.count(text), 8191
+
+    @property
+    def embedding_token_limit(self) -> int:
+        return self._embedding_window[1]
+
+    @property
+    def embedding_window_policy(self) -> str:
         if self.settings.embedding_provider == "local":
-            return local_embedding(text)
-        if self.settings.embedding_provider == "router":
+            return "offline_demo_no_model_window"
+        if self.settings.embedding_provider == "ollama" and self.settings.embedding_tokenizer_config is None:
+            return "server_reject"
+        return "exact"
+
+    def embedding_token_count(self, text: str, *, query: bool = False) -> int:
+        return self._embedding_window[0](self._embedding_input(text, query=query), query=query)
+
+    def embedding_tokenizer(self):
+        from rags.tokenization import ExactEncodingTokenizer
+        self.settings.features.require("tokenizer.embedding", "embedding." + self.settings.embedding_provider)
+        if self.embedding_window_policy != "exact":
+            raise CapabilityError("requires_provider", "Automatic source counting requires an exact embedding tokenizer")
+        # Resolve the window now, so missing resources fail before source splitting.
+        limit = self.embedding_token_limit
+        digest = contract_digest(self.embedding_contract)
+        return ExactEncodingTokenizer(
+            tokenizer_id="embedding:" + digest,
+            profile={"backend": "embedding", "embedding_identity": digest, "model": self.embedding_model,
+                     "max_input_tokens": limit, "input_role": "document",
+                     "special_tokens": self.settings.embedding_special_tokens
+                         if self.settings.embedding_tokenizer_config is not None else "encoder_native"},
+            count=lambda text: self.embedding_token_count(text),
+        )
+
+    def preflight_embeddings(self, texts, *, query: bool = False) -> None:
+        """Validate all complete inputs before starting any encoding in a batch."""
+        self.settings.features.require("embedding." + self.settings.embedding_provider)
+        for text in texts:
+            self._embedding_input(text, query=query)
+        if self.embedding_window_policy == "server_reject":
+            return
+        maximum = self.embedding_token_limit
+        for text in texts:
+            remaining_timeout(30)
+            count = self.embedding_token_count(text, query=query)
+            if type(count) is not int or count < 0:
+                raise CapabilityError("invalid_embedding", "Embedding counter returned an invalid value", 502)
+            if count > maximum:
+                raise CapabilityError("context_budget_exceeded", "Complete input exceeds the embedding token window", 422)
+
+    def resolve_text_tokenizer(self, config: dict):
+        from rags.tokenization import resolve_tokenizer
+        self.settings.features.require("tokenizer." + config.get("backend", "unicode"))
+        bound = self.embedding_tokenizer() if config.get("backend") == "embedding" else None
+        return resolve_tokenizer(config, artifacts=self.settings.tokenizer_artifacts, embedding_tokenizer=bound)
+
+    def embedding(self, text: str) -> list[float]:
+        return self._embed_text(text, query=False)
+
+    def query_embedding(self, text: str) -> list[float]:
+        if (self.settings.embedding_provider not in {"fastembed", "sentence_transformers"}
+                and self.settings.embedding_query_prefix == self.settings.embedding_document_prefix):
+            return self.embedding(text)
+        return self._embed_text(text, query=True)
+
+    def _embed_text(self, text: str, *, query: bool) -> list[float]:
+        self.settings.features.require("embedding." + self.settings.embedding_provider)
+        if self.settings.embedding_provider == "openai" and not chat_profile(self.settings.embedding_model).supports_embeddings:
+            raise CapabilityError("unsupported_model_operation", "Selected model does not provide embeddings", 422)
+        if self.settings.embedding_provider in {"openai", "ollama"} and (
+            self.settings.embedding_auth_mode == "required" and not self._embedding_credential
+        ):
+            raise CapabilityError("requires_provider", "Configure an embedding credential or explicit loopback no-auth policy")
+        self.preflight_embeddings([text], query=query)
+        text = self._embedding_input(text, query=query)
+        if self.settings.embedding_provider == "local":
+            vector = local_embedding(text)
+        elif self.settings.embedding_provider == "router":
             result = self.model_router.embedding(model=self.settings.embedding_model, text=text,
                                                  timeout_seconds=remaining_timeout(30))
             self.record("embedding", self.embedding_model, {"usage": result.usage})
-            return result.vector
-        if self.settings.embedding_provider == "fastembed":
-            return next(_semantic_encoder(self.settings.fastembed_model, os.getenv("RAGS_MODEL_CACHE") or None).embed([text])).tolist()
-        if not self.settings.embedding_credential:
-            raise ValueError("RAGS_EMBEDDING_API_KEY or OPENAI_API_KEY required for OpenAI embeddings")
-        if not chat_profile(self.settings.embedding_model).supports_embeddings:
-            raise CapabilityError("unsupported_model_operation", "Selected model does not provide embeddings", 422)
+            vector = result.vector
+        elif self.settings.embedding_provider == "fastembed":
+            encoder = _semantic_encoder(self.settings.fastembed_model, os.getenv("RAGS_MODEL_CACHE") or None)
+            try:
+                rows = list(islice(encoder.query_embed(text) if query else encoder.embed([text]), 2))
+                if len(rows) != 1:
+                    raise CapabilityError("invalid_embedding", "Encoder returned an unexpected embedding count", 502)
+                vector = rows[0].tolist()
+            except CapabilityError:
+                raise
+            except (AttributeError, TypeError, ValueError, StopIteration) as exc:
+                raise CapabilityError("invalid_embedding", "Encoder returned an invalid embedding response", 502) from exc
+        elif self.settings.embedding_provider == "sentence_transformers":
+            vector = self._sentence_encoder.embed(text, normalize=self.settings.embedding_normalize is not False,
+                                                  dimensions=self.settings.embedding_dimensions)
+        elif self.settings.embedding_provider == "ollama":
+            vector = self._ollama_embedding(text)
+        else:
+            vector = self._openai_embedding(text)
+        reason = "Provider returned an invalid embedding vector"
+        if not isinstance(vector, list) or not 1 <= len(vector) <= 16_384 or any(
+            not _finite_number(v) for v in vector
+        ) or (self.settings.embedding_dimensions is not None and len(vector) != self.settings.embedding_dimensions):
+            raise CapabilityError("invalid_embedding", reason, 502)
+        if self.settings.embedding_normalize is True:
+            scale = max(abs(value) for value in vector)
+            if scale:
+                scaled = [value / scale for value in vector]
+                norm = math.sqrt(sum(value * value for value in scaled))
+                vector = [value / norm for value in scaled]
+        return vector
+
+    def _openai_embedding(self, text: str) -> list[float]:
+        body = {"model": self.settings.embedding_model, "input": text}
+        if self.settings.embedding_dimensions is not None:
+            body["dimensions"] = self.settings.embedding_dimensions
+        headers = ({"Authorization": "Bearer " + self._embedding_credential}
+                   if self.settings.embedding_auth_mode == "required" else {})
+        options = {} if self.settings.embedding_auth_mode == "required" else {"trust_env": False}
         response = provider_transport.post(
             self.settings.embedding_endpoint + "/embeddings",
-            headers={"Authorization": "Bearer " + self.settings.embedding_credential},
-            json={"model": self.settings.embedding_model, "input": text},
-            timeout=remaining_timeout(30),
+            headers=headers, json=body, timeout=remaining_timeout(30), **options,
         )
         reason = "Provider returned an invalid embedding vector"
         payload = response_object(response, "invalid_embedding", reason)
-        vector = _first_object(payload, "data").get("embedding")
-        if not isinstance(vector, list) or not 1 <= len(vector) <= 16_384 or any(
-            not _finite_number(v) for v in vector
-        ):
+        data = payload.get("data")
+        if (not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], dict)
+                or ("index" in data[0] and (type(data[0]["index"]) is not int or data[0]["index"] != 0))):
             raise CapabilityError("invalid_embedding", reason, 502)
         self.record("embedding", self.embedding_model, payload)
-        return vector
+        return data[0].get("embedding")
 
-    def query_embedding(self, text: str) -> list[float]:
-        self.settings.features.require("embedding." + self.settings.embedding_provider)
-        if self.settings.embedding_provider == "fastembed":
-            return next(_semantic_encoder(self.settings.fastembed_model, os.getenv("RAGS_MODEL_CACHE") or None).query_embed(text)).tolist()
-        return self.embedding(text)
+    def _ollama_embedding(self, text: str) -> list[float]:
+        body = {"model": self.settings.embedding_model, "input": [text], "truncate": False}
+        if self.settings.embedding_dimensions is not None:
+            body["dimensions"] = self.settings.embedding_dimensions
+        headers = ({"Authorization": "Bearer " + self._embedding_credential}
+                   if self.settings.embedding_auth_mode == "required" else {})
+        try:
+            response = provider_transport.bounded_post(
+                self.settings.embedding_endpoint + "/api/embed", headers=headers, json=body,
+                timeout=remaining_timeout(30), trust_env=self.settings.embedding_auth_mode != "none",
+                accepted_statuses=(400,),
+            )
+            if response.status_code == 400:
+                payload = strict_json(response.content)
+                if isinstance(payload, dict) and payload.get("error") == "input length exceeds maximum context length":
+                    raise CapabilityError("context_budget_exceeded", "Ollama rejected input exceeding its context window", 422)
+                raise CapabilityError("provider_failed", "Ollama rejected the embedding request", 502)
+            payload = response_object(response, "invalid_embedding", "Ollama returned an invalid embedding response")
+        except CapabilityError:
+            raise
+        except (httpx.HTTPError, TimeoutError, ValueError, RecursionError):
+            raise CapabilityError("provider_failed", "Configured Ollama embedding request failed", 502) from None
+        vectors = payload.get("embeddings")
+        if not isinstance(vectors, list) or len(vectors) != 1:
+            raise CapabilityError("invalid_embedding", "Ollama returned an unexpected embedding count", 502)
+        self.record("embedding", self.embedding_model, {})
+        return vectors[0]
 
     def complete(self, system: str, user: str) -> str | None:
         if self.settings.model_provider == "extractive":
             return None
         self.require_generation()
-        from rags.tokenization import resolve_tokenizer
         self.settings.features.require("tokenizer." + self.settings.generation_tokenizer_config.get("backend", "unicode"))
-        tokenizer = resolve_tokenizer(self.settings.generation_tokenizer_config)
+        tokenizer = self.resolve_text_tokenizer(self.settings.generation_tokenizer_config)
         if tokenizer.count(system + user) > self.settings.context_budget - self.settings.output_budget - self.settings.envelope_budget:
             raise CapabilityError("context_budget_exceeded", "Rendered model input exceeds the configured budget", 422)
         if self.settings.model_provider == "router":

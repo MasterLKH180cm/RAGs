@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from typing import Protocol
 
+from rags.embedding_windows import disable_encoder_telemetry, fastembed_token_window
 from rags.features import FeatureFlags, strategy_features
 from rags.registry import CapabilityError
 from rags.tokenization import resolve_tokenizer
@@ -83,40 +84,6 @@ def verify_source(package: str, expected: dict[str, str]) -> Path:
     return root
 
 
-def disable_encoder_telemetry() -> None:
-    """ONNX computation needs no platform diagnostic network traffic."""
-    # Official ONNX Runtime Privacy.md documents this pre-initialization opt-out.
-    os.environ["ORT_DISABLE_TELEMETRY"] = "1"
-    if importlib.util.find_spec("onnxruntime") is not None:
-        import onnxruntime
-        onnxruntime.disable_telemetry_events()
-
-
-def fastembed_token_window(encoder):
-    """Clone the actual tokenizer so full counts cannot inherit truncation.
-
-    The first adapter supports FastEmbed's ordinary ONNX text models. Models
-    with custom query/passage preprocessing need their own counting contract;
-    guessing from a different tokenizer would silently lose source evidence.
-    """
-    from fastembed.text.onnx_embedding import OnnxTextEmbedding
-    from fastembed.text.text_embedding_base import TextEmbeddingBase
-    from tokenizers import Tokenizer
-    model = encoder.model
-    tokenizer = getattr(model, "tokenizer", None)
-    if (type(model) is not OnnxTextEmbedding or tokenizer is None
-            or getattr(model.query_embed, "__func__", None) is not TextEmbeddingBase.query_embed):
-        raise CapabilityError("requires_provider", "Research needs an exact token counter for this embedding model")
-    truncation = tokenizer.truncation or {}
-    limit = truncation.get("max_length")
-    if type(limit) is not int or not 1 <= limit <= 100_000:
-        raise CapabilityError("requires_provider", "Embedding model token window is unavailable")
-    full = Tokenizer.from_str(tokenizer.to_str())
-    full.no_truncation()
-    full.no_padding()
-    return lambda text, query=False: len(full.encode(text).ids), limit
-
-
 class ProviderBridge:
     """Per-request counters/caches; never stores source data outside this instance."""
 
@@ -133,10 +100,14 @@ class ProviderBridge:
         self.embedding_model = getattr(provider, "embedding_model", "")
         self.generation_provider = getattr(provider, "model_identity", "")
         embedding_provider = getattr(settings, "embedding_provider", "local")
-        if (embedding_provider not in {"fastembed", "openai", "router"}
+        if (embedding_provider not in {"fastembed", "openai", "router", "sentence_transformers"}
                 or not isinstance(self.embedding_model, str) or not self.embedding_model
                 or len(self.embedding_model) > 200 or "hash" in self.embedding_model.lower()):
             raise CapabilityError("requires_provider", "Research requires a configured trained embedding provider")
+        if embedding_provider == "sentence_transformers" and not callable(
+            getattr(provider, "embedding_token_count", None)
+        ):
+            raise CapabilityError("requires_provider", "Research requires an exact embedding token counter")
         self.features.require("embedding." + embedding_provider)
         tokenizer_config = getattr(settings, "generation_tokenizer_config", {"backend": "unicode"})
         self.features.require("tokenizer." + tokenizer_config.get("backend", "unicode"))
@@ -144,7 +115,12 @@ class ProviderBridge:
                 or not isinstance(self.generation_provider, str) or not self.generation_provider
                 or len(self.generation_provider) > 200 or self.generation_provider.startswith("extractive")):
             raise CapabilityError("requires_provider", "Research requires a configured generation provider")
-        self.tokenizer = resolve_tokenizer(tokenizer_config)
+        binding = getattr(provider, "embedding_tokenizer", None)
+        self.tokenizer = resolve_tokenizer(
+            tokenizer_config, artifacts=getattr(settings, "tokenizer_artifacts", {}),
+            embedding_tokenizer=(binding() if tokenizer_config.get("backend") == "embedding"
+                                 and callable(binding) else None),
+        )
         self.input_budget = (getattr(settings, "context_budget", 16000)
                              - getattr(settings, "output_budget", 1024)
                              - getattr(settings, "envelope_budget", 256))
