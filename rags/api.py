@@ -326,12 +326,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/capabilities")
     def capabilities(request: Request, tenant: Annotated[str, Depends(auth)]) -> dict:
         principal = request.state.principal
+        from rags.model_catalog import catalog as model_catalog
         return {"features": effective_features(principal),
                 "storage": {"backend": store.storage_backend, "vector_search": store.vector_search},
                 "generation": {"provider": config.model_provider, "model": service.provider.model_identity},
                 "permissions": sorted(principal.permissions),
                 "capabilities": effective_catalog(tenant, principal),
                 "collections": collections.capabilities(principal),
+                "model_selection": model_catalog(config.features),
                 "image_assets": multimodal.capability()}
 
     @app.get("/strategies")

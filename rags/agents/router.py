@@ -107,8 +107,8 @@ class ModelRouter:
             headers["Authorization"] = "Bearer " + self.config.gateway_key
         return headers
 
-    def embedding(self, *, model: str, text: str,
-                  timeout_seconds: float = 30.) -> EmbeddingReply:
+    def embedding(self, *, model: str, text: str, dimensions: int | None = None,
+                  input_type: str | None = None, timeout_seconds: float = 30.) -> EmbeddingReply:
         """One OpenAI-compatible embeddings endpoint for approved Gateway models."""
         if not self.config.router_ready:
             raise CapabilityError("router_unconfigured", "Model gateway is not configured", 503)
@@ -122,8 +122,17 @@ class ModelRouter:
             raise ValueError("Embedding input exceeds the configured length limit")
         if type(timeout_seconds) not in (int, float) or not 0.05 <= timeout_seconds <= 90.:
             raise ValueError("Embedding timeout must be 0.05..90 seconds")
+        if dimensions is not None and (type(dimensions) is not int or not 1 <= dimensions <= 16_384):
+            raise ValueError("Embedding dimensions must be an integer from 1 to 16384")
+        if input_type is not None and (not isinstance(input_type, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./@+-]{0,159}", input_type)):
+            raise ValueError("Embedding input_type must be a bounded identifier")
+        body = {"model": selected, "input": text}
+        if dimensions is not None:
+            body["dimensions"] = dimensions
+        if input_type is not None:
+            body["input_type"] = input_type
         try:
-            response = self._post("/embeddings", {"model": selected, "input": text}, timeout_seconds)
+            response = self._post("/embeddings", body, timeout_seconds)
             if response.status_code != 200:
                 raise CapabilityError("embedding_gateway_failed", "Gateway rejected the embedding request", 502)
             payload = strict_json(response.content)
@@ -141,13 +150,15 @@ class ModelRouter:
             if not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], dict):
                 raise ValueError("Expected one embedding result")
             vector = data[0]["embedding"]
-            if not isinstance(vector, list) or not 1 <= len(vector) <= 16000 or any(
+            if not isinstance(vector, list) or not 1 <= len(vector) <= 16384 or any(
                 type(value) not in (int, float) or not math.isfinite(value) for value in vector
             ):
                 raise ValueError("Invalid embedding vector")
+            if dimensions is not None and len(vector) != dimensions:
+                raise ValueError("Embedding provider ignored requested dimensions")
             safe_usage = normalized_usage(payload)
             return EmbeddingReply(vector=vector, model=selected, usage=safe_usage)
-        except (ValueError, TypeError, KeyError, IndexError, AttributeError) as exc:
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as exc:
             raise CapabilityError("invalid_embedding", "Invalid Gateway embedding result", 502) from exc
 
     def complete(self, *, model: str, messages: list[dict], tools: list[dict] | None = None,

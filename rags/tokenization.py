@@ -26,13 +26,16 @@ def _text(value: str) -> None:
 
 @dataclass(frozen=True)
 class TokenizerConfig:
-    backend: Literal["unicode", "tiktoken", "utf8_bytes"] = "unicode"
+    backend: Literal["unicode", "tiktoken", "utf8_bytes", "huggingface", "sentencepiece"] = "unicode"
     model: str | None = None
     encoding: str | None = None
+    path: str | None = None
 
     def __post_init__(self) -> None:
-        if self.backend not in {"unicode", "tiktoken", "utf8_bytes"}:
-            raise ValueError("Tokenizer backend must be unicode, utf8_bytes or tiktoken")
+        if not isinstance(self.backend, str) or self.backend not in {
+            "unicode", "tiktoken", "utf8_bytes", "huggingface", "sentencepiece",
+        }:
+            raise ValueError("Tokenizer backend must be unicode, utf8_bytes, tiktoken, huggingface or sentencepiece")
         for name in ("model", "encoding"):
             value = getattr(self, name)
             if value is not None and (not isinstance(value, str) or not value.strip()):
@@ -41,6 +44,15 @@ class TokenizerConfig:
             raise ValueError("Fallback counting does not accept a model or encoding")
         if self.backend == "tiktoken" and not (self.model or self.encoding):
             raise ValueError("Tiktoken requires a model or explicit encoding")
+        if self.backend in {"huggingface", "sentencepiece"}:
+            if self.model is not None or self.encoding is not None:
+                raise ValueError("Local artifact tokenizers use path, not model or encoding")
+            if (not isinstance(self.path, str) or not self.path.strip() or len(self.path) > 4096
+                    or "\x00" in self.path or "://" in self.path):
+                raise ValueError("Local artifact tokenizer requires a bounded local file path")
+            _text(self.path)
+        elif self.path is not None:
+            raise ValueError("Tokenizer path is only supported by local artifact backends")
 
 
 @dataclass(frozen=True)
@@ -80,6 +92,10 @@ class _SpanTokenizer:
     def count(self, text: str) -> int:
         return len(self.encode(text))
 
+    def _truncate_from(self, text: str, start: int, budget: int) -> str:
+        """Allow bounded tokenizers to avoid copying every remaining suffix."""
+        return self.truncate(text[start:], budget)
+
     def spans(self, text: str, max_tokens: int, overlap_tokens: int = 0) -> list[TokenSpan]:
         """Compatibility list API; bounded ingestion consumes iter_spans instead."""
         return list(self.iter_spans(text, max_tokens, overlap_tokens))
@@ -99,7 +115,7 @@ class _SpanTokenizer:
                 # Revalidate overlap after any progress adjustment below.
                 while start < previous_end and self.count(text[start:previous_end]) > overlap_tokens:
                     start += 1
-            value = self.truncate(text[start:], max_tokens)
+            value = self._truncate_from(text, start, max_tokens)
             if not value:
                 raise ValueError("Token budget is too small for the next Unicode character")
             end = start + len(value)
@@ -132,7 +148,10 @@ class UnicodeTokenizer(_SpanTokenizer):
 
     def decode(self, tokens: Sequence[int]) -> str:
         try:
-            result = "".join(chr(token) for token in tokens)
+            values = list(tokens)
+            if any(type(token) is not int or not 0 <= token <= 0x10FFFF for token in values):
+                raise ValueError("Expected Unicode code point integers")
+            result = "".join(chr(token) for token in values)
         except (TypeError, ValueError) as exc:
             raise ValueError("Invalid Unicode code points") from exc
         _text(result)
@@ -221,7 +240,10 @@ class TiktokenTokenizer(_SpanTokenizer):
 
     @property
     def profile(self) -> dict:
-        return {**asdict(self._config), "encoding": self._encoding.name, "id": self.id,
+        # Keep existing profile identities stable when adding optional fields.
+        config = asdict(self._config)
+        config.pop("path")
+        return {**config, "encoding": self._encoding.name, "id": self.id,
                 "unit": self.unit, "count_kind": self.count_kind, "version": self._version}
 
     def encode(self, text: str) -> list[int]:
@@ -231,7 +253,10 @@ class TiktokenTokenizer(_SpanTokenizer):
 
     def decode(self, tokens: Sequence[int]) -> str:
         try:
-            return self._encoding.decode(list(tokens), errors="strict")
+            values = list(tokens)
+            if any(type(token) is not int or not 0 <= token <= 2 ** 32 - 1 for token in values):
+                raise ValueError("Expected token integers")
+            return self._encoding.decode(values, errors="strict")
         except (KeyError, ValueError, UnicodeDecodeError, TypeError) as exc:
             raise ValueError("Token sequence does not decode to valid Unicode text") from exc
 
@@ -286,6 +311,9 @@ def resolve_tokenizer(config: TokenizerConfig | Mapping | None = None) -> Tokeni
         return UnicodeTokenizer()
     if config.backend == "utf8_bytes":
         return UTF8ByteTokenizer()
+    if config.backend in {"huggingface", "sentencepiece"}:
+        from rags.tokenizer_backends import LocalArtifactTokenizer
+        return LocalArtifactTokenizer(config)
     return TiktokenTokenizer(config)
 
 

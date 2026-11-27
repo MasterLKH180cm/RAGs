@@ -96,6 +96,10 @@ def worker_environment(config: ResearchSettings) -> dict:
         "OPENAI_BASE_URL", "OPENAI_CHAT_MODEL", "OPENAI_EMBEDDING_MODEL",
         "ANTHROPIC_CHAT_MODEL", "ANTHROPIC_BASE_URL",
         "RAGS_EMBEDDING_BASE_URL", "RAGS_EMBEDDING_MODEL", "RAGS_EMBEDDING_SPACE_ID",
+        "RAGS_EMBEDDING_AUTH_MODE", "RAGS_EMBEDDING_REVISION", "RAGS_EMBEDDING_DIMENSIONS",
+        "RAGS_EMBEDDING_QUERY_PREFIX", "RAGS_EMBEDDING_DOCUMENT_PREFIX",
+        "RAGS_EMBEDDING_QUERY_INPUT_TYPE", "RAGS_EMBEDDING_DOCUMENT_INPUT_TYPE",
+        "RAGS_EMBEDDING_TOKENIZER_JSON", "RAGS_EMBEDDING_MAX_TOKENS",
         "RAGS_GENERATION_BASE_URL", "RAGS_GENERATION_MODEL",
         "RAGS_GENERATION_PROTOCOL", "RAGS_REASONING_EFFORT", "RAGS_GENERATION_AUTH_MODE",
     }
@@ -111,9 +115,9 @@ def worker_environment(config: ResearchSettings) -> dict:
             if (os.getenv("RAGS_GENERATION_AUTH_MODE", "required") != "none"
                     and not any(os.getenv(k) for k in ("RAGS_GENERATION_API_KEY", "RAGS_GENERATION_API_KEY_FILE"))):
                 include_secret("OPENAI_API_KEY" if generation == "openai" else "ANTHROPIC_API_KEY")
-        if embedding == "openai" and config.engine != "crag":
+        if embedding in {"openai", "ollama"} and config.engine != "crag" and os.getenv("RAGS_EMBEDDING_AUTH_MODE", "required") != "none":
             include_secret("RAGS_EMBEDDING_API_KEY")
-            if not any(os.getenv(k) for k in ("RAGS_EMBEDDING_API_KEY", "RAGS_EMBEDDING_API_KEY_FILE")):
+            if embedding == "openai" and not any(os.getenv(k) for k in ("RAGS_EMBEDDING_API_KEY", "RAGS_EMBEDDING_API_KEY_FILE")):
                 include_secret("OPENAI_API_KEY")
         if generation == "router" or (embedding == "router" and config.engine != "crag"):
             allowed.update({"RAGS_ROUTER_ENABLED", "RAGS_ROUTER_GATEWAY_URL", "RAGS_ROUTER_MODELS_JSON",
@@ -147,6 +151,15 @@ def worker_environment(config: ResearchSettings) -> dict:
     for name in ("RAGS_MODEL_CACHE", "TIKTOKEN_CACHE_DIR"):
         if environment.get(name):
             environment[name] = str(Path(environment[name]).resolve())
+    for name in ("RAGS_EMBEDDING_TOKENIZER_JSON", "RAGS_GENERATION_TOKENIZER_JSON"):
+        if environment.get(name):
+            from rags.model_profiles import strict_json
+            from rags.tokenization import TokenizerConfig
+            config_value = strict_json(environment[name])
+            TokenizerConfig(**config_value)
+            if config_value.get("path") is not None:
+                config_value["path"] = str(Path(config_value["path"]).resolve())
+            environment[name] = json.dumps(config_value)
     return environment
 
 

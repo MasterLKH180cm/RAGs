@@ -1,0 +1,5 @@
+# CPU embedding verification, separate from the frozen answerability profile.
+-c answerability.txt
+sentence-transformers==5.7.0
+sentencepiece==0.2.3
+pytest==9.2.0

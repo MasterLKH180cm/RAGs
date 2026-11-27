@@ -171,6 +171,44 @@ changing models or index settings.
 
 ## Use a model provider
 
+Browse **22 embedding presets** and **8 tokenizer choices**, or select your own
+compatible model ID. The CLI also offers an interactive picker:
+
+```bash
+rags models list
+rags models list --language multilingual
+rags models show bge-small-zh
+rags tokenizers list
+rags configure
+```
+
+For example, select a Chinese embedding model and keep the existing generation
+provider. In a fresh terminal with the Python environment activated:
+
+```bash
+python -m pip install "rags-platform[encoders] @ git+https://github.com/MasterLKH180cm/RAGs.git"
+rags configure --embedding bge-small-zh --tokenizer unicode --output rags.models.env
+```
+
+If the initial `offline` profile disabled `embedding.fastembed`, explicitly
+enable that entry in `rags.features.json`. Then check and start the service:
+
+```bash
+rags doctor --env-file .env --model-config rags.models.env --no-db
+rags serve --env-file .env --model-config rags.models.env
+```
+
+Selection creates a private model-only overlay and preserves existing files.
+Process environment wins over the overlay, which wins over `.env`. Choosing a
+model does not download weights or change an existing index. Reindex documents
+or create a new collection after changing the embedding identity. Local weights
+load on first use; `doctor` checks configuration and installed dependencies.
+
+The admin **Settings** page has model/tokenizer selectors that generate the same
+configuration command. See [model and tokenizer guide](docs/MODEL_SELECTION.md)
+for all choices, exact tokenizer artifacts, native Ollama, Sentence Transformers,
+custom gateway models, task prefixes, dimensions and safe migration.
+
 Embeddings and answer generation are configured separately. Changing only the
 chat model does not improve the embedding index. Open a **fresh terminal** and
 activate your Python environment before switching profiles: exported variables
@@ -267,7 +305,7 @@ From a checkout, install the locked development dependencies. Repeat all desired
 extras on each `uv sync`; optional research/model runtimes have separate recipes.
 
 ```bash
-uv sync --locked --extra dev --extra pdf --extra mcp --extra vision --extra postgres
+uv sync --locked --extra dev --extra pdf --extra mcp --extra vision --extra postgres --extra tokenizers
 uv run --no-sync python -m pytest -q -m unit --require-no-skips
 uv run --no-sync python -m pytest -q -m "integration and not external" --require-no-skips
 uv run --no-sync python scripts/check_readme.py --live --report reports/testing/readme-onboarding.json

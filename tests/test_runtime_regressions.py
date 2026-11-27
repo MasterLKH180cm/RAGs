@@ -138,6 +138,7 @@ def test_multipart_provider_work_keeps_real_http_liveness_responsive(tmp_path, i
             embedding_provider="local" if image else "openai",
             embedding_api_key="fixture", embedding_base_url=endpoint,
             embedding_model="fixture-embedding", model_provider="openai" if image else "extractive",
+            embedding_tokenizer_config={"backend": "utf8_bytes"}, embedding_max_tokens=100000,
             openai_key="fixture", openai_base_url=endpoint, chat_model="fixture-caption",
             anthropic_key="", anthropic_model="fixture-unused")
         upload = ("source.txt", b"Synthetic source content")

@@ -237,6 +237,35 @@
       txt('#setting-auth',d.auth_mode);txt('#setting-storage',d.storage);
       txt('#setting-embedding',d.embedding_provider);
       txt('#setting-generation',d.generation_provider);
+      const modelSelect=$('#model-preset'),tokenizerSelect=$('#tokenizer-preset');
+      if(modelSelect&&tokenizerSelect){
+        const choices=d.model_selection||{embeddings:[],tokenizers:[]};
+        modelSelect.replaceChildren();tokenizerSelect.replaceChildren();
+        (choices.embeddings||[]).forEach(item=>{
+          const option=el('option','',item.label+' · '+item.provider+(item.enabled===false?'（功能停用）':''));
+          option.value=item.id;modelSelect.append(option);
+        });
+        (choices.tokenizers||[]).forEach(item=>{
+          const option=el('option','',item.label+(item.enabled===false?'（功能停用）':''));
+          option.value=item.id;tokenizerSelect.append(option);
+        });
+        const preview=()=>{
+          const model=(choices.embeddings||[]).find(item=>item.id===modelSelect.value);
+          const tokenizer=(choices.tokenizers||[]).find(item=>item.id===tokenizerSelect.value);
+          txt('#model-preset-description',model?model.description:'');
+          txt('#tokenizer-preset-description',tokenizer?tokenizer.description:'');
+          // Only fixed catalog IDs form commands; never interpolate model text,
+          // endpoints, credentials, paths or user-controlled descriptions.
+          const safe=value=>/^[a-z0-9][a-z0-9-]{0,63}$/.test(value);
+          const command=$('#model-config-command');
+          if(!command)return;
+          if(!model||!tokenizer||!safe(model.id)||!safe(tokenizer.id)){command.value='';return;}
+          const artifact=['huggingface','sentencepiece'].includes(tokenizer.backend)
+            ?' --tokenizer-path /absolute/path/to/'+(tokenizer.backend==='huggingface'?'tokenizer.json':'tokenizer.model'):'';
+          command.value='rags configure --embedding '+model.id+' --tokenizer '+tokenizer.id+artifact+' --output rags.models.env';
+        };
+        modelSelect.onchange=preview;tokenizerSelect.onchange=preview;preview();
+      }
       const perms=$('#permission-list');perms.replaceChildren();
       (d.permissions||[]).forEach(p=>perms.append(el('span','scope-chip',p)));
       const flags=$('#feature-list');flags.replaceChildren();

@@ -84,37 +84,16 @@ def verify_source(package: str, expected: dict[str, str]) -> Path:
 
 
 def disable_encoder_telemetry() -> None:
-    """ONNX computation needs no platform diagnostic network traffic."""
-    # Official ONNX Runtime Privacy.md documents this pre-initialization opt-out.
-    os.environ["ORT_DISABLE_TELEMETRY"] = "1"
-    if importlib.util.find_spec("onnxruntime") is not None:
-        import onnxruntime
-        onnxruntime.disable_telemetry_events()
+    """Compatibility facade for the shared encoder lifecycle policy."""
+    from rags.embedding_runtime import disable_encoder_telemetry as disable
+    disable()
 
 
 def fastembed_token_window(encoder):
-    """Clone the actual tokenizer so full counts cannot inherit truncation.
-
-    The first adapter supports FastEmbed's ordinary ONNX text models. Models
-    with custom query/passage preprocessing need their own counting contract;
-    guessing from a different tokenizer would silently lose source evidence.
-    """
-    from fastembed.text.onnx_embedding import OnnxTextEmbedding
-    from fastembed.text.text_embedding_base import TextEmbeddingBase
-    from tokenizers import Tokenizer
-    model = encoder.model
-    tokenizer = getattr(model, "tokenizer", None)
-    if (type(model) is not OnnxTextEmbedding or tokenizer is None
-            or getattr(model.query_embed, "__func__", None) is not TextEmbeddingBase.query_embed):
-        raise CapabilityError("requires_provider", "Research needs an exact token counter for this embedding model")
-    truncation = tokenizer.truncation or {}
-    limit = truncation.get("max_length")
-    if type(limit) is not int or not 1 <= limit <= 100_000:
-        raise CapabilityError("requires_provider", "Embedding model token window is unavailable")
-    full = Tokenizer.from_str(tokenizer.to_str())
-    full.no_truncation()
-    full.no_padding()
-    return lambda text, query=False: len(full.encode(text).ids), limit
+    """Compatibility facade for research callers; use the shared runtime contract."""
+    from rags.embedding_runtime import fastembed_window
+    window = fastembed_window(encoder)
+    return window.count, window.limit
 
 
 class ProviderBridge:
@@ -133,7 +112,7 @@ class ProviderBridge:
         self.embedding_model = getattr(provider, "embedding_model", "")
         self.generation_provider = getattr(provider, "model_identity", "")
         embedding_provider = getattr(settings, "embedding_provider", "local")
-        if (embedding_provider not in {"fastembed", "openai", "router"}
+        if (embedding_provider not in {"fastembed", "openai", "router", "sentence_transformers", "ollama"}
                 or not isinstance(self.embedding_model, str) or not self.embedding_model
                 or len(self.embedding_model) > 200 or "hash" in self.embedding_model.lower()):
             raise CapabilityError("requires_provider", "Research requires a configured trained embedding provider")
@@ -168,7 +147,7 @@ class ProviderBridge:
             if type(limit) is not int or not 1 <= limit <= 100_000:
                 raise CapabilityError("requires_provider", "Embedding token limit is unavailable")
             self._embedding_counter, self.embedding_token_limit = counter, limit
-            self.embedding_window_policy = "provider_exact_counter_reject_oversize"
+            self.embedding_window_policy = getattr(self.provider, "embedding_window_policy", "provider_exact_counter_reject_oversize")
         elif self.provider.settings.embedding_provider == "fastembed":
             self.features.require("embedding.fastembed")
             from rags.providers import _semantic_encoder

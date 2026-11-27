@@ -204,6 +204,18 @@ def check_browser(app, token, executable, checks):
             page.locator("#admin-token").fill(token)
             page.locator("#login-submit").click()
             expect(page.locator("#workspace")).to_be_visible()
+            page.locator('[data-view="settings"]').click()
+            expect(page.locator("#model-preset option")).to_have_count(22)
+            expect(page.locator("#tokenizer-preset option")).to_have_count(8)
+            page.locator("#model-preset").select_option("bge-small-zh")
+            page.locator("#tokenizer-preset").select_option("huggingface")
+            expect(page.locator("#model-config-command")).to_have_value(
+                "rags configure --embedding bge-small-zh --tokenizer huggingface "
+                "--tokenizer-path /absolute/path/to/tokenizer.json --output rags.models.env")
+            page.locator("#tokenizer-preset").select_option("unicode")
+            expect(page.locator("#model-config-command")).to_have_value(
+                "rags configure --embedding bge-small-zh --tokenizer unicode --output rags.models.env")
+            require(token not in page.locator("#model-config-command").input_value(), "Model preview exposed a credential")
             page.locator('[data-view="agents"]').click()
             expect(page.locator("#agent-model")).to_have_value("inkling-mini")
             page.locator("#agent-goal").fill(QUESTION)

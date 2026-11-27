@@ -448,6 +448,7 @@ def install_admin(app: FastAPI, *, settings: Settings, authenticator: Authentica
     @app.get("/admin/api/operations", include_in_schema=False)
     def operations(request: Request):
         principal, _ = require(request, "rags:read")
+        from rags.model_catalog import catalog as model_catalog
         flags = settings.features.as_dict()
         rights = {
             "documents": "rags:read", "query": "rags:query", "ingestion": "rags:write",
@@ -459,6 +460,8 @@ def install_admin(app: FastAPI, *, settings: Settings, authenticator: Authentica
             flags[flag] = flags[flag] and permission in principal.permissions
         return {"auth_mode": settings.auth_mode, "storage": store.storage_backend,
                 "embedding_provider": settings.embedding_provider,
+                "embedding_model": service.provider.embedding_model,
+                "model_selection": model_catalog(settings.features),
                 "generation_provider": settings.model_provider,
                 "features": flags, "permissions": sorted(principal.permissions),
                 "telemetry": monitor.snapshot(principal.tenant)["otel"]}

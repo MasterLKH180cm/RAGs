@@ -78,6 +78,15 @@ class Settings:
     generation_auth_mode: str = "required"
     embedding_space_id: str = ""
     collection_config: CollectionConfig = field(default_factory=CollectionConfig)
+    embedding_revision: str | None = None
+    embedding_dimensions: int | None = None
+    embedding_query_prefix: str = ""
+    embedding_document_prefix: str = ""
+    embedding_query_input_type: str | None = None
+    embedding_document_input_type: str | None = None
+    embedding_auth_mode: str = "required"
+    embedding_tokenizer_config: dict | None = None
+    embedding_max_tokens: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.collection_config, CollectionConfig):
@@ -85,6 +94,53 @@ class Settings:
         if (not isinstance(self.embedding_space_id, str)
                 or (self.embedding_space_id and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:/@+-]{0,159}", self.embedding_space_id))):
             raise ValueError("RAGS_EMBEDDING_SPACE_ID must be a bounded deployment/version identifier")
+        if not isinstance(self.embedding_provider, str) or self.embedding_provider not in {"local", "openai", "fastembed", "router", "sentence_transformers", "ollama"}:
+            raise ValueError("Unsupported embedding provider")
+        if self.embedding_base_url is not None:
+            if not isinstance(self.embedding_base_url, str):
+                raise ValueError("Embedding endpoint must be a string")
+            endpoint(self.embedding_base_url, "RAGS_EMBEDDING_BASE_URL")
+        validate_model_auth_mode(self.embedding_auth_mode)
+        if self.embedding_auth_mode == "none":
+            if self.embedding_provider not in {"openai", "ollama"}:
+                raise ValueError("Unauthenticated embeddings require the OpenAI-compatible or Ollama provider")
+            validate_local_no_auth_endpoint(self.embedding_base_url)
+            if self.embedding_api_key not in (None, ""):
+                raise ValueError("Unauthenticated embeddings cannot configure an embedding credential")
+        for name in ("embedding_query_prefix", "embedding_document_prefix"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or len(value) > 1024:
+                raise ValueError("Embedding prefixes must be strings of at most 1024 characters")
+            try:
+                value.encode("utf-8")
+            except UnicodeError as exc:
+                raise ValueError("Embedding prefixes must contain valid Unicode") from exc
+        for name in ("embedding_revision", "embedding_query_input_type", "embedding_document_input_type"):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./@+-]{0,159}", value)):
+                raise ValueError("Embedding revision and input types must be bounded identifiers")
+        if self.embedding_revision is not None and self.embedding_provider != "sentence_transformers":
+            raise ValueError("Embedding revision applies to Sentence Transformers; use SPACE_ID for remote deployments")
+        if self.embedding_dimensions is not None and (
+            type(self.embedding_dimensions) is not int or not 1 <= self.embedding_dimensions <= 16_384
+            or self.embedding_provider not in {"openai", "router", "sentence_transformers", "ollama"}
+        ):
+            raise ValueError("Embedding dimensions require a supported provider and an integer from 1 to 16384")
+        if (self.embedding_query_input_type or self.embedding_document_input_type) and self.embedding_provider not in {"openai", "router"}:
+            raise ValueError("Embedding input_type is supported only by remote providers")
+        if (self.embedding_tokenizer_config is None) != (self.embedding_max_tokens is None):
+            raise ValueError("Configure both RAGS_EMBEDDING_TOKENIZER_JSON and RAGS_EMBEDDING_MAX_TOKENS")
+        if self.embedding_tokenizer_config is not None:
+            if not isinstance(self.embedding_tokenizer_config, dict):
+                raise ValueError("Embedding tokenizer must be a configuration object")
+            try:
+                tokenizer = TokenizerConfig(**self.embedding_tokenizer_config)
+            except TypeError as exc:
+                raise ValueError("Unknown embedding tokenizer configuration field") from exc
+            if tokenizer.backend == "unicode":
+                raise ValueError("Unicode codepoint counting is not an embedding model token contract")
+            if type(self.embedding_max_tokens) is not int or not 1 <= self.embedding_max_tokens <= 100_000:
+                raise ValueError("Embedding token window must be an integer from 1 to 100000")
         validate_model_auth_mode(self.generation_auth_mode)
         if self.generation_auth_mode == "none":
             validate_local_no_auth_endpoint(self.generation_base_url)
@@ -97,11 +153,16 @@ class Settings:
     def embedding_endpoint(self) -> str:
         if self.embedding_provider == "router":
             return "router"
+        if self.embedding_provider == "ollama":
+            return self.embedding_base_url or "http://127.0.0.1:11434"
         return (self.embedding_base_url or self.openai_base_url) if self.embedding_provider == "openai" else "local"
 
     @property
     def embedding_credential(self) -> str:
-        return self.embedding_api_key if self.embedding_api_key is not None else self.openai_key
+        if self.embedding_auth_mode == "none":
+            return ""
+        return self.embedding_api_key if self.embedding_api_key is not None else (
+            self.openai_key if self.embedding_provider == "openai" else "")
 
     @property
     def generation_endpoint(self) -> str:
@@ -198,10 +259,15 @@ class Settings:
             raise ValueError("Production admin dashboard requires explicit RAGS_KEY_ROLES_JSON")
         embedding_provider = os.getenv("RAGS_EMBEDDING_PROVIDER", "local").lower()
         model_provider = os.getenv("RAGS_MODEL_PROVIDER", "extractive").lower()
-        if embedding_provider not in {"local", "openai", "fastembed", "router"}:
+        if embedding_provider not in {"local", "openai", "fastembed", "router", "sentence_transformers", "ollama"}:
             raise ValueError("Unsupported embedding provider")
         if model_provider not in {"extractive", "openai", "anthropic", "router"}:
             raise ValueError("Unsupported model provider")
+        embedding_auth_mode = validate_model_auth_mode(os.getenv("RAGS_EMBEDDING_AUTH_MODE", "required"))
+        if embedding_auth_mode == "none" and any(os.getenv(name) for name in (
+            "RAGS_EMBEDDING_API_KEY", "RAGS_EMBEDDING_API_KEY_FILE",
+        )):
+            raise ValueError("Unauthenticated embeddings cannot configure an embedding credential")
         generation_auth_mode = validate_model_auth_mode(os.getenv("RAGS_GENERATION_AUTH_MODE", "required"))
         if generation_auth_mode == "none" and any(os.getenv(name) for name in (
             "RAGS_GENERATION_API_KEY", "RAGS_GENERATION_API_KEY_FILE",
@@ -212,7 +278,7 @@ class Settings:
             raise ValueError("RAGS_DATABASE_URL must select PostgreSQL")
         db_path = database_url or os.getenv("RAGS_DB_PATH") or str(Path("data") / "rags.db")
         openai_base = endpoint(os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1", "OPENAI_BASE_URL")
-        embedding_base = os.getenv("RAGS_EMBEDDING_BASE_URL")
+        embedding_base = os.getenv("RAGS_EMBEDDING_BASE_URL") or None
         generation_base = os.getenv("RAGS_GENERATION_BASE_URL") or (
             os.getenv("ANTHROPIC_BASE_URL") if model_provider == "anthropic" else None)
         if embedding_base:
@@ -283,10 +349,11 @@ class Settings:
         # A local generation run never reads ambient hosted secrets. Separately
         # configured OpenAI embeddings may still need their own explicit/legacy key.
         local_generation = generation_auth_mode == "none"
-        embedding_key = (secret("RAGS_EMBEDDING_API_KEY") or None
-                         if not local_generation or embedding_provider == "openai" else None)
+        embedding_key = ((secret("RAGS_EMBEDDING_API_KEY") or None)
+                         if embedding_auth_mode != "none" and (not local_generation or embedding_provider in {"openai", "ollama"}) else None)
         openai_key = (secret("OPENAI_API_KEY")
-                      if not local_generation or (embedding_provider == "openai" and not embedding_key) else "")
+                      if (embedding_auth_mode != "none" or model_provider == "openai")
+                      and (not local_generation or (embedding_provider == "openai" and embedding_auth_mode != "none" and not embedding_key)) else "")
         return cls(
             db_path=db_path,
             keys=keys,
@@ -296,9 +363,11 @@ class Settings:
             openai_base_url=openai_base,
             embedding_model=os.getenv("RAGS_EMBEDDING_MODEL") or (
                 "embeddings" if embedding_provider == "router" else
+                "sentence-transformers/all-MiniLM-L6-v2" if embedding_provider == "sentence_transformers" else
+                "nomic-embed-text" if embedding_provider == "ollama" else
                 os.getenv("OPENAI_EMBEDDING_MODEL") or "text-embedding-3-small"),
             chat_model=chat_model,
-            anthropic_key=secret("ANTHROPIC_API_KEY") if not local_generation else "",
+            anthropic_key=secret("ANTHROPIC_API_KEY") if not local_generation and (embedding_auth_mode != "none" or model_provider == "anthropic") else "",
             anthropic_model=os.getenv("RAGS_GENERATION_MODEL") or os.getenv("ANTHROPIC_CHAT_MODEL") or "claude-sonnet-4-5",
             tokenizer_config=tokenizer,
             chunking_config=chunking,
@@ -330,4 +399,13 @@ class Settings:
             reasoning_effort=effort,
             generation_auth_mode=generation_auth_mode,
             collection_config=CollectionConfig.from_env(),
+            embedding_revision=os.getenv("RAGS_EMBEDDING_REVISION") or None,
+            embedding_dimensions=int(os.environ["RAGS_EMBEDDING_DIMENSIONS"]) if os.getenv("RAGS_EMBEDDING_DIMENSIONS") else None,
+            embedding_query_prefix=os.getenv("RAGS_EMBEDDING_QUERY_PREFIX", ""),
+            embedding_document_prefix=os.getenv("RAGS_EMBEDDING_DOCUMENT_PREFIX", ""),
+            embedding_query_input_type=os.getenv("RAGS_EMBEDDING_QUERY_INPUT_TYPE") or None,
+            embedding_document_input_type=os.getenv("RAGS_EMBEDDING_DOCUMENT_INPUT_TYPE") or None,
+            embedding_auth_mode=embedding_auth_mode,
+            embedding_tokenizer_config=object_env("RAGS_EMBEDDING_TOKENIZER_JSON", "{}") if os.getenv("RAGS_EMBEDDING_TOKENIZER_JSON") else None,
+            embedding_max_tokens=int(os.environ["RAGS_EMBEDDING_MAX_TOKENS"]) if os.getenv("RAGS_EMBEDDING_MAX_TOKENS") else None,
         )

@@ -228,6 +228,12 @@ class CollectionService:
         self.settings.features.require("embedding." + self.settings.embedding_provider)
         for text in texts:
             valid_text(text, 20_000)
+        validate = getattr(self.provider, "validate_embedding_inputs", None)
+        if callable(validate):
+            # The production provider owns model-specific preprocessing and its
+            # complete-input window; batches validate before the first call.
+            validate(texts, query=query)
+            return
         callback = getattr(self.provider, "embedding_token_count", None)
         if callable(callback):
             maximum = getattr(self.provider, "embedding_token_limit", None)
