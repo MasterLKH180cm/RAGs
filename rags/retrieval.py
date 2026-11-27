@@ -127,6 +127,9 @@ class RAGService:
             raise ValueError("Unknown native index feature")
         config = ChunkConfig(**(chunking or self.settings.chunking_config))
         tokenizer_config = tokenizer or self.settings.tokenizer_config
+        if (tokenizer_config.get("backend") in {"huggingface", "sentencepiece"}
+                and tokenizer_config != self.settings.tokenizer_config):
+            raise CapabilityError("tokenizer_not_allowed", "Local tokenizer artifacts must match the operator configuration", 403)
         self.settings.features.require("chunking." + config.strategy,
                                        "tokenizer." + tokenizer_config.get("backend", "unicode"),
                                        *("index." + name for name in features))
@@ -254,6 +257,9 @@ class RAGService:
             context_model=self.provider.model_identity if config.strategy == "contextual" else None,
             max_records=MAX_INDEX_RECORDS, max_materialized_bytes=MAX_MATERIALIZED_BYTES,
         )
+        validate_embeddings = getattr(self.provider, "validate_embedding_inputs", None)
+        if callable(validate_embeddings):
+            validate_embeddings([draft.embedding_text for draft in plan.chunks])
         first_vector = self.provider.embedding(plan.chunks[0].embedding_text)
         profile["embedding_dimensions"] = len(first_vector)
         profile_id = index_fingerprint(profile)
@@ -369,6 +375,16 @@ class RAGService:
         profile = doc["index_profile"]
         tokenizer_profile = profile.get("tokenizer", {})
         tokenizer_config = {k: tokenizer_profile[k] for k in ("backend", "model", "encoding") if tokenizer_profile.get(k) is not None}
+        if tokenizer_profile.get("backend") in {"huggingface", "sentencepiece"} and not changes.get("tokenizer"):
+            active = self.settings.tokenizer_config
+            self.preflight_ingestion(
+                chunking=changes.get("chunking") or profile.get("chunking"), tokenizer=active,
+                index_features=changes.get("index_features") if changes.get("index_features") is not None else profile.get("features", []),
+            )
+            if (active.get("backend") != tokenizer_profile.get("backend")
+                    or resolve_tokenizer(active).profile != tokenizer_profile):
+                raise CapabilityError("tokenizer_mismatch", "The indexed tokenizer artifact changed; explicitly select the configured tokenizer to reindex", 409)
+            tokenizer_config = active
         metadata = dict(doc["metadata"])
         rows = metadata.pop("_rags_rows", None)
         return self.ingest(

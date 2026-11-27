@@ -1,0 +1,146 @@
+{
+  "actual_encoder_junit": {
+    "path": "reports/embedding-encoders.junit.xml",
+    "sha256": "ab8a6fc7d7facf800fb6c1ba8cca42b9e90ac8429cb24cab0b4fb2cedd3b21c7"
+  },
+  "actual_encoder_selection": [
+    "tests/test_semantic_encoder.py",
+    "tests/test_collection_encoder_actual.py",
+    "tests/test_sentence_encoder_actual.py",
+    "tests/test_sentence_model_actual.py"
+  ],
+  "baseline_commit": "50436763b63f895054b315f9732eb1979901f80b",
+  "evidence_scope": {
+    "actual_ollama_checkpoint_inference": false,
+    "actual_tiny_synthetic_sentence_transformers": 4,
+    "live_hosted_model_inference": false,
+    "quality_or_throughput_improvement_claimed": false,
+    "trained_fastembed_bge": 2,
+    "trained_pinned_minilm": 1
+  },
+  "executed_actual_encoder_tests": {
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0,
+    "tests": 7
+  },
+  "models": [
+    {
+      "files": {
+        "config.json": {
+          "bytes": 706,
+          "sha256": "13582bcf2effc85b7bf3d3f5532e686bc1c9ce86bb009d10f0ec33cbe92299dd"
+        },
+        "model_optimized.onnx": {
+          "bytes": 66465124,
+          "sha256": "51f1bd0addd6e859e42c2c8021a5e5461385bb676a649f4b269aa445449f2431"
+        },
+        "special_tokens_map.json": {
+          "bytes": 695,
+          "sha256": "5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a"
+        },
+        "tokenizer.json": {
+          "bytes": 711396,
+          "sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"
+        },
+        "tokenizer_config.json": {
+          "bytes": 1242,
+          "sha256": "0b29c7bfc889e53b36d9dd3e686dd4300f6525110eaa98c76a5dafceb2029f53"
+        }
+      },
+      "repository": "Qdrant/bge-small-en-v1.5-onnx-Q",
+      "revision": "aa8f8b060edb00e03bfdd08813a2949946c8ba55"
+    },
+    {
+      "files": {
+        "1_Pooling/config.json": {
+          "bytes": 190,
+          "sha256": "4be450dde3b0273bb9787637cfbd28fe04a7ba6ab9d36ac48e92b11e350ffc23"
+        },
+        "README.md": {
+          "bytes": 10502,
+          "sha256": "dcd602d2fd35c203a247304a06fec6654a12f7941b739f9221a064fe8dc3b7f0"
+        },
+        "config.json": {
+          "bytes": 612,
+          "sha256": "953f9c0d463486b10a6871cc2fd59f223b2c70184f49815e7efbcab5d8908b41"
+        },
+        "config_sentence_transformers.json": {
+          "bytes": 116,
+          "sha256": "061ca9d39661d6c6d6de5ba27f79a1cd5770ea247f8d46412a68a498dc5ac9f3"
+        },
+        "model.safetensors": {
+          "bytes": 90868376,
+          "sha256": "53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9db"
+        },
+        "modules.json": {
+          "bytes": 349,
+          "sha256": "84e40c8e006c9b1d6c122e02cba9b02458120b5fb0c87b746c41e0207cf642cf"
+        },
+        "sentence_bert_config.json": {
+          "bytes": 53,
+          "sha256": "fc1993fde0a95c24ec6c022539d41cf6e2f7c9721e5415d6fb6897472a9cd4b7"
+        },
+        "special_tokens_map.json": {
+          "bytes": 112,
+          "sha256": "303df45a03609e4ead04bc3dc1536d0ab19b5358db685b6f3da123d05ec200e3"
+        },
+        "tokenizer.json": {
+          "bytes": 466247,
+          "sha256": "be50c3628f2bf5bb5e3a7f17b1f74611b2561a3a27eeab05e5aa30f411572037"
+        },
+        "tokenizer_config.json": {
+          "bytes": 350,
+          "sha256": "acb92769e8195aabd29b7b2137a9e6d6e25c476a4f15aa4355c233426c61576b"
+        },
+        "vocab.txt": {
+          "bytes": 231508,
+          "sha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3"
+        }
+      },
+      "repository": "sentence-transformers/all-MiniLM-L6-v2",
+      "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
+    }
+  ],
+  "other_targeted_verification": {
+    "combined_selection_passed": 211,
+    "postgres_cases_explicitly_deselected": 2,
+    "selected_skips": 0,
+    "warning": "Do not sum overlapping selections; final repository-wide gates are separate."
+  },
+  "prior_attempt": {
+    "reason": "ONNX attempted unrelated diagnostic network traffic",
+    "resolution": "Explicitly disabled ONNX and Hugging Face telemetry before runtime construction; final seven tests passed with telemetry disabled.",
+    "status": "automatic_approval_rejected"
+  },
+  "runtimes": {
+    "fastembed": "0.9.1",
+    "numpy": "2.5.5",
+    "onnxruntime": "1.32.0",
+    "sentence-transformers": "5.7.0",
+    "tiktoken": "0.14.0",
+    "tokenizers": "0.22.2",
+    "torch": "2.15.0+cpu",
+    "transformers": "4.57.6"
+  },
+  "schema": "embedding-runtime-validation-v1",
+  "source_sha256": {
+    "rags/agents/router.py": "cd62f980c8eb9188bcecbb64b6a5edc620e7fcad64d9158b5824db56d1150aa2",
+    "rags/collection_service.py": "b557fdb0f4f26d1a62c75fa4235b959204609f3a6165fcb3d87622ad3a118dc7",
+    "rags/config.py": "b66f0b9adf129e2406c079a8bb53e00f11655df4451330283a3ec0ad16d6f65a",
+    "rags/embedding_runtime.py": "5da07efd35e2fd2cc9034356867f951aa86cbfc9ef9939c2932c83795e8f0249",
+    "rags/providers.py": "d409ae30bfea30e6d7a9fe21d703fcde28726b5132afdb649098de6ecff66597",
+    "rags/research/common.py": "69ed1ef46e278d3f2abd392c2c12a31663f5ced3b0dc5c3430fe45675a3b072e",
+    "rags/research_service.py": "364a086042ea77588360f57e610c07f3525388e232f1f46305f285e1d54bab86",
+    "rags/research_worker.py": "060277cb3f7e0efaa88ed32f59bf8f22b22b18e893b3e55d2561a2099419b53e",
+    "rags/retrieval.py": "20eda46d7664bdfed3fb6dc1679e5027b5933f82d473fe1bb4a326da9a4d6e14",
+    "rags/tokenization.py": "f741db69084fe07b8d221208aecce638c53ad811be5fdd53b3c380855ed3f24e",
+    "tests/test_collection_encoder_actual.py": "46cfae95db720ada36f416cbc07c1af158616632051fce396bbde5d5a602f0fd",
+    "tests/test_embedding_runtime.py": "415f87c2633c6310b36eef50560b75f7869acab9c1544fbbf248c1a6ecc1eb5f",
+    "tests/test_embedding_selection_integration.py": "403deefa6bcfd9d2a13461281d05e0a921e88a21a1ba8b3378f0d9f680465f80",
+    "tests/test_semantic_encoder.py": "f0d2c0ff9dc0290f679efe4b983a7505c89556c3ba4915c62715214f665fb5de",
+    "tests/test_sentence_encoder_actual.py": "fbe8e8bc13ca59b2fc0ac25cb9799a8dceaf6cfbc6e9e968235b51e522c4f526",
+    "tests/test_sentence_model_actual.py": "1f0d78a7a24a80c9957976ac8c2afc43db5507738ae12d6a1916b273c59f71b5"
+  },
+  "verified_at_utc": "2026-11-27T04:02:12.346168+00:00"
+}

@@ -44,14 +44,10 @@ PROFILE_DISABLED = {
 }
 
 
-def load_env_file(path: str | Path | None) -> None:
-    """Read a small shell-quoted file without executing arbitrary shell code.
-
-    Existing process variables take precedence; files never replace secrets
-    supplied by a shell, container orchestrator, or secret-management system.
-    """
+def read_env_file(path: str | Path | None) -> dict[str, str]:
+    """Parse a bounded environment file without modifying process state."""
     if path is None:
-        return
+        return {}
     filename = Path(path)
     try:
         raw = read_regular_text(filename, max_bytes=MAX_ENV_SIZE)
@@ -61,23 +57,78 @@ def load_env_file(path: str | Path | None) -> None:
         raise ValueError("Environment file must be an existing regular file, not a symlink") from exc
     except (OSError, UnicodeError) as exc:
         raise ValueError("Cannot read environment file") from exc
+    if "\0" in raw:
+        raise ValueError("Environment files cannot contain NUL characters")
     seen = set()
     parsed = {}
-    for number, line in enumerate(raw.splitlines(), start=1):
-        if not line.strip() or line.lstrip().startswith("#"):
+    pending = []
+    quote = None
+    statement_number = 0
+    # Unicode line separators can be meaningful prompt text. Only LF delimits
+    # physical environment lines; shlex accepts CRLF whitespace outside quotes.
+    for number, line in enumerate(raw.split("\n"), start=1):
+        if not pending and (not line.strip() or line.lstrip().startswith("#")):
             continue
-        name, separator, value = line.partition("=")
-        if not separator or not ENV_NAME.fullmatch(name) or name in seen:
-            raise ValueError(f"Malformed or repeated environment name on line {number}")
-        seen.add(name)
+        if not pending:
+            statement_number = number
+        if not pending:
+            name, separator, value = line.partition("=")
+            if not separator or not ENV_NAME.fullmatch(name) or name in seen:
+                raise ValueError(f"Malformed or repeated environment name on line {statement_number}")
+        else:
+            value = line
+        pending.append(line)
+        # Scan boundaries once; invoking shlex on every growing prefix would
+        # make a small many-line quoted value quadratic to parse.
+        escaped = False
+        for character in value:
+            if escaped:
+                escaped = False
+            elif quote == "'":
+                if character == "'":
+                    quote = None
+            elif character == "\\":
+                escaped = True
+            elif quote == '"':
+                if character == '"':
+                    quote = None
+            elif character == "#":
+                break
+            elif character in {"'", '"'}:
+                quote = character
+        if quote is not None:
+            continue
+        statement = "\n".join(pending)
+        name, _, value = statement.partition("=")
         try:
             tokens = shlex.split(value, comments=True, posix=True)
         except ValueError as exc:
-            raise ValueError(f"Malformed shell quoting on line {number}") from exc
+            raise ValueError(f"Malformed shell quoting on line {statement_number}") from exc
         if len(tokens) > 1:
-            raise ValueError(f"Environment line {number} must contain one value")
+            raise ValueError(f"Environment line {statement_number} must contain one value")
+        seen.add(name)
         parsed[name] = tokens[0] if tokens else ""
-    for name, value in parsed.items():
+        pending = []
+    if pending:
+        raise ValueError(f"Malformed shell quoting on line {statement_number}")
+    return parsed
+
+
+def load_env_file(path: str | Path | None) -> None:
+    """Existing process variables take precedence; never execute shell code."""
+    for name, value in read_env_file(path).items():
+        os.environ.setdefault(name, value)
+
+
+def load_configuration(base: str | Path | None, model: str | Path | None = None) -> None:
+    """Environment > model selection > base file; parse both before mutation."""
+    values = read_env_file(base)
+    selection = read_env_file(model)
+    from rags.model_selection import MODEL_ENV_KEYS
+    if set(selection) - MODEL_ENV_KEYS:
+        raise ValueError("Model overlays may contain only model and tokenizer settings")
+    values.update(selection)
+    for name, value in values.items():
         os.environ.setdefault(name, value)
 
 
@@ -195,7 +246,7 @@ def diagnose(*, check_db: bool = True) -> dict:
          "offline-hash-v1" if settings.embedding_provider == "local" else
          settings.fastembed_model if settings.embedding_provider == "fastembed" else settings.embedding_model,
          settings.embedding_endpoint,
-         settings.embedding_credential if settings.embedding_provider == "openai" else ""),
+         settings.embedding_credential if settings.embedding_provider in {"openai", "ollama"} else ""),
         ("generation", settings.model_provider,
          settings.anthropic_model if settings.model_provider == "anthropic" else
          settings.chat_model if settings.model_provider == "openai" else "extractive",
@@ -205,15 +256,39 @@ def diagnose(*, check_db: bool = True) -> dict:
     for name, provider, model, url, credential in providers:
         host = urlsplit(url).hostname or "local"
         details = f"{provider}; model={model}; endpoint_host={host}"
-        local_no_auth = name == "generation" and settings.generation_auth_mode == "none"
+        local_no_auth = ((name == "generation" and settings.generation_auth_mode == "none")
+                         or (name == "embedding" and settings.embedding_auth_mode == "none"))
         if local_no_auth:
             details += "; auth=none (explicit loopback)"
-        if not local_no_auth and (provider == "openai" or provider == "anthropic") and (
+        if not local_no_auth and provider in {"openai", "anthropic", "ollama"} and (
             not credential or credential == "REPLACE_ME"
         ):
             checks.append(_check(name, "warning", details + "; credentials missing"))
         else:
             checks.append(_check(name, "ok", details))
+    from importlib.util import find_spec
+    optional = {"fastembed": ("fastembed", "encoders"),
+                "sentence_transformers": ("sentence_transformers", "sentence-transformers")}
+    if settings.embedding_provider in optional:
+        module, extra = optional[settings.embedding_provider]
+        if find_spec(module) is None:
+            checks.append(_check("embedding_runtime", "error", "Install rags-platform[" + extra + "]"))
+    if not settings.features.enabled("embedding." + settings.embedding_provider):
+        checks.append(_check("embedding_permission", "error", "Selected embedding provider is disabled by operator feature policy"))
+    for name, config in (("chunking_tokenizer", settings.tokenizer_config),
+                         ("generation_tokenizer", settings.generation_tokenizer_config),
+                         ("embedding_tokenizer", settings.embedding_tokenizer_config)):
+        if not config:
+            continue
+        backend = config.get("backend", "unicode")
+        if not settings.features.enabled("tokenizer." + backend):
+            checks.append(_check(name, "error", "Selected tokenizer is disabled by operator feature policy"))
+        if backend in {"huggingface", "sentencepiece"}:
+            module = "tokenizers" if backend == "huggingface" else "sentencepiece"
+            if find_spec(module) is None:
+                checks.append(_check(name, "error", "Install rags-platform[tokenizers]"))
+            elif not Path(config["path"]).is_file() or Path(config["path"]).is_symlink():
+                checks.append(_check(name, "error", "Local tokenizer artifact is unavailable or is a symlink"))
     if settings.model_provider == "router" or settings.embedding_provider == "router":
         from rags.agents.config import AgentPlatformConfig
 
@@ -264,10 +339,12 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--directory", type=Path, default=Path("."))
     doctor = sub.add_parser("doctor", help="Read-only configuration and storage checks")
     doctor.add_argument("--env-file", type=Path)
+    doctor.add_argument("--model-config", type=Path, help="Model selection overlay; existing environment wins")
     doctor.add_argument("--no-db", action="store_true", help="Skip database connection")
     doctor.add_argument("--json", action="store_true", help="Emit machine-readable results")
     serve = sub.add_parser("serve", help="Start the existing FastAPI service")
     serve.add_argument("--env-file", type=Path)
+    serve.add_argument("--model-config", type=Path, help="Model selection overlay; existing environment wins")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
     serve.add_argument("--allow-public", action="store_true", help="Explicitly allow non-loopback bind")
@@ -320,6 +397,8 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--json", action="store_true")
     from rags.collection_cli import add_commands
     add_commands(sub)
+    from rags.model_selection import add_commands as add_model_commands
+    add_model_commands(sub)
     return parser
 
 
@@ -333,7 +412,17 @@ def main(argv: list[str] | None = None) -> int:
                 print("Created " + str(path))
             print("Start with: rags serve --env-file " + str(paths[0]))
             return 0
-        load_env_file(args.env_file)
+        if args.command in {"models", "tokenizers", "configure"}:
+            from rags.model_selection import run
+            try:
+                return run(args)
+            except (ValueError, FileExistsError, EOFError) as exc:
+                message = ("Output already exists; choose a new --output path" if isinstance(exc, FileExistsError)
+                           else "Selection cancelled; no configuration was written" if isinstance(exc, EOFError)
+                           else str(exc))
+                print("rags: " + message, file=sys.stderr)
+                return 2
+        load_configuration(args.env_file, getattr(args, "model_config", None))
         if args.command in {"collection", "records", "search"}:
             from rags.collection_cli import run
             return run(args)

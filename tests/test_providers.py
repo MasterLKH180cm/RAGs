@@ -25,6 +25,7 @@ def settings(tmp_path):
         embedding_provider="openai", model_provider="openai", openai_key="fixture-openai-key",
         openai_base_url="https://provider.invalid/v1", embedding_model="fixture-embedding",
         chat_model="fixture-chat", anthropic_key="fixture-anthropic-key", anthropic_model="fixture-message",
+        embedding_tokenizer_config={"backend": "utf8_bytes"}, embedding_max_tokens=100000,
     )
 
 
@@ -53,7 +54,7 @@ def test_embedding_request_vector_and_usage_preserve_the_provider_contract(setti
         "json": {"model": "fixture-embedding", "input": "source text"}, "timeout": 30,
     })]
     assert provider.usage()["provider_reports"] == [{
-        "kind": "embedding", "model": "openai:fixture-embedding",
+        "kind": "embedding", "model": provider.embedding_model,
         "usage": {"prompt_tokens": 7, "total_tokens": 7},
     }]
     assert "private" not in json.dumps(provider.usage())
@@ -309,7 +310,7 @@ def test_fastembed_adapter_keeps_query_and_document_paths_distinct(settings, mon
     calls = []
 
     class Encoder:
-        def embed(self, texts):
+        def passage_embed(self, texts):
             calls.append(("document", texts))
             return iter([SimpleNamespace(tolist=lambda: [1.0, 0.0])])
 
@@ -318,6 +319,9 @@ def test_fastembed_adapter_keeps_query_and_document_paths_distinct(settings, mon
             return iter([SimpleNamespace(tolist=lambda: [0.0, 1.0])])
 
     monkeypatch.setattr(provider_module, "_semantic_encoder", lambda *_: Encoder())
+    from rags.embedding_runtime import EmbeddingWindow
+    monkeypatch.setattr(provider_module, "fastembed_window", lambda _: EmbeddingWindow(
+        lambda text, query=False: len(text), 64, "synthetic_native_counter"))
     provider = Providers(replace(settings, embedding_provider="fastembed"))
     assert provider.embedding("source") == [1.0, 0.0]
     assert provider.query_embedding("question") == [0.0, 1.0]

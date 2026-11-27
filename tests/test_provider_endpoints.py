@@ -62,6 +62,7 @@ def test_separate_embedding_and_generation_endpoints_keys_models_and_index_ident
                            embedding_provider="openai", model_provider=model_provider,
                            openai_base_url="https://legacy-must-not-be-called.invalid/v1", openai_key="legacy-key",
                            embedding_base_url=embedding_url, embedding_api_key="embedding-only-key", embedding_model="embedding-v2",
+                           embedding_tokenizer_config={"backend": "utf8_bytes"}, embedding_max_tokens=100000,
                            generation_base_url=generation_url, generation_api_key="generation-only-key",
                            chat_model="chat-v2", anthropic_model="messages-v2", generation_tokenizer_config={"backend": "unicode"})
         with TestClient(create_app(settings)) as client:

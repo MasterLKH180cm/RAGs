@@ -31,9 +31,11 @@ MANIFEST = {
     "collections.sparse_vectors": "Store and query explicit sparse vector spaces",
     "collections.batch": "Execute bounded atomic record and search batches",
     "collections.grouping": "Diversify search results by metadata groups",
-    **{f"embedding.{name}": f"Use the {name} embedding provider" for name in ("local", "openai", "fastembed", "router")},
+    **{f"embedding.{name}": f"Use the {name} embedding provider"
+       for name in ("local", "openai", "fastembed", "router", "sentence_transformers", "ollama")},
     **{f"index.{name}": f"Build the {name} index" for name in ("hierarchy", "graph")},
-    **{f"tokenizer.{name}": f"Use the {name} text counter" for name in ("unicode", "tiktoken", "utf8_bytes")},
+    **{f"tokenizer.{name}": f"Use the {name} text counter"
+       for name in ("unicode", "tiktoken", "utf8_bytes", "huggingface", "sentencepiece")},
     **{f"chunking.{name}": f"Use the {name} chunker" for name in STRATEGIES},
     **{f"strategy.{name}": f"Execute the {name} retrieval strategy" for name in MODES},
 }

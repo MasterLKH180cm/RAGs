@@ -30,7 +30,7 @@ def provider_settings(*, require_embeddings=True):
     from rags.config import Settings
     os.environ["RAGS_KEYS_JSON"] = json.dumps({secrets.token_urlsafe(32): "research-worker"})
     settings = Settings.from_env()
-    if require_embeddings and settings.embedding_provider not in {"fastembed", "openai", "router"}:
+    if require_embeddings and settings.embedding_provider not in {"fastembed", "openai", "router", "sentence_transformers", "ollama"}:
         raise ValueError("requires_provider")
     return settings
 

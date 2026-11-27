@@ -324,6 +324,14 @@
           <article class="panel"><div class="panel-heading"><div><h2>有效權限</h2><p>以登入憑證的實際 Scopes 為準</p></div></div>
             <div id="permission-list" class="chip-grid"></div><div class="info-callout"><strong>最小權限</strong><p>本頁的管理員權限，不會繞過 API 的租戶隔離、模型授權或功能開關。</p></div></article>
         </div>
+        <article class="panel feature-panel"><div class="panel-heading"><div><h2>選擇模型與 Tokenizer</h2><p>先產生設定指令，由管理者套用後重新啟動服務。變更 embedding 後請重建索引或建立新 Collection。</p></div></div>
+          <div class="overview-grid">
+            <div><label for="model-preset">Embedding 模型</label><select id="model-preset" aria-describedby="model-preset-description"></select><p id="model-preset-description" class="field-hint"></p></div>
+            <div><label for="tokenizer-preset">文件分段 Tokenizer</label><select id="tokenizer-preset" aria-describedby="tokenizer-preset-description"></select><p id="tokenizer-preset-description" class="field-hint"></p></div>
+          </div>
+          <label for="model-config-command">設定指令</label><textarea id="model-config-command" rows="3" readonly spellcheck="false"></textarea>
+          <p class="field-hint">使用伺服器終端執行上述指令；模型授權與功能開關仍由管理者設定。Generation Tokenizer 可另外透過 CLI 選擇。</p>
+        </article>
         <article class="panel feature-panel"><div class="panel-heading"><div><h2>功能開關</h2><p>目前部署的有效啟用狀態（唯讀）</p></div></div><div id="feature-list" class="feature-grid"></div></article>
       </section>
       <footer class="main-footer"><span>RAGs Control Center <span class="tiny-dot">·</span> v0.9</span><span>Self-hosted · Tenant isolated · Designed for clarity</span></footer>

@@ -75,7 +75,8 @@ def test_same_start_source_correction_does_not_restore_expired_older_copy(tmp_pa
 
 def routed_service(store, host, calls, *, space_id="", key="synthetic-key"):
     settings = replace(settings_for(store.path), embedding_provider="router", embedding_model="embed",
-                       embedding_space_id=space_id)
+                       embedding_space_id=space_id, embedding_tokenizer_config={"backend": "utf8_bytes"},
+                       embedding_max_tokens=100000)
 
     def gateway(request):
         body = json.loads(request.content)

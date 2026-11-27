@@ -49,6 +49,7 @@ def query(client, *, token=A, **data):
 def test_sqlite_dense_ranks_extreme_finite_vectors_by_direction(system, monkeypatch, scale):
     client, service, _ = system
     monkeypatch.setattr(service.provider, "embedding", lambda text: [scale, 0.0] if "aligned" in text else [0.0, scale])
+    monkeypatch.setattr(service.provider, "query_embedding", lambda text: [scale, 0.0] if "aligned" in text else [0.0, scale])
     # The lower source ID is deliberately orthogonal: zero/NaN scores must not
     # reduce the ranking to insertion order or the stable identifier tie-break.
     monkeypatch.setattr(retrieval_module, "_identifier", lambda *parts: parts[1] + "-" + parts[-1])

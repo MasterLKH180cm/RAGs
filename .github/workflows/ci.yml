@@ -55,7 +55,7 @@ jobs:
             requirements/*.txt
       - name: Install locked development dependencies
         run: |
-          uv sync --locked --extra dev --extra pdf --extra mcp --extra vision --extra postgres
+          uv sync --locked --extra dev --extra pdf --extra mcp --extra vision --extra postgres --extra tokenizers
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
       - name: Bootstrap the vector extension before application connections
         run: |
@@ -340,6 +340,57 @@ jobs:
         if: always()
         with:
           name: actual-encoder-test-evidence
+          path: reports/testing/
+          if-no-files-found: error
+
+  sentence-transformers:
+    name: Actual Sentence Transformers preprocessing and pretrained embeddings
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RAGS_ENV: test
+      RAGS_TEST_SENTENCE_TRANSFORMERS: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TOKENIZERS_PARALLELISM: "false"
+      OMP_NUM_THREADS: "2"
+      RAGS_MODEL_CACHE: /tmp/rags-sentence-models
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+        with:
+          version: "0.13.9"
+          enable-cache: true
+          cache-suffix: sentence-transformers
+          cache-dependency-glob: |
+            uv.lock
+            requirements/embedding-cpu.txt
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/rags-sentence-models
+          key: rags-sentence-minilm-v1-${{ runner.os }}
+      - name: Install locked core and hash-locked CPU embedding runtime
+        run: |
+          uv sync --locked --extra dev --extra tokenizers
+          uv pip install --python .venv/bin/python --torch-backend cpu --require-hashes -r requirements/embedding-cpu.txt
+      - name: Verify real local tokenizer preprocessing
+        run: >-
+          uv run --no-sync python -m pytest -q
+          tests/test_sentence_encoder_actual.py
+          --require-no-skips --junitxml reports/testing/sentence-transformers-local.junit.xml
+      # The offline-only local fixture initializes Hugging Face process globals.
+      # A fresh process keeps the pretrained download gate valid on a cold cache.
+      - name: Verify actual trained MiniLM embeddings
+        run: >-
+          uv run --no-sync python -m pytest -q
+          tests/test_sentence_model_actual.py
+          --require-no-skips --junitxml reports/testing/sentence-transformers-trained.junit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sentence-transformers-test-evidence
           path: reports/testing/
           if-no-files-found: error
 
